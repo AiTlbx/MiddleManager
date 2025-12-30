@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.3.1] - 2025-12-30
+
+- Fix Windows Service not starting (add UseWindowsService hosting)
+
 ## [1.3.0] - 2025-12-30
 
 - Add terminal user de-elevation for service mode
