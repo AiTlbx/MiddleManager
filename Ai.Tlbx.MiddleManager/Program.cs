@@ -155,11 +155,11 @@ public class Program
         var wwwrootPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "wwwroot");
         IFileProvider fileProvider = Directory.Exists(wwwrootPath)
             ? new PhysicalFileProvider(Path.GetFullPath(wwwrootPath))
-            : new EmbeddedWebRootFileProvider(Assembly.GetExecutingAssembly(), "Ai.Tlbx.MiddleManager.Aot");
+            : new EmbeddedWebRootFileProvider(Assembly.GetExecutingAssembly(), "Ai.Tlbx.MiddleManager");
 #else
         IFileProvider fileProvider = new EmbeddedWebRootFileProvider(
             Assembly.GetExecutingAssembly(),
-            "Ai.Tlbx.MiddleManager.Aot");
+            "Ai.Tlbx.MiddleManager");
 #endif
 
         app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = fileProvider });

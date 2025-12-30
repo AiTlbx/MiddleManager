@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.3.5] - 2025-12-30
+
+- Fix embedded static files not loading (wrong namespace for resource lookup)
+
 ## [1.3.4] - 2025-12-30
 
 - Add application icon to Windows executable
