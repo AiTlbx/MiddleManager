@@ -2,6 +2,12 @@
 # MiddleManager Windows Installer
 # Usage: irm https://raw.githubusercontent.com/AiTlbx/MiddleManager/main/install.ps1 | iex
 
+param(
+    [string]$RunAsUser,
+    [string]$RunAsUserSid,
+    [switch]$ServiceMode
+)
+
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
@@ -28,6 +34,17 @@ function Test-Administrator
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function Get-CurrentUserInfo
+{
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $userName = $identity.Name.Split('\')[-1]
+    $userSid = $identity.User.Value
+    return @{
+        Name = $userName
+        Sid = $userSid
+    }
+}
+
 function Get-LatestRelease
 {
     Write-Host "Fetching latest release..." -ForegroundColor Gray
@@ -47,11 +64,51 @@ function Get-AssetUrl
     return $asset.browser_download_url
 }
 
+function Write-ServiceSettings
+{
+    param(
+        [string]$Username,
+        [string]$UserSid
+    )
+
+    $configDir = "$env:ProgramData\MiddleManager"
+    $settingsPath = Join-Path $configDir "settings.json"
+
+    if (-not (Test-Path $configDir))
+    {
+        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+    }
+
+    $settings = @{
+        runAsUser = $Username
+        runAsUserSid = $UserSid
+        defaultShell = "Pwsh"
+        defaultCols = 120
+        defaultRows = 30
+        defaultWorkingDirectory = ""
+        fontSize = 14
+        cursorStyle = "bar"
+        cursorBlink = $true
+        theme = "dark"
+        scrollbackLines = 10000
+        bellStyle = "notification"
+        copyOnSelect = $false
+        rightClickPaste = $true
+    }
+
+    $json = $settings | ConvertTo-Json -Depth 10
+    Set-Content -Path $settingsPath -Value $json -Encoding UTF8
+
+    Write-Host "  Terminal user: $Username" -ForegroundColor Gray
+}
+
 function Install-MiddleManager
 {
     param(
         [bool]$AsService,
-        [string]$Version
+        [string]$Version,
+        [string]$RunAsUser,
+        [string]$RunAsUserSid
     )
 
     if ($AsService)
@@ -92,6 +149,12 @@ function Install-MiddleManager
 
     if ($AsService)
     {
+        # Write settings with runAsUser info
+        if ($RunAsUser -and $RunAsUserSid)
+        {
+            Write-ServiceSettings -Username $RunAsUser -UserSid $RunAsUserSid
+        }
+
         Install-AsService -InstallDir $installDir -Version $Version
     }
     else
@@ -232,6 +295,9 @@ sc.exe delete "$ServiceName" | Out-Null
 # Remove registry entry
 Remove-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MiddleManager" -Force -ErrorAction SilentlyContinue
 
+# Remove settings
+Remove-Item -Path "`$env:ProgramData\MiddleManager" -Recurse -Force -ErrorAction SilentlyContinue
+
 # Remove install directory (schedule for next reboot if locked)
 `$installDir = "$InstallDir"
 Start-Sleep -Seconds 2
@@ -267,6 +333,22 @@ Write-Host "MiddleManager uninstalled." -ForegroundColor Green
 }
 
 # Main
+
+# If we're being called with ServiceMode flag, we're the elevated process
+if ($ServiceMode)
+{
+    Write-Header
+    $script:release = Get-LatestRelease
+    $version = $script:release.tag_name -replace "^v", ""
+    Write-Host "  Latest version: $version" -ForegroundColor White
+    Write-Host ""
+    Install-MiddleManager -AsService $true -Version $version -RunAsUser $RunAsUser -RunAsUserSid $RunAsUserSid
+    exit
+}
+
+# Capture current user info BEFORE any potential elevation
+$currentUser = Get-CurrentUserInfo
+
 Write-Header
 
 # Fetch release info first
@@ -283,6 +365,7 @@ Write-Host "  [1] System service (recommended for always-on access)" -Foreground
 Write-Host "      - Runs in background, starts on boot" -ForegroundColor Gray
 Write-Host "      - Available before you log in" -ForegroundColor Gray
 Write-Host "      - Installs to Program Files" -ForegroundColor Gray
+Write-Host "      - Terminals run as: $($currentUser.Name)" -ForegroundColor Gray
 Write-Host "      - Requires admin privileges" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "  [2] User install (no admin required)" -ForegroundColor Cyan
@@ -303,13 +386,30 @@ if ($asService)
         Write-Host ""
         Write-Host "Requesting administrator privileges..." -ForegroundColor Yellow
 
-        # Re-run as admin
+        # Download script to temp file and run elevated with parameters
+        $tempScript = Join-Path $env:TEMP "mm-install-elevated.ps1"
         $scriptUrl = "https://raw.githubusercontent.com/$RepoOwner/$RepoName/main/install.ps1"
-        $elevatedCommand = "irm '$scriptUrl' | iex"
+        Invoke-WebRequest -Uri $scriptUrl -OutFile $tempScript
 
-        Start-Process pwsh -ArgumentList "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $elevatedCommand -Verb RunAs
+        # Run elevated with user info passed as parameters
+        $arguments = @(
+            "-NoProfile"
+            "-ExecutionPolicy", "Bypass"
+            "-File", $tempScript
+            "-ServiceMode"
+            "-RunAsUser", $currentUser.Name
+            "-RunAsUserSid", $currentUser.Sid
+        )
+
+        Start-Process pwsh -ArgumentList $arguments -Verb RunAs -Wait
+        Remove-Item $tempScript -Force -ErrorAction SilentlyContinue
         exit
     }
-}
 
-Install-MiddleManager -AsService $asService -Version $version
+    # Already admin, proceed with install
+    Install-MiddleManager -AsService $true -Version $version -RunAsUser $currentUser.Name -RunAsUserSid $currentUser.Sid
+}
+else
+{
+    Install-MiddleManager -AsService $false -Version $version -RunAsUser "" -RunAsUserSid ""
+}

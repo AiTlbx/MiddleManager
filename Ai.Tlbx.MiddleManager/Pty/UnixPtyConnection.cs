@@ -83,7 +83,8 @@ public sealed class UnixPtyConnection : IPtyConnection
         string workingDirectory,
         int cols,
         int rows,
-        IDictionary<string, string>? environment = null)
+        IDictionary<string, string>? environment = null,
+        string? runAsUser = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(app);
         ArgumentNullException.ThrowIfNull(args);
@@ -94,7 +95,7 @@ public sealed class UnixPtyConnection : IPtyConnection
         var connection = new UnixPtyConnection();
         try
         {
-            connection.StartInternal(app, args, workingDirectory, cols, rows, environment);
+            connection.StartInternal(app, args, workingDirectory, cols, rows, environment, runAsUser);
             return connection;
         }
         catch
@@ -110,7 +111,8 @@ public sealed class UnixPtyConnection : IPtyConnection
         string workingDirectory,
         int cols,
         int rows,
-        IDictionary<string, string>? environment)
+        IDictionary<string, string>? environment,
+        string? runAsUser)
     {
         _masterFd = posix_openpt(O_RDWR | O_NOCTTY);
         if (_masterFd < 0)
@@ -150,6 +152,10 @@ public sealed class UnixPtyConnection : IPtyConnection
             bufferSize: 4096,
             isAsync: false);
 
+        // Determine if we need to drop privileges via sudo -u
+        var needsSudo = getuid() == 0 && !string.IsNullOrEmpty(runAsUser);
+        var sudoPrefix = needsSudo ? $"sudo -u {runAsUser} -- " : "";
+
         var argsString = args.Length > 0 ? " " + string.Join(" ", args) : "";
 
         ProcessStartInfo psi;
@@ -161,7 +167,7 @@ public sealed class UnixPtyConnection : IPtyConnection
             var helperPath = Path.Combine(exeDir, "pty_helper");
             if (File.Exists(helperPath))
             {
-                var helperArgs = $"{slaveName} {app}" + (args.Length > 0 ? " " + string.Join(" ", args) : "");
+                var helperArgs = $"{slaveName} {sudoPrefix}{app}" + (args.Length > 0 ? " " + string.Join(" ", args) : "");
                 psi = new ProcessStartInfo
                 {
                     FileName = helperPath,
@@ -170,8 +176,12 @@ public sealed class UnixPtyConnection : IPtyConnection
             }
             else
             {
-                var pyArgs = args.Length > 0 ? ", " + string.Join(", ", args.Select(a => $"'{a}'")) : "";
-                var pyScript = $"import os; os.setsid(); fd=os.open('{slaveName}',os.O_RDWR); os.dup2(fd,0); os.dup2(fd,1); os.dup2(fd,2); os.close(fd); os.execvp('{app}',['{app}'{pyArgs}])";
+                var effectiveApp = needsSudo ? "/usr/bin/sudo" : app;
+                var effectiveArgsForPy = needsSudo
+                    ? new[] { "-u", runAsUser!, "--", app }.Concat(args).ToArray()
+                    : args;
+                var pyArgs = effectiveArgsForPy.Length > 0 ? ", " + string.Join(", ", effectiveArgsForPy.Select(a => $"'{a}'")) : "";
+                var pyScript = $"import os; os.setsid(); fd=os.open('{slaveName}',os.O_RDWR); os.dup2(fd,0); os.dup2(fd,1); os.dup2(fd,2); os.close(fd); os.execvp('{effectiveApp}',['{effectiveApp}'{pyArgs}])";
                 psi = new ProcessStartInfo
                 {
                     FileName = "/usr/bin/python3",
@@ -182,7 +192,7 @@ public sealed class UnixPtyConnection : IPtyConnection
         else
         {
             // On Linux: setsid properly sets up controlling terminal
-            var execCmd = $"exec setsid {app}{argsString} <'{slaveName}' >'{slaveName}' 2>&1";
+            var execCmd = $"exec setsid {sudoPrefix}{app}{argsString} <'{slaveName}' >'{slaveName}' 2>&1";
             psi = new ProcessStartInfo
             {
                 FileName = "/bin/sh",
@@ -355,6 +365,9 @@ public sealed class UnixPtyConnection : IPtyConnection
 
     [DllImport("libc", SetLastError = true)]
     private static extern int close(int fd);
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern uint getuid();
 
     #endregion
 }

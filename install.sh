@@ -17,6 +17,11 @@ CYAN='\033[0;36m'
 GRAY='\033[0;90m'
 NC='\033[0m' # No Color
 
+# Variables passed through sudo
+INSTALLING_USER="${INSTALLING_USER:-}"
+INSTALLING_UID="${INSTALLING_UID:-}"
+INSTALLING_GID="${INSTALLING_GID:-}"
+
 print_header() {
     echo ""
     echo -e "${CYAN}  MiddleManager Installer${NC}"
@@ -86,6 +91,7 @@ prompt_service_mode() {
     echo -e "      ${GRAY}- Runs in background, starts on boot${NC}"
     echo -e "      ${GRAY}- Available before you log in${NC}"
     echo -e "      ${GRAY}- Installs to /usr/local/bin${NC}"
+    echo -e "      ${GRAY}- Terminals run as: $(whoami)${NC}"
     echo -e "      ${YELLOW}- Requires sudo privileges${NC}"
     echo ""
     echo -e "  ${CYAN}[2] User install${NC} (no sudo required)"
@@ -104,6 +110,43 @@ prompt_service_mode() {
             SERVICE_MODE=true
             ;;
     esac
+}
+
+write_service_settings() {
+    local config_dir="/usr/local/etc/middlemanager"
+    local settings_path="$config_dir/settings.json"
+
+    mkdir -p "$config_dir"
+
+    # Determine default shell based on platform
+    if [ "$(uname -s)" = "Darwin" ]; then
+        default_shell="Zsh"
+    else
+        default_shell="Bash"
+    fi
+
+    cat > "$settings_path" << EOF
+{
+  "runAsUser": "$INSTALLING_USER",
+  "runAsUid": $INSTALLING_UID,
+  "runAsGid": $INSTALLING_GID,
+  "defaultShell": "$default_shell",
+  "defaultCols": 120,
+  "defaultRows": 30,
+  "defaultWorkingDirectory": "",
+  "fontSize": 14,
+  "cursorStyle": "bar",
+  "cursorBlink": true,
+  "theme": "dark",
+  "scrollbackLines": 10000,
+  "bellStyle": "notification",
+  "copyOnSelect": false,
+  "rightClickPaste": true
+}
+EOF
+
+    chmod 644 "$settings_path"
+    echo -e "  ${GRAY}Terminal user: $INSTALLING_USER${NC}"
 }
 
 install_binary() {
@@ -141,7 +184,11 @@ install_as_service() {
     if [ "$EUID" -ne 0 ]; then
         echo ""
         echo -e "${YELLOW}Requesting sudo privileges...${NC}"
-        exec sudo "$0" --service
+        # Re-exec with sudo, passing user info as environment variables
+        exec sudo INSTALLING_USER="$INSTALLING_USER" \
+                  INSTALLING_UID="$INSTALLING_UID" \
+                  INSTALLING_GID="$INSTALLING_GID" \
+                  "$0" --service
     fi
 
     install_binary "$install_dir"
@@ -152,6 +199,11 @@ install_as_service() {
     # Move pty_helper to lib dir if present
     if [ -f "$install_dir/pty_helper" ]; then
         mv "$install_dir/pty_helper" "$lib_dir/"
+    fi
+
+    # Write settings with runAsUser info
+    if [ -n "$INSTALLING_USER" ] && [ -n "$INSTALLING_UID" ]; then
+        write_service_settings
     fi
 
     if [ "$(uname -s)" = "Darwin" ]; then
@@ -313,6 +365,7 @@ fi
 
 sudo rm -f /usr/local/bin/mm
 sudo rm -rf /usr/local/lib/middlemanager
+sudo rm -rf /usr/local/etc/middlemanager
 
 echo "MiddleManager uninstalled."
 EOF
@@ -343,6 +396,14 @@ if [ "$1" = "--service" ]; then
     get_latest_release
     install_as_service
     exit 0
+fi
+
+# Capture current user info BEFORE any potential sudo
+# This is critical - we need the real user, not root
+if [ -z "$INSTALLING_USER" ]; then
+    INSTALLING_USER=$(whoami)
+    INSTALLING_UID=$(id -u)
+    INSTALLING_GID=$(id -g)
 fi
 
 # Main

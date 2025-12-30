@@ -1,4 +1,5 @@
 using Ai.Tlbx.MiddleManager.Settings;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 
 namespace Ai.Tlbx.MiddleManager.Settings
@@ -19,13 +20,66 @@ namespace Ai.Tlbx.MiddleManager.Settings
         public SettingsLoadStatus LoadStatus { get; private set; } = SettingsLoadStatus.Default;
         public string? LoadError { get; private set; }
         public string SettingsPath => _settingsPath;
+        public bool IsRunningAsService { get; }
 
         public SettingsService()
         {
+            IsRunningAsService = DetectServiceMode();
+            _settingsPath = GetSettingsPath(IsRunningAsService);
+        }
+
+        private static string GetSettingsPath(bool isService)
+        {
+            if (isService)
+            {
+                if (OperatingSystem.IsWindows())
+                {
+                    var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+                    return Path.Combine(programData, "MiddleManager", "settings.json");
+                }
+                else
+                {
+                    return "/usr/local/etc/middlemanager/settings.json";
+                }
+            }
+
             var userDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             var configDir = Path.Combine(userDir, ".middlemanager");
-            _settingsPath = Path.Combine(configDir, "settings.json");
+            return Path.Combine(configDir, "settings.json");
         }
+
+        private static bool DetectServiceMode()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                return IsWindowsService();
+            }
+            else
+            {
+                return getuid() == 0;
+            }
+        }
+
+        private static bool IsWindowsService()
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                return false;
+            }
+
+            try
+            {
+                var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+                return identity.IsSystem;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        [DllImport("libc", EntryPoint = "getuid")]
+        private static extern uint getuid();
 
         public MiddleManagerSettings Load()
         {

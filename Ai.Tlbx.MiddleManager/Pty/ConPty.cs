@@ -82,6 +82,40 @@ namespace Ai.Tlbx.MiddleManager.Pty
         public const uint WAIT_OBJECT_0 = 0;
         public const uint STILL_ACTIVE = 259;
 
+        // User token APIs for de-elevation
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern uint WTSGetActiveConsoleSessionId();
+
+        [DllImport("wtsapi32.dll", SetLastError = true)]
+        public static extern bool WTSQueryUserToken(uint sessionId, out IntPtr phToken);
+
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern bool CreateProcessAsUser(
+            IntPtr hToken,
+            string? lpApplicationName,
+            string lpCommandLine,
+            IntPtr lpProcessAttributes,
+            IntPtr lpThreadAttributes,
+            bool bInheritHandles,
+            uint dwCreationFlags,
+            IntPtr lpEnvironment,
+            string? lpCurrentDirectory,
+            ref StartupInfoEx lpStartupInfo,
+            out ProcessInformation lpProcessInformation);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        public static extern bool DuplicateTokenEx(
+            IntPtr hExistingToken,
+            uint dwDesiredAccess,
+            IntPtr lpTokenAttributes,
+            int impersonationLevel,
+            int tokenType,
+            out IntPtr phNewToken);
+
+        public const uint TOKEN_ALL_ACCESS = 0x000F01FF;
+        public const int SecurityImpersonation = 2;
+        public const int TokenPrimary = 1;
+
         [StructLayout(LayoutKind.Sequential)]
         public struct Coord
         {

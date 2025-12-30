@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.0] - 2025-12-30
+
+- Add terminal user de-elevation for service mode
+- Terminals now spawn as the installing user instead of SYSTEM/root
+- Add user picker in Settings UI under Security section
+- Install scripts capture user identity before elevation
+- Windows: Uses CreateProcessAsUser with WTSQueryUserToken
+- Unix: Uses sudo -u wrapper when running as root
+- Add /api/users endpoint for user enumeration
+
 ## [1.2.1] - 2025-12-30
 
 - Improve install scripts with clearer service vs user install choice

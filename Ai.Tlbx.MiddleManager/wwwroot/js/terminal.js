@@ -829,15 +829,39 @@
     }
 
     function fetchSettings() {
-        fetch('/api/settings')
-            .then(function(r) { return r.json(); })
-            .then(function(settings) {
-                currentSettings = settings;
-                populateSettingsForm(settings);
-            })
-            .catch(function(e) {
-                console.error('Error fetching settings:', e);
-            });
+        Promise.all([
+            fetch('/api/settings').then(function(r) { return r.json(); }),
+            fetch('/api/users').then(function(r) { return r.json(); }).catch(function() { return []; })
+        ])
+        .then(function(results) {
+            var settings = results[0];
+            var users = results[1];
+            currentSettings = settings;
+            populateUserDropdown(users, settings.runAsUser);
+            populateSettingsForm(settings);
+        })
+        .catch(function(e) {
+            console.error('Error fetching settings:', e);
+        });
+    }
+
+    function populateUserDropdown(users, selectedUser) {
+        var select = document.getElementById('setting-run-as-user');
+        if (!select) return;
+
+        // Keep the default option
+        select.innerHTML = '<option value="">Process Owner (default)</option>';
+
+        // Add user options
+        users.forEach(function(user) {
+            var option = document.createElement('option');
+            option.value = user.username;
+            option.textContent = user.username;
+            if (user.username === selectedUser) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
     }
 
     function populateSettingsForm(settings) {
@@ -851,6 +875,7 @@
         setElementValue('setting-bell-style', settings.bellStyle || 'notification');
         setElementChecked('setting-copy-on-select', settings.copyOnSelect === true);
         setElementChecked('setting-right-click-paste', settings.rightClickPaste !== false);
+        setElementValue('setting-run-as-user', settings.runAsUser || '');
     }
 
     function setElementValue(id, value) {
@@ -874,6 +899,7 @@
     }
 
     function saveAllSettings() {
+        var runAsUserValue = getElementValue('setting-run-as-user', '');
         var settings = {
             defaultShell: getElementValue('setting-default-shell', 'Pwsh'),
             defaultWorkingDirectory: getElementValue('setting-working-dir', ''),
@@ -884,7 +910,8 @@
             scrollbackLines: parseInt(getElementValue('setting-scrollback', '10000'), 10) || 10000,
             bellStyle: getElementValue('setting-bell-style', 'notification'),
             copyOnSelect: getElementChecked('setting-copy-on-select'),
-            rightClickPaste: getElementChecked('setting-right-click-paste')
+            rightClickPaste: getElementChecked('setting-right-click-paste'),
+            runAsUser: runAsUserValue || null
         };
 
         // Persist theme to cookie for flash-free page load

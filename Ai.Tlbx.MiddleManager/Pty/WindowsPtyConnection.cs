@@ -1,11 +1,13 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
 using static Ai.Tlbx.MiddleManager.Pty.ConPtyNative;
 
 namespace Ai.Tlbx.MiddleManager.Pty;
 
+[SupportedOSPlatform("windows")]
 public sealed class WindowsPtyConnection : IPtyConnection
 {
     private readonly object _lock = new();
@@ -97,7 +99,8 @@ public sealed class WindowsPtyConnection : IPtyConnection
         string workingDirectory,
         int cols,
         int rows,
-        IDictionary<string, string>? environment = null)
+        IDictionary<string, string>? environment = null,
+        string? runAsUserSid = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(app);
         ArgumentNullException.ThrowIfNull(args);
@@ -110,7 +113,7 @@ public sealed class WindowsPtyConnection : IPtyConnection
         var connection = new WindowsPtyConnection();
         try
         {
-            connection.StartInternal(app, args, workingDirectory, cols, rows, environment);
+            connection.StartInternal(app, args, workingDirectory, cols, rows, environment, runAsUserSid);
             return connection;
         }
         catch
@@ -126,7 +129,8 @@ public sealed class WindowsPtyConnection : IPtyConnection
         string workingDirectory,
         int cols,
         int rows,
-        IDictionary<string, string>? environment)
+        IDictionary<string, string>? environment,
+        string? runAsUserSid)
     {
         SafeFileHandle? inputReadHandle = null;
         SafeFileHandle? inputWriteHandle = null;
@@ -192,6 +196,7 @@ public sealed class WindowsPtyConnection : IPtyConnection
                 envPtr = Marshal.StringToHGlobalUni(envBlock);
             }
 
+            IntPtr userToken = IntPtr.Zero;
             try
             {
                 var startupInfo = new StartupInfoEx
@@ -200,17 +205,46 @@ public sealed class WindowsPtyConnection : IPtyConnection
                     lpAttributeList = _attributeList
                 };
 
-                if (!CreateProcess(
-                    null,
-                    commandLine,
-                    IntPtr.Zero,
-                    IntPtr.Zero,
-                    false,
-                    EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
-                    envPtr,
-                    workingDirectory,
-                    ref startupInfo,
-                    out var processInfo))
+                bool success;
+                ProcessInformation processInfo;
+
+                // If we have a target user and we're running as LocalSystem, get their token
+                if (!string.IsNullOrEmpty(runAsUserSid) && IsRunningAsLocalSystem())
+                {
+                    userToken = GetUserTokenFromSession();
+                }
+
+                if (userToken != IntPtr.Zero)
+                {
+                    success = CreateProcessAsUser(
+                        userToken,
+                        null,
+                        commandLine,
+                        IntPtr.Zero,
+                        IntPtr.Zero,
+                        false,
+                        EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
+                        envPtr,
+                        workingDirectory,
+                        ref startupInfo,
+                        out processInfo);
+                }
+                else
+                {
+                    success = CreateProcess(
+                        null,
+                        commandLine,
+                        IntPtr.Zero,
+                        IntPtr.Zero,
+                        false,
+                        EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
+                        envPtr,
+                        workingDirectory,
+                        ref startupInfo,
+                        out processInfo);
+                }
+
+                if (!success)
                 {
                     throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to create process");
                 }
@@ -221,6 +255,10 @@ public sealed class WindowsPtyConnection : IPtyConnection
             }
             finally
             {
+                if (userToken != IntPtr.Zero)
+                {
+                    CloseHandle(userToken);
+                }
                 if (envPtr != IntPtr.Zero)
                 {
                     Marshal.FreeHGlobal(envPtr);
@@ -283,6 +321,53 @@ public sealed class WindowsPtyConnection : IPtyConnection
         }
         sb.Append('\0');
         return sb.ToString();
+    }
+
+    private static bool IsRunningAsLocalSystem()
+    {
+        try
+        {
+            var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+            return identity.IsSystem;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static IntPtr GetUserTokenFromSession()
+    {
+        // Get the active console session (the logged-in user's session)
+        var sessionId = WTSGetActiveConsoleSessionId();
+        if (sessionId == 0xFFFFFFFF)
+        {
+            return IntPtr.Zero;
+        }
+
+        // Get the user token for that session
+        if (!WTSQueryUserToken(sessionId, out var token))
+        {
+            return IntPtr.Zero;
+        }
+
+        // Duplicate the token for use with CreateProcessAsUser
+        // CreateProcessAsUser requires a primary token, and we need to duplicate
+        // with the right access rights
+        if (!DuplicateTokenEx(
+            token,
+            TOKEN_ALL_ACCESS,
+            IntPtr.Zero,
+            SecurityImpersonation,
+            TokenPrimary,
+            out var duplicatedToken))
+        {
+            CloseHandle(token);
+            return IntPtr.Zero;
+        }
+
+        CloseHandle(token);
+        return duplicatedToken;
     }
 
     public void Resize(int cols, int rows)

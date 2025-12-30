@@ -43,7 +43,15 @@ namespace Ai.Tlbx.MiddleManager.Services
             CreatedAt = DateTime.UtcNow;
         }
 
-        public static TerminalSession Create(string workingDirectory, int cols, int rows, IShellConfiguration shellConfig)
+        public static TerminalSession Create(
+            string workingDirectory,
+            int cols,
+            int rows,
+            IShellConfiguration shellConfig,
+            string? runAsUser = null,
+            string? runAsUserSid = null,
+            int? runAsUid = null,
+            int? runAsGid = null)
         {
             var id = Guid.NewGuid().ToString("N")[..8];
 
@@ -53,7 +61,11 @@ namespace Ai.Tlbx.MiddleManager.Services
                 workingDirectory,
                 cols,
                 rows,
-                shellConfig.GetEnvironmentVariables());
+                shellConfig.GetEnvironmentVariables(),
+                runAsUser,
+                runAsUserSid,
+                runAsUid,
+                runAsGid);
 
             var session = new TerminalSession(id, connection)
             {

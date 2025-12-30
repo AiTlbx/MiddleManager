@@ -36,7 +36,17 @@ public sealed class SessionManager : IDisposable
         var shellConfig = _shellRegistry.GetConfigurationOrDefault(effectiveShellType);
 
         var workingDirectory = GetDefaultWorkingDirectory();
-        var session = TerminalSession.Create(workingDirectory, cols, rows, shellConfig);
+
+        // Pass runAs settings for privilege de-elevation when running as service
+        var session = TerminalSession.Create(
+            workingDirectory,
+            cols,
+            rows,
+            shellConfig,
+            settings.RunAsUser,
+            settings.RunAsUserSid,
+            settings.RunAsUid,
+            settings.RunAsGid);
 
         session.OnStateChanged += () => NotifyStateChange();
         session.OnOutput += async (sessionId, data) =>

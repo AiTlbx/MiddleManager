@@ -16,6 +16,8 @@ namespace Ai.Tlbx.MiddleManager.Services;
 [JsonSerializable(typeof(MiddleManagerSettings))]
 [JsonSerializable(typeof(UpdateInfo))]
 [JsonSerializable(typeof(StateUpdate))]
+[JsonSerializable(typeof(UserInfo))]
+[JsonSerializable(typeof(List<UserInfo>))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, UseStringEnumConverter = true)]
 public partial class AppJsonContext : JsonSerializerContext
 {

@@ -34,5 +34,11 @@ namespace Ai.Tlbx.MiddleManager.Settings
         public string BellStyle { get; set; } = "notification";
         public bool CopyOnSelect { get; set; } = false;
         public bool RightClickPaste { get; set; } = true;
+
+        // Security - User to spawn terminals as (when running as service)
+        public string? RunAsUser { get; set; }
+        public string? RunAsUserSid { get; set; }  // Windows: User SID for token lookup
+        public int? RunAsUid { get; set; }         // Unix: User ID
+        public int? RunAsGid { get; set; }         // Unix: Group ID
     }
 }

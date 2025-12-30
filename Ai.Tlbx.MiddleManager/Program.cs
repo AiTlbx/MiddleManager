@@ -268,6 +268,12 @@ public class Program
             return Results.Ok();
         });
 
+        app.MapGet("/api/users", () =>
+        {
+            var users = UserEnumerationService.GetSystemUsers();
+            return Results.Json(users, AppJsonContext.Default.ListUserInfo);
+        });
+
         app.MapGet("/api/sessions", () =>
             Results.Json(sessionManager.GetSessionList(), AppJsonContext.Default.SessionListDto));
 
