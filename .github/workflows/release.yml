@@ -114,14 +114,6 @@ jobs:
           body: |
             ## What's Changed
             ${{ steps.changelog.outputs.changelog }}
-
-            ## Sidecar Architecture (v2.0+)
-            This release includes two binaries:
-            - **mm** (mm.exe on Windows) - Web server
-            - **mm-host** (mm-host.exe on Windows) - PTY session host
-
-            Terminal sessions are now persisted by mm-host. When you update the web server,
-            your terminal sessions remain active.
           files: |
             artifacts/mm-osx-arm64.tar.gz
             artifacts/mm-osx-x64.tar.gz
