@@ -111,6 +111,15 @@ function Install-MiddleManager
     if ($AsService)
     {
         $installDir = "$env:ProgramFiles\MiddleManager"
+
+        # Stop existing service before copying (file may be locked)
+        $existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+        if ($existingService)
+        {
+            Write-Host "Stopping existing service..." -ForegroundColor Gray
+            Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+        }
     }
     else
     {

@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.3.7] - 2025-12-30
+
+- Fix Windows installer failing when service is running (stop service before copying binary)
+
 ## [1.3.6] - 2025-12-30
 
 - Add settings migration on update (backup to .old, migrate user preferences)
