@@ -2,6 +2,7 @@
 
 # MiddleManager
 
+[![GitHub Release](https://img.shields.io/github/v/release/AiTlbx/MiddleManager)](https://github.com/AiTlbx/MiddleManager/releases/latest)
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)
 [![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)](#installation)
 [![Windows](https://img.shields.io/badge/Windows-0078D6?logo=windows&logoColor=white)](#installation)

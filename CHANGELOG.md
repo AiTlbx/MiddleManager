@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.3.2] - 2025-12-30
+
+- Fix cross-platform build (conditional compilation for Windows Service)
+
 ## [1.3.1] - 2025-12-30
 
 - Fix Windows Service not starting (add UseWindowsService hosting)

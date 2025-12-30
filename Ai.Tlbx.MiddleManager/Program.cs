@@ -122,11 +122,10 @@ public class Program
     {
         var builder = WebApplication.CreateSlimBuilder(args);
 
+#if WINDOWS
         // Enable Windows Service hosting (no-op when not running as service)
-        if (OperatingSystem.IsWindows())
-        {
-            builder.Host.UseWindowsService();
-        }
+        builder.Host.UseWindowsService();
+#endif
 
         builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
         builder.Logging.SetMinimumLevel(LogLevel.Warning);

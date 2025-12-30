@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Version>1.3.1</Version>
+    <Version>1.3.2</Version>
     <InvariantGlobalization>true</InvariantGlobalization>
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
     <EnableDefaultContentItems>false</EnableDefaultContentItems>
@@ -51,7 +51,11 @@
     <InternalsVisibleTo Include="Ai.Tlbx.MiddleManager.Tests" />
   </ItemGroup>
 
-  <!-- Windows-specific linker options -->
+  <!-- Windows-specific defines and linker options -->
+  <PropertyGroup Condition="$(RuntimeIdentifier.StartsWith('win')) Or '$(RuntimeIdentifier)' == ''">
+    <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup Condition="'$(IsPublishing)' == 'true' And $(RuntimeIdentifier.StartsWith('win'))">
     <LinkerArg Include="/OPT:REF" />
     <LinkerArg Include="/OPT:ICF" />
@@ -63,7 +67,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.1" />
   </ItemGroup>
 
 
