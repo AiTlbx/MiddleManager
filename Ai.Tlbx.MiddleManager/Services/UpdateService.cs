@@ -15,11 +15,13 @@ public sealed class UpdateService : IDisposable
     private readonly ConcurrentDictionary<string, Action<UpdateInfo>> _updateListeners = new();
     private readonly Timer _checkTimer;
     private readonly string _currentVersion;
+    private readonly VersionManifest _installedManifest;
     private UpdateInfo? _latestUpdate;
     private bool _disposed;
 
     public UpdateInfo? LatestUpdate => _latestUpdate;
     public string CurrentVersion => _currentVersion;
+    public VersionManifest InstalledManifest => _installedManifest;
 
     public UpdateService()
     {
@@ -27,6 +29,7 @@ public sealed class UpdateService : IDisposable
         _httpClient.DefaultRequestHeaders.Add("User-Agent", "MiddleManager-UpdateCheck");
 
         _currentVersion = GetCurrentVersion();
+        _installedManifest = GetInstalledManifest();
         _checkTimer = new Timer(OnCheckTimer, null, TimeSpan.FromSeconds(10), CheckInterval);
     }
 
@@ -34,6 +37,65 @@ public sealed class UpdateService : IDisposable
     {
         return Assembly.GetExecutingAssembly()
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
+    }
+
+    private static VersionManifest GetInstalledManifest()
+    {
+        var version = GetCurrentVersion();
+
+        // Try to read version.json from install directory
+        try
+        {
+            var installDir = Path.GetDirectoryName(GetCurrentBinaryPath());
+            if (!string.IsNullOrEmpty(installDir))
+            {
+                var versionJsonPath = Path.Combine(installDir, "version.json");
+                if (File.Exists(versionJsonPath))
+                {
+                    var json = File.ReadAllText(versionJsonPath);
+                    var manifest = JsonSerializer.Deserialize<VersionManifest>(json, VersionManifestContext.Default.VersionManifest);
+                    if (manifest is not null)
+                    {
+                        return manifest;
+                    }
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        // Fallback: assume web and pty are same version
+        return new VersionManifest
+        {
+            Web = version,
+            Pty = version,
+            Protocol = 1,
+            MinCompatiblePty = version
+        };
+    }
+
+    private static UpdateType DetermineUpdateType(VersionManifest installed, VersionManifest release)
+    {
+        // Protocol change = always full update
+        if (release.Protocol != installed.Protocol)
+        {
+            return UpdateType.Full;
+        }
+
+        // PTY version change = full update (host restarts, sessions lost)
+        if (!string.Equals(release.Pty, installed.Pty, StringComparison.OrdinalIgnoreCase))
+        {
+            return UpdateType.Full;
+        }
+
+        // Only web version changed = web-only update (sessions preserved)
+        if (!string.Equals(release.Web, installed.Web, StringComparison.OrdinalIgnoreCase))
+        {
+            return UpdateType.WebOnly;
+        }
+
+        return UpdateType.None;
     }
 
     public string AddUpdateListener(Action<UpdateInfo> callback)
@@ -83,6 +145,9 @@ public sealed class UpdateService : IDisposable
             var assetName = GetAssetNameForPlatform();
             var asset = release.Assets?.FirstOrDefault(a => a.Name == assetName);
 
+            var releaseManifest = await FetchReleaseManifestAsync(release.TagName);
+            var updateType = DetermineUpdateType(_installedManifest, releaseManifest);
+
             _latestUpdate = new UpdateInfo
             {
                 Available = true,
@@ -91,7 +156,8 @@ public sealed class UpdateService : IDisposable
                 ReleaseUrl = release.HtmlUrl ?? $"https://github.com/{RepoOwner}/{RepoName}/releases/tag/{release.TagName}",
                 DownloadUrl = asset?.BrowserDownloadUrl,
                 AssetName = assetName,
-                ReleaseNotes = release.Body
+                ReleaseNotes = release.Body,
+                Type = updateType
             };
 
             NotifyListeners(_latestUpdate);
@@ -101,6 +167,32 @@ public sealed class UpdateService : IDisposable
         {
             return null;
         }
+    }
+
+    private async Task<VersionManifest> FetchReleaseManifestAsync(string tagName)
+    {
+        try
+        {
+            var url = $"https://raw.githubusercontent.com/{RepoOwner}/{RepoName}/{tagName}/version.json";
+            var json = await _httpClient.GetStringAsync(url);
+            var manifest = JsonSerializer.Deserialize<VersionManifest>(json, VersionManifestContext.Default.VersionManifest);
+            if (manifest is not null)
+            {
+                return manifest;
+            }
+        }
+        catch
+        {
+        }
+
+        var version = tagName.TrimStart('v');
+        return new VersionManifest
+        {
+            Web = version,
+            Pty = version,
+            Protocol = 1,
+            MinCompatiblePty = version
+        };
     }
 
     public async Task<string?> DownloadUpdateAsync(string? downloadUrl = null)
@@ -276,6 +368,13 @@ public sealed class UpdateService : IDisposable
     }
 }
 
+public enum UpdateType
+{
+    None,
+    WebOnly,
+    Full
+}
+
 public sealed class UpdateInfo
 {
     public bool Available { get; init; }
@@ -285,6 +384,16 @@ public sealed class UpdateInfo
     public string? DownloadUrl { get; init; }
     public string? AssetName { get; init; }
     public string? ReleaseNotes { get; init; }
+    public UpdateType Type { get; init; } = UpdateType.Full;
+    public bool SessionsPreserved => Type == UpdateType.WebOnly;
+}
+
+public sealed class VersionManifest
+{
+    public string Web { get; set; } = "";
+    public string Pty { get; set; } = "";
+    public int Protocol { get; set; } = 1;
+    public string MinCompatiblePty { get; set; } = "";
 }
 
 internal sealed class GitHubRelease

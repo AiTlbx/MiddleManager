@@ -11,12 +11,15 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
-$ServiceName = "MiddleManager"
-$DisplayName = "MiddleManager Terminal Server"
+$WebServiceName = "MiddleManager"
+$HostServiceName = "MiddleManagerHost"
+$WebDisplayName = "MiddleManager Terminal Server"
+$HostDisplayName = "MiddleManager PTY Host"
 $Publisher = "AiTlbx"
 $RepoOwner = "AiTlbx"
 $RepoName = "MiddleManager"
-$BinaryName = "mm.exe"
+$WebBinaryName = "mm.exe"
+$HostBinaryName = "mm-host.exe"
 $AssetPattern = "mm-win-x64.zip"
 
 function Write-Header
@@ -112,12 +115,20 @@ function Install-MiddleManager
     {
         $installDir = "$env:ProgramFiles\MiddleManager"
 
-        # Stop existing service before copying (file may be locked)
-        $existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-        if ($existingService)
+        # Stop existing services before copying (files may be locked)
+        $existingWebService = Get-Service -Name $WebServiceName -ErrorAction SilentlyContinue
+        $existingHostService = Get-Service -Name $HostServiceName -ErrorAction SilentlyContinue
+
+        if ($existingWebService)
         {
-            Write-Host "Stopping existing service..." -ForegroundColor Gray
-            Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+            Write-Host "Stopping existing web service..." -ForegroundColor Gray
+            Stop-Service -Name $WebServiceName -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 1
+        }
+        if ($existingHostService)
+        {
+            Write-Host "Stopping existing host service..." -ForegroundColor Gray
+            Stop-Service -Name $HostServiceName -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 2
         }
     }
@@ -144,10 +155,24 @@ function Install-MiddleManager
     if (Test-Path $tempExtract) { Remove-Item $tempExtract -Recurse -Force }
     Expand-Archive -Path $tempZip -DestinationPath $tempExtract
 
-    # Copy binary
-    $sourceBinary = Join-Path $tempExtract $BinaryName
-    $destBinary = Join-Path $installDir $BinaryName
-    Copy-Item $sourceBinary $destBinary -Force
+    # Copy both binaries
+    $sourceWebBinary = Join-Path $tempExtract $WebBinaryName
+    $sourceHostBinary = Join-Path $tempExtract $HostBinaryName
+    $destWebBinary = Join-Path $installDir $WebBinaryName
+    $destHostBinary = Join-Path $installDir $HostBinaryName
+
+    Copy-Item $sourceWebBinary $destWebBinary -Force
+    if (Test-Path $sourceHostBinary)
+    {
+        Copy-Item $sourceHostBinary $destHostBinary -Force
+    }
+
+    # Copy version manifest
+    $sourceVersionJson = Join-Path $tempExtract "version.json"
+    if (Test-Path $sourceVersionJson)
+    {
+        Copy-Item $sourceVersionJson (Join-Path $installDir "version.json") -Force
+    }
 
     # Cleanup temp files
     Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
@@ -183,26 +208,56 @@ function Install-AsService
         [string]$Version
     )
 
-    $binaryPath = Join-Path $InstallDir $BinaryName
+    $webBinaryPath = Join-Path $InstallDir $WebBinaryName
+    $hostBinaryPath = Join-Path $InstallDir $HostBinaryName
 
-    # Stop existing service if running
-    $existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-    if ($existingService)
+    # Remove existing services if present
+    $existingWebService = Get-Service -Name $WebServiceName -ErrorAction SilentlyContinue
+    if ($existingWebService)
     {
-        Write-Host "Stopping existing service..." -ForegroundColor Gray
-        Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
-        sc.exe delete $ServiceName | Out-Null
+        Write-Host "Removing existing web service..." -ForegroundColor Gray
+        Stop-Service -Name $WebServiceName -Force -ErrorAction SilentlyContinue
+        sc.exe delete $WebServiceName | Out-Null
+        Start-Sleep -Seconds 1
+    }
+
+    $existingHostService = Get-Service -Name $HostServiceName -ErrorAction SilentlyContinue
+    if ($existingHostService)
+    {
+        Write-Host "Removing existing host service..." -ForegroundColor Gray
+        Stop-Service -Name $HostServiceName -Force -ErrorAction SilentlyContinue
+        sc.exe delete $HostServiceName | Out-Null
         Start-Sleep -Seconds 2
     }
 
-    # Create Windows service
-    Write-Host "Creating Windows service..." -ForegroundColor Gray
-    sc.exe create $ServiceName binPath= "`"$binaryPath`"" start= auto DisplayName= "$DisplayName" | Out-Null
-    sc.exe description $ServiceName "Web-based terminal multiplexer for AI coding agents and TUI apps" | Out-Null
+    # Create host service first (web server depends on it)
+    if (Test-Path $hostBinaryPath)
+    {
+        Write-Host "Creating PTY host service..." -ForegroundColor Gray
+        sc.exe create $HostServiceName binPath= "`"$hostBinaryPath`"" start= auto DisplayName= "$HostDisplayName" | Out-Null
+        sc.exe description $HostServiceName "PTY session host for MiddleManager (persists terminal sessions)" | Out-Null
 
-    # Start service
-    Write-Host "Starting service..." -ForegroundColor Gray
-    Start-Service -Name $ServiceName
+        # Start host service
+        Write-Host "Starting host service..." -ForegroundColor Gray
+        Start-Service -Name $HostServiceName
+        Start-Sleep -Seconds 1
+    }
+
+    # Create web service with dependency on host service
+    Write-Host "Creating web service..." -ForegroundColor Gray
+    if (Test-Path $hostBinaryPath)
+    {
+        sc.exe create $WebServiceName binPath= "`"$webBinaryPath`"" start= auto depend= "$HostServiceName" DisplayName= "$WebDisplayName" | Out-Null
+    }
+    else
+    {
+        sc.exe create $WebServiceName binPath= "`"$webBinaryPath`"" start= auto DisplayName= "$WebDisplayName" | Out-Null
+    }
+    sc.exe description $WebServiceName "Web-based terminal multiplexer for AI coding agents and TUI apps" | Out-Null
+
+    # Start web service
+    Write-Host "Starting web service..." -ForegroundColor Gray
+    Start-Service -Name $WebServiceName
 
     # Register in Add/Remove Programs
     Register-Uninstall -InstallDir $InstallDir -Version $Version -IsService $true
@@ -256,12 +311,12 @@ function Register-Uninstall
     }
 
     $regValues = @{
-        DisplayName = $DisplayName
+        DisplayName = $WebDisplayName
         DisplayVersion = $Version
         Publisher = $Publisher
         InstallLocation = $InstallDir
         UninstallString = "pwsh -ExecutionPolicy Bypass -File `"$uninstallScript`""
-        DisplayIcon = Join-Path $InstallDir $BinaryName
+        DisplayIcon = Join-Path $InstallDir $WebBinaryName
         NoModify = 1
         NoRepair = 1
     }
@@ -294,9 +349,13 @@ function Create-UninstallScript
 
 Write-Host "Uninstalling MiddleManager..." -ForegroundColor Cyan
 
-# Stop and remove service
-Stop-Service -Name "$ServiceName" -Force -ErrorAction SilentlyContinue
-sc.exe delete "$ServiceName" | Out-Null
+# Stop and remove web service first (depends on host)
+Stop-Service -Name "$WebServiceName" -Force -ErrorAction SilentlyContinue
+sc.exe delete "$WebServiceName" | Out-Null
+
+# Stop and remove host service
+Stop-Service -Name "$HostServiceName" -Force -ErrorAction SilentlyContinue
+sc.exe delete "$HostServiceName" | Out-Null
 
 # Remove registry entry
 Remove-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MiddleManager" -Force -ErrorAction SilentlyContinue

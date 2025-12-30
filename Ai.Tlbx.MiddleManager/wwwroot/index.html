@@ -64,6 +64,26 @@
                     <div class="settings-container">
                         <h2>Settings</h2>
 
+                        <!-- About & Updates -->
+                        <div class="settings-section about-section">
+                            <h3>About & Updates</h3>
+                            <div class="version-info">
+                                <div class="version-row">
+                                    <span class="version-label">Server</span>
+                                    <span class="version-value" id="version-web">-</span>
+                                </div>
+                                <div class="version-row">
+                                    <span class="version-label">PTY Host</span>
+                                    <span class="version-value" id="version-pty">-</span>
+                                </div>
+                            </div>
+                            <div class="update-actions">
+                                <button id="btn-check-updates" class="btn-secondary">Check for Updates</button>
+                                <button id="btn-show-changelog" class="btn-secondary">Changelog</button>
+                            </div>
+                            <div id="update-status" class="update-status hidden"></div>
+                        </div>
+
                         <!-- Session Defaults -->
                         <div class="settings-section">
                             <h3>Session Defaults</h3>
@@ -207,6 +227,20 @@
     </div>
 
     <div id="connection-status" class="connection-status"></div>
+
+    <!-- Changelog Modal -->
+    <div id="changelog-modal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content changelog-modal-content">
+            <div class="modal-header">
+                <h3>Changelog</h3>
+                <button id="btn-close-changelog" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="changelog-body">
+                <div class="changelog-loading">Loading...</div>
+            </div>
+        </div>
+    </div>
 
     <script src="js/xterm.min.js"></script>
     <script src="js/xterm-addon-fit.min.js"></script>

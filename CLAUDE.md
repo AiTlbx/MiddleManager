@@ -4,56 +4,88 @@ This file provides guidance to Claude Code when working with this repository.
 
 ## What This Is
 
-MiddleManager is a web-based terminal multiplexer. Single executable (~15MB), native AOT compiled, runs on macOS/Windows/Linux. Serves terminal sessions via browser at `http://localhost:2000`.
+MiddleManager is a web-based terminal multiplexer. Native AOT compiled, runs on macOS/Windows/Linux. Serves terminal sessions via browser at `http://localhost:2000`.
 
-**Executable name:** `mm` (mm.exe on Windows)
+**Executables (v2.0+):**
+- `mm` / `mm.exe` — Web server (UI, REST API, WebSockets)
+- `mm-host` / `mm-host.exe` — PTY host (terminal sessions, persists across web restarts)
+
 **Default port:** 2000
 **Settings location:** `~/.middlemanager/settings.json`
 
 ## Build Commands
 
 ```bash
-# Build
+# Build both projects
 dotnet build Ai.Tlbx.MiddleManager/Ai.Tlbx.MiddleManager.csproj
+dotnet build Ai.Tlbx.MiddleManager.Host/Ai.Tlbx.MiddleManager.Host.csproj
 
 # Test
-dotnet test Ai.Tlbx.MiddleManager.Tests/Ai.Tlbx.MiddleManager.Tests.csproj
+dotnet test Ai.Tlbx.MiddleManager.Aot.Tests/Ai.Tlbx.MiddleManager.Aot.Tests.csproj
 
 # AOT publish (platform-specific)
-./Ai.Tlbx.MiddleManager/build-aot-macos.sh # macOS
-Ai.Tlbx.MiddleManager/build-aot.cmd        # Windows
-./Ai.Tlbx.MiddleManager/build-aot-linux.sh # Linux
+Ai.Tlbx.MiddleManager.Aot/build-aot.cmd        # Windows
+./Ai.Tlbx.MiddleManager.Aot/build-aot-linux.sh # Linux
+./Ai.Tlbx.MiddleManager.Aot/build-aot-macos.sh # macOS
 
-# Output: Ai.Tlbx.MiddleManager/publish/mm[.exe]
+# Output: Ai.Tlbx.MiddleManager.Aot/publish/mm[.exe]
 ```
 
-## Architecture
+## Architecture (v2.0+ Sidecar)
 
 ```
-Program.cs                    Entry point, API endpoints, WebSocket handlers
+┌─────────────────────────────────────────────────────────────┐
+│  mm.exe (Web Server) - Ai.Tlbx.MiddleManager                │
+│  ├─ REST API, WebSocket handlers, Static files              │
+│  ├─ Settings UI                                             │
+│  └─ SidecarClient (connects to mm-host via IPC)             │
+└─────────────────────────────────────────────────────────────┘
+           │ Named Pipe (Win) / Unix Socket (Unix)
+           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  mm-host.exe (PTY Sidecar) - Ai.Tlbx.MiddleManager.Host     │
+│  ├─ SidecarServer (accepts IPC connections)                 │
+│  ├─ SessionManager (owns sessions, survives web restarts)   │
+│  ├─ TerminalSession (wraps PTY, buffers output)             │
+│  └─ IPtyConnection (Windows ConPTY / Unix forkpty)          │
+└─────────────────────────────────────────────────────────────┘
+           │
+    Shell Processes (pwsh, bash, zsh)
+```
+
+**Key Benefit:** Terminal sessions persist across web server restarts. Most updates only restart mm.exe.
+
+### Project Structure
+
+```
+Ai.Tlbx.MiddleManager/              Web Server (mm.exe)
+├── Program.cs                      Entry point, API, WebSocket handlers
 ├── Services/
-│   ├── SessionManager        Manages all terminal sessions
-│   ├── TerminalSession       Individual session (wraps PTY + I/O)
-│   ├── MuxConnectionManager  WebSocket multiplexing (multiple sessions over one socket)
-│   ├── MuxProtocol           Binary protocol: [1-byte type][2-byte sessionId][2-byte length][payload]
-│   ├── UpdateService         GitHub release check, download, background timer
-│   └── UpdateScriptGenerator Platform-specific update scripts
-├── Pty/
-│   ├── IPtyConnection        Interface for PTY implementations
-│   ├── PtyConnectionFactory  Platform selector
-│   ├── WindowsPtyConnection  ConPTY via CsWin32 (Windows only)
-│   └── UnixPtyConnection     forkpty() via P/Invoke (Linux + macOS)
-├── Shells/
-│   ├── IShellConfiguration   Shell config interface
-│   ├── ShellRegistry         Available shells per platform
-│   └── *ShellConfiguration   Pwsh, PowerShell, Cmd, Bash, Zsh
-├── Settings/
-│   ├── MiddleManagerSettings POCO for settings.json
-│   └── SettingsService       Load/save with JSON source gen
-└── wwwroot/
-    ├── index.html            Single page app
-    ├── js/terminal.js        xterm.js integration, mux client, sidebar
-    └── css/app.css           Styles
+│   ├── SidecarClient               IPC client to mm-host
+│   ├── SidecarLifecycle            Spawn/connect to mm-host
+│   ├── SidecarSessionManager       Proxy to mm-host sessions
+│   ├── SidecarMuxConnectionManager WebSocket mux for sidecar mode
+│   ├── SessionManager              Direct mode (fallback, no sidecar)
+│   ├── UpdateService               GitHub release check, version comparison
+│   └── UpdateScriptGenerator       Platform-specific update scripts
+├── Ipc/                            IPC infrastructure
+│   ├── IIpcTransport               Transport interface
+│   ├── IpcFrame, IpcMessageType    Binary protocol
+│   ├── SidecarProtocol             Payload serialization
+│   └── Windows/, Unix/             Platform transports
+└── wwwroot/                        Static files (embedded)
+
+Ai.Tlbx.MiddleManager.Host/         PTY Host (mm-host.exe)
+├── Program.cs                      Entry point, CLI parsing
+├── Services/
+│   ├── SidecarServer               IPC listener
+│   ├── SessionManager              Session lifecycle
+│   └── TerminalSession             PTY wrapper + output buffer
+├── Pty/                            PTY implementations
+│   ├── WindowsPtyConnection        ConPTY
+│   └── UnixPtyConnection           forkpty()
+├── Shells/                         Shell configurations
+└── Ipc/                            IPC (copy of main project)
 ```
 
 ## API Endpoints
@@ -130,17 +162,99 @@ Default shell: Zsh (macOS), Pwsh (Windows), Bash (Linux)
 
 ## Release Process
 
-1. Bump `<Version>` in `Ai.Tlbx.MiddleManager/Ai.Tlbx.MiddleManager.csproj`
-2. Update `CHANGELOG.md`
-3. Commit, push, tag: `git tag v1.x.x && git push origin v1.x.x`
-4. GitHub Actions builds all platforms and creates release
+1. Bump `<Version>` in BOTH projects:
+   - `Ai.Tlbx.MiddleManager/Ai.Tlbx.MiddleManager.csproj`
+   - `Ai.Tlbx.MiddleManager.Host/Ai.Tlbx.MiddleManager.Host.csproj`
+2. Update `version.json` in repo root (web, pty, protocol versions)
+3. Update `CHANGELOG.md`
+4. Commit, push, tag: `git tag v2.x.x && git push origin v2.x.x`
+5. GitHub Actions builds both projects and creates release
 
 **GitHub Actions workflow** (`.github/workflows/release.yml`):
 - Triggers on `v*` tags
 - Matrix build: `win-x64`, `linux-x64`, `osx-arm64`, `osx-x64`
-- Uploads raw binaries as artifacts (not pre-zipped)
-- Release job packages artifacts: `.zip` for Windows, `.tar.gz` for Unix
-- macOS includes `pty_helper` native binary (built with clang)
+- Builds both `mm` and `mm-host` for each platform
+- Packages both binaries together per platform
+
+## Update System & Version Comparison
+
+### Version Manifest (`version.json`)
+
+```json
+{
+  "web": "2.0.0",      // mm.exe version
+  "pty": "2.0.0",      // mm-host.exe version
+  "protocol": 1,       // IPC protocol version (must match exactly)
+  "minCompatiblePty": "2.0.0"  // Minimum mm-host version web server can work with
+}
+```
+
+### Determining Update Type
+
+**Web-Only Update** (sessions preserved):
+- `release.pty == installed.pty` (PTY host version unchanged)
+- Only mm.exe is replaced
+- Sessions continue running in mm-host
+- User message: "Quick update - your terminals will stay alive"
+
+**Full Update** (sessions lost):
+- `release.pty != installed.pty` (PTY host version changed)
+- Both binaries replaced
+- mm-host restarts, killing all sessions
+- User message: "Full update - please save your work, terminals will restart"
+
+**Protocol Mismatch** (requires full update):
+- `release.protocol != installed.protocol`
+- IPC protocol changed, both must update together
+- Always a full update
+
+### Version Comparison Logic (in UpdateService)
+
+```csharp
+public UpdateType DetermineUpdateType(VersionManifest installed, VersionManifest release)
+{
+    // Protocol change = always full update
+    if (release.Protocol != installed.Protocol)
+        return UpdateType.Full;
+
+    // PTY version change = full update (host restarts)
+    if (release.Pty != installed.Pty)
+        return UpdateType.Full;
+
+    // Only web version changed = web-only update (sessions preserved)
+    if (release.Web != installed.Web)
+        return UpdateType.WebOnly;
+
+    return UpdateType.None;
+}
+```
+
+### Update Scenarios
+
+| Scenario | Web Version | PTY Version | Protocol | Update Type | Sessions |
+|----------|-------------|-------------|----------|-------------|----------|
+| Bug fix in UI | 2.0.0 → 2.0.1 | 2.0.0 | 1 | Web-Only | Preserved |
+| New web feature | 2.0.0 → 2.1.0 | 2.0.0 | 1 | Web-Only | Preserved |
+| PTY bug fix | 2.0.0 | 2.0.0 → 2.0.1 | 1 | Full | Lost |
+| New PTY feature | 2.0.0 → 2.1.0 | 2.0.0 → 2.1.0 | 1 | Full | Lost |
+| Protocol change | 2.0.0 → 3.0.0 | 2.0.0 → 3.0.0 | 1 → 2 | Full | Lost |
+
+### UI Messaging
+
+**Web-Only Update Toast:**
+```
+Update Available: v2.0.1
+Quick update - your terminals will stay alive!
+[Update Now]
+```
+
+**Full Update Toast:**
+```
+Update Available: v2.1.0
+⚠️ This update requires restarting the terminal host.
+Please save your work - all terminal sessions will close.
+[Update Now] [Later]
+```
 
 ## Install System
 

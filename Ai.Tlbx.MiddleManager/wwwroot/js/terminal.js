@@ -171,7 +171,8 @@
         stateWs.onmessage = function(event) {
             try {
                 var data = JSON.parse(event.data);
-                handleStateUpdate(data.sessions || []);
+                var sessionList = data.sessions && data.sessions.sessions ? data.sessions.sessions : [];
+                handleStateUpdate(sessionList);
                 handleUpdateInfo(data.update);
             } catch (e) {
                 console.error('Error parsing state:', e);
@@ -251,9 +252,27 @@
         panel.classList.remove('hidden');
         var currentEl = panel.querySelector('.update-current');
         var latestEl = panel.querySelector('.update-latest');
+        var noteEl = panel.querySelector('.update-note');
+        var headerEl = panel.querySelector('.update-header');
 
         if (currentEl) currentEl.textContent = updateInfo.currentVersion;
         if (latestEl) latestEl.textContent = updateInfo.latestVersion;
+
+        if (updateInfo.sessionsPreserved) {
+            if (headerEl) headerEl.textContent = 'Quick Update';
+            if (noteEl) {
+                noteEl.textContent = 'Sessions will stay alive';
+                noteEl.classList.add('update-note-safe');
+                noteEl.classList.remove('update-note-warning');
+            }
+        } else {
+            if (headerEl) headerEl.textContent = 'Update Available';
+            if (noteEl) {
+                noteEl.textContent = 'Save your work - sessions will restart';
+                noteEl.classList.add('update-note-warning');
+                noteEl.classList.remove('update-note-safe');
+            }
+        }
     }
 
     function applyUpdate() {
@@ -285,6 +304,119 @@
                 }
                 console.error('Update error:', e);
             });
+    }
+
+    function checkForUpdates() {
+        var btn = document.getElementById('btn-check-updates');
+        var statusEl = document.getElementById('update-status');
+
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Checking...';
+        }
+
+        fetch('/api/update/check')
+            .then(function(r) { return r.json(); })
+            .then(function(update) {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Check for Updates';
+                }
+
+                handleUpdateInfo(update);
+
+                if (statusEl) {
+                    statusEl.classList.remove('hidden');
+                    if (update && update.available) {
+                        statusEl.className = 'update-status update-status-available';
+                        var msg = 'Update available: v' + update.latestVersion;
+                        if (update.sessionsPreserved) {
+                            msg += ' (sessions will stay alive)';
+                        } else {
+                            msg += ' (sessions will restart)';
+                        }
+                        statusEl.textContent = msg;
+                    } else {
+                        statusEl.className = 'update-status update-status-current';
+                        statusEl.textContent = 'You are running the latest version';
+                    }
+                }
+            })
+            .catch(function(e) {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Check for Updates';
+                }
+                if (statusEl) {
+                    statusEl.classList.remove('hidden');
+                    statusEl.className = 'update-status update-status-error';
+                    statusEl.textContent = 'Failed to check for updates';
+                }
+                console.error('Update check error:', e);
+            });
+    }
+
+    function showChangelog() {
+        var modal = document.getElementById('changelog-modal');
+        var body = document.getElementById('changelog-body');
+
+        if (modal) modal.classList.remove('hidden');
+        if (body) body.innerHTML = '<div class="changelog-loading">Loading changelog...</div>';
+
+        fetch('https://api.github.com/repos/AiTlbx/MiddleManager/releases?per_page=10')
+            .then(function(r) { return r.json(); })
+            .then(function(releases) {
+                if (!body) return;
+
+                if (!releases || releases.length === 0) {
+                    body.innerHTML = '<p>No releases found.</p>';
+                    return;
+                }
+
+                var html = '';
+                releases.forEach(function(release) {
+                    var version = release.tag_name || 'Unknown';
+                    var date = release.published_at ? new Date(release.published_at).toLocaleDateString() : '';
+                    var notes = release.body || 'No release notes.';
+
+                    html += '<div class="changelog-release">';
+                    html += '<div class="changelog-version">' + escapeHtml(version) + '</div>';
+                    if (date) html += '<div class="changelog-date">' + escapeHtml(date) + '</div>';
+                    html += '<div class="changelog-notes">' + formatMarkdown(notes) + '</div>';
+                    html += '</div>';
+                });
+
+                body.innerHTML = html;
+            })
+            .catch(function(e) {
+                if (body) {
+                    body.innerHTML = '<p class="changelog-error">Failed to load changelog. <a href="https://github.com/AiTlbx/MiddleManager/releases" target="_blank">View on GitHub</a></p>';
+                }
+                console.error('Changelog error:', e);
+            });
+    }
+
+    function closeChangelog() {
+        var modal = document.getElementById('changelog-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    function escapeHtml(text) {
+        var div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function formatMarkdown(text) {
+        // Basic markdown: headers, bold, links, lists
+        return escapeHtml(text)
+            .replace(/^### (.+)$/gm, '<h4>$1</h4>')
+            .replace(/^## (.+)$/gm, '<h3>$1</h3>')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+            .replace(/^- (.+)$/gm, '<li>$1</li>')
+            .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+            .replace(/\n/g, '<br>');
     }
 
     // ========================================================================
@@ -831,18 +963,34 @@
     function fetchSettings() {
         Promise.all([
             fetch('/api/settings').then(function(r) { return r.json(); }),
-            fetch('/api/users').then(function(r) { return r.json(); }).catch(function() { return []; })
+            fetch('/api/users').then(function(r) { return r.json(); }).catch(function() { return []; }),
+            fetch('/api/version/details').then(function(r) { return r.json(); }).catch(function() { return null; })
         ])
         .then(function(results) {
             var settings = results[0];
             var users = results[1];
+            var versionDetails = results[2];
             currentSettings = settings;
             populateUserDropdown(users, settings.runAsUser);
             populateSettingsForm(settings);
+            populateVersionInfo(versionDetails);
         })
         .catch(function(e) {
             console.error('Error fetching settings:', e);
         });
+    }
+
+    function populateVersionInfo(details) {
+        var webEl = document.getElementById('version-web');
+        var ptyEl = document.getElementById('version-pty');
+
+        if (details) {
+            if (webEl) webEl.textContent = details.web || '-';
+            if (ptyEl) ptyEl.textContent = details.pty || '-';
+        } else {
+            if (webEl) webEl.textContent = '-';
+            if (ptyEl) ptyEl.textContent = '-';
+        }
     }
 
     function populateUserDropdown(users, selectedUser) {
@@ -958,6 +1106,15 @@
 
         // Update button
         bindClick('update-btn', applyUpdate);
+
+        // About & Updates
+        bindClick('btn-check-updates', checkForUpdates);
+        bindClick('btn-show-changelog', showChangelog);
+        bindClick('btn-close-changelog', closeChangelog);
+        var changelogBackdrop = document.querySelector('#changelog-modal .modal-backdrop');
+        if (changelogBackdrop) {
+            changelogBackdrop.addEventListener('click', closeChangelog);
+        }
 
         bindSettingsAutoSave();
     }

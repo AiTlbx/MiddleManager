@@ -15,6 +15,8 @@ namespace Ai.Tlbx.MiddleManager.Services;
 [JsonSerializable(typeof(List<ShellInfoDto>))]
 [JsonSerializable(typeof(MiddleManagerSettings))]
 [JsonSerializable(typeof(UpdateInfo))]
+[JsonSerializable(typeof(UpdateType))]
+[JsonSerializable(typeof(VersionManifest))]
 [JsonSerializable(typeof(StateUpdate))]
 [JsonSerializable(typeof(UserInfo))]
 [JsonSerializable(typeof(List<UserInfo>))]

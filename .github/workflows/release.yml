@@ -7,7 +7,8 @@ on:
 
 env:
   DOTNET_VERSION: '10.0.x'
-  PROJECT_PATH: Ai.Tlbx.MiddleManager/Ai.Tlbx.MiddleManager.csproj
+  WEB_PROJECT: Ai.Tlbx.MiddleManager/Ai.Tlbx.MiddleManager.csproj
+  HOST_PROJECT: Ai.Tlbx.MiddleManager.Host/Ai.Tlbx.MiddleManager.Host.csproj
 
 jobs:
   build:
@@ -34,36 +35,37 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Publish AOT
-        run: dotnet publish ${{ env.PROJECT_PATH }} -c Release -r ${{ matrix.rid }} /p:IsPublishing=true
+      - name: Publish Web Server (mm)
+        run: dotnet publish ${{ env.WEB_PROJECT }} -c Release -r ${{ matrix.rid }} /p:IsPublishing=true
 
-      - name: Build pty_helper (macOS only)
-        if: startsWith(matrix.rid, 'osx')
-        run: |
-          clang -O2 Ai.Tlbx.MiddleManager/Pty/pty_helper.c -o Ai.Tlbx.MiddleManager/bin/Release/net10.0/${{ matrix.rid }}/publish/pty_helper
+      - name: Publish PTY Host (mm-host)
+        run: dotnet publish ${{ env.HOST_PROJECT }} -c Release -r ${{ matrix.rid }} /p:IsPublishing=true
 
-      - name: Upload binary (Windows)
+      - name: Create staging directory
+        shell: bash
+        run: mkdir -p staging
+
+      - name: Stage binaries (Windows)
         if: matrix.rid == 'win-x64'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.rid }}
-          path: Ai.Tlbx.MiddleManager/bin/Release/net10.0/${{ matrix.rid }}/publish/mm.exe
+        shell: bash
+        run: |
+          cp Ai.Tlbx.MiddleManager/bin/Release/net10.0/${{ matrix.rid }}/publish/mm.exe staging/
+          cp Ai.Tlbx.MiddleManager.Host/bin/Release/net10.0/${{ matrix.rid }}/publish/mm-host.exe staging/
+          cp version.json staging/
 
-      - name: Upload binary (macOS)
-        if: startsWith(matrix.rid, 'osx')
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.rid }}
-          path: |
-            Ai.Tlbx.MiddleManager/bin/Release/net10.0/${{ matrix.rid }}/publish/mm
-            Ai.Tlbx.MiddleManager/bin/Release/net10.0/${{ matrix.rid }}/publish/pty_helper
+      - name: Stage binaries (Unix)
+        if: matrix.rid != 'win-x64'
+        shell: bash
+        run: |
+          cp Ai.Tlbx.MiddleManager/bin/Release/net10.0/${{ matrix.rid }}/publish/mm staging/
+          cp Ai.Tlbx.MiddleManager.Host/bin/Release/net10.0/${{ matrix.rid }}/publish/mm-host staging/
+          cp version.json staging/
 
-      - name: Upload binary (Linux)
-        if: matrix.rid == 'linux-x64'
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.rid }}
-          path: Ai.Tlbx.MiddleManager/bin/Release/net10.0/${{ matrix.rid }}/publish/mm
+          path: staging/
 
   release:
     needs: build
@@ -86,12 +88,12 @@ jobs:
         run: |
           cd artifacts
           # Windows
-          cd win-x64 && zip ../mm-win-x64.zip mm.exe && cd ..
+          cd win-x64 && zip ../mm-win-x64.zip mm.exe mm-host.exe version.json && cd ..
           # macOS
-          cd osx-arm64 && tar -czvf ../mm-osx-arm64.tar.gz mm pty_helper && cd ..
-          cd osx-x64 && tar -czvf ../mm-osx-x64.tar.gz mm pty_helper && cd ..
+          cd osx-arm64 && tar -czvf ../mm-osx-arm64.tar.gz mm mm-host version.json && cd ..
+          cd osx-x64 && tar -czvf ../mm-osx-x64.tar.gz mm mm-host version.json && cd ..
           # Linux
-          cd linux-x64 && tar -czvf ../mm-linux-x64.tar.gz mm && cd ..
+          cd linux-x64 && tar -czvf ../mm-linux-x64.tar.gz mm mm-host version.json && cd ..
 
       - name: Generate changelog
         id: changelog
@@ -112,6 +114,14 @@ jobs:
           body: |
             ## What's Changed
             ${{ steps.changelog.outputs.changelog }}
+
+            ## Sidecar Architecture (v2.0+)
+            This release includes two binaries:
+            - **mm** (mm.exe on Windows) - Web server
+            - **mm-host** (mm-host.exe on Windows) - PTY session host
+
+            Terminal sessions are now persisted by mm-host. When you update the web server,
+            your terminal sessions remain active.
           files: |
             artifacts/mm-osx-arm64.tar.gz
             artifacts/mm-osx-x64.tar.gz

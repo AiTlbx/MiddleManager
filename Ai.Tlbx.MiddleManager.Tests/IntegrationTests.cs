@@ -1,7 +1,6 @@
 using System.Net.Http.Json;
 using System.Net.WebSockets;
 using System.Text;
-using Ai.Tlbx.MiddleManager.Services;
 using Ai.Tlbx.MiddleManager.Models;
 using Ai.Tlbx.MiddleManager.Services;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -256,6 +255,78 @@ public class IntegrationTests : IClassFixture<WebApplicationFactory<Program>>, I
         var socket = await wsClient.ConnectAsync(wsUri, CancellationToken.None);
         _webSockets.Add(socket);
         return socket;
+    }
+
+    [Fact]
+    public async Task WebSocket_State_ReceivesInitialSessionList()
+    {
+        var ws = await ConnectWebSocket("/ws/state");
+
+        var buffer = new byte[8192];
+        var result = await ws.ReceiveAsync(buffer, CancellationToken.None);
+
+        Assert.Equal(WebSocketMessageType.Text, result.MessageType);
+        var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
+
+        // Verify the structure matches what the frontend expects: { sessions: { sessions: [] } }
+        var state = System.Text.Json.JsonSerializer.Deserialize<StateUpdate>(json, AppJsonContext.Default.StateUpdate);
+        Assert.NotNull(state);
+        Assert.NotNull(state.Sessions);
+        Assert.NotNull(state.Sessions.Sessions);
+    }
+
+    [Fact]
+    public async Task WebSocket_State_UpdatesWhenSessionCreated()
+    {
+        // Connect to state websocket first
+        var ws = await ConnectWebSocket("/ws/state");
+
+        // Drain initial state
+        var buffer = new byte[8192];
+        await ws.ReceiveAsync(buffer, CancellationToken.None);
+
+        // Create a new session
+        var createResponse = await _client.PostAsJsonAsync("/api/sessions", new { Cols = 80, Rows = 24 });
+        var session = await createResponse.Content.ReadFromJsonAsync<SessionInfoDto>(AppJsonContext.Default.SessionInfoDto);
+        Assert.NotNull(session);
+
+        // Wait for state update
+        using var cts = new CancellationTokenSource(5000);
+        var result = await ws.ReceiveAsync(buffer, cts.Token);
+
+        Assert.Equal(WebSocketMessageType.Text, result.MessageType);
+        var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
+        var state = System.Text.Json.JsonSerializer.Deserialize<StateUpdate>(json, AppJsonContext.Default.StateUpdate);
+
+        Assert.NotNull(state);
+        Assert.NotNull(state.Sessions);
+        Assert.Contains(state.Sessions.Sessions, s => s.Id == session.Id);
+    }
+
+    [Fact]
+    public async Task WebSocket_State_SessionListHasCorrectStructure()
+    {
+        // Create a session first
+        var createResponse = await _client.PostAsJsonAsync("/api/sessions", new { Cols = 100, Rows = 40 });
+        var session = await createResponse.Content.ReadFromJsonAsync<SessionInfoDto>(AppJsonContext.Default.SessionInfoDto);
+        Assert.NotNull(session);
+
+        // Connect to state websocket
+        var ws = await ConnectWebSocket("/ws/state");
+        var buffer = new byte[8192];
+        var result = await ws.ReceiveAsync(buffer, CancellationToken.None);
+
+        var json = Encoding.UTF8.GetString(buffer, 0, result.Count);
+        var state = System.Text.Json.JsonSerializer.Deserialize<StateUpdate>(json, AppJsonContext.Default.StateUpdate);
+
+        Assert.NotNull(state);
+        Assert.NotNull(state.Sessions);
+        Assert.NotEmpty(state.Sessions.Sessions);
+
+        var sessionInfo = state.Sessions.Sessions.First(s => s.Id == session.Id);
+        Assert.Equal(100, sessionInfo.Cols);
+        Assert.Equal(40, sessionInfo.Rows);
+        Assert.True(sessionInfo.IsRunning);
     }
 
     private static async Task DrainInitialFrames(WebSocket ws)

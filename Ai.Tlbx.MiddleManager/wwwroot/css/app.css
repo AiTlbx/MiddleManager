@@ -896,3 +896,235 @@ html, body {
     margin-top: 6px;
     text-align: center;
 }
+
+.update-note-safe {
+    color: #4ec9b0;
+}
+
+.update-note-warning {
+    color: #ce9178;
+}
+
+/* About & Updates section in settings */
+.about-section {
+    background-color: #1a1a2e;
+    border: 1px solid #333;
+}
+
+.version-info {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 12px;
+}
+
+.version-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.version-label {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+}
+
+.version-value {
+    font-size: 14px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: #4ec9b0;
+}
+
+.update-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.update-actions .btn-secondary {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 12px;
+}
+
+.update-status {
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    text-align: center;
+}
+
+.update-status.hidden {
+    display: none;
+}
+
+.update-status-available {
+    background-color: #1a3a1a;
+    border: 1px solid #2d5a2d;
+    color: #4ec9b0;
+}
+
+.update-status-current {
+    background-color: #1a1a2e;
+    border: 1px solid #333;
+    color: #888;
+}
+
+.update-status-error {
+    background-color: #3a1a1a;
+    border: 1px solid #5a2d2d;
+    color: #ce9178;
+}
+
+/* Modal styles */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+}
+
+.modal-content {
+    position: relative;
+    background-color: #252526;
+    border: 1px solid #3c3c3c;
+    border-radius: 8px;
+    max-width: 600px;
+    max-height: 80vh;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid #3c3c3c;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 16px;
+    color: #fff;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.modal-close:hover {
+    color: #fff;
+}
+
+.modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* Changelog specific styles */
+.changelog-modal-content {
+    max-width: 700px;
+}
+
+.changelog-loading {
+    text-align: center;
+    color: #888;
+    padding: 40px;
+}
+
+.changelog-release {
+    margin-bottom: 24px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid #333;
+}
+
+.changelog-release:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.changelog-version {
+    font-size: 18px;
+    font-weight: bold;
+    color: #4ec9b0;
+    margin-bottom: 4px;
+}
+
+.changelog-date {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 12px;
+}
+
+.changelog-notes {
+    font-size: 13px;
+    line-height: 1.6;
+    color: #d4d4d4;
+}
+
+.changelog-notes h3 {
+    font-size: 14px;
+    color: #fff;
+    margin: 16px 0 8px 0;
+}
+
+.changelog-notes h4 {
+    font-size: 13px;
+    color: #ddd;
+    margin: 12px 0 6px 0;
+}
+
+.changelog-notes ul {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.changelog-notes li {
+    margin: 4px 0;
+}
+
+.changelog-notes a {
+    color: #569cd6;
+}
+
+.changelog-notes a:hover {
+    text-decoration: underline;
+}
+
+.changelog-error {
+    color: #ce9178;
+    text-align: center;
+}
+
+.changelog-error a {
+    color: #569cd6;
+}

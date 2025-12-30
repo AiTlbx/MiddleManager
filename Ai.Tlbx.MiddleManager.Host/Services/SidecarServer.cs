@@ -1,0 +1,289 @@
+using System.Collections.Concurrent;
+using Ai.Tlbx.MiddleManager.Host.Ipc;
+
+namespace Ai.Tlbx.MiddleManager.Host.Services;
+
+public sealed class SidecarServer : IAsyncDisposable
+{
+    private readonly IIpcServer _server;
+    private readonly SessionManager _sessionManager;
+    private readonly ConcurrentDictionary<int, ClientHandler> _clients = new();
+    private readonly CancellationTokenSource _cts = new();
+    private int _nextClientId;
+    private bool _disposed;
+
+    public SidecarServer(SessionManager sessionManager)
+    {
+        _server = IpcServerFactory.Create();
+        _sessionManager = sessionManager;
+
+        _sessionManager.OnOutput += BroadcastOutput;
+        _sessionManager.OnStateChanged += BroadcastStateChange;
+    }
+
+    public async Task StartAsync(CancellationToken cancellationToken = default)
+    {
+        await _server.StartAsync(cancellationToken).ConfigureAwait(false);
+        Console.WriteLine($"mm-host listening on {IpcServerFactory.GetEndpointDescription()}");
+
+        _ = AcceptLoopAsync(_cts.Token);
+    }
+
+    private async Task AcceptLoopAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                var transport = await _server.AcceptAsync(cancellationToken).ConfigureAwait(false);
+                var clientId = Interlocked.Increment(ref _nextClientId);
+                var handler = new ClientHandler(clientId, transport, _sessionManager, RemoveClient);
+                _clients[clientId] = handler;
+                _ = handler.RunAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Accept error: {ex.Message}");
+                await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private void RemoveClient(int clientId)
+    {
+        _clients.TryRemove(clientId, out _);
+    }
+
+    private void BroadcastOutput(string sessionId, ReadOnlyMemory<byte> data)
+    {
+        var frame = new IpcFrame(IpcMessageType.Output, sessionId, data);
+        foreach (var client in _clients.Values)
+        {
+            _ = client.SendFrameAsync(frame);
+        }
+    }
+
+    private void BroadcastStateChange(string sessionId)
+    {
+        var session = _sessionManager.GetSession(sessionId);
+        var snapshot = session?.ToSnapshot() ?? new SessionSnapshot
+        {
+            Id = sessionId,
+            ShellType = string.Empty,
+            IsRunning = false
+        };
+
+        var payload = SidecarProtocol.CreateStateChangePayload(snapshot);
+        var frame = new IpcFrame(IpcMessageType.StateChange, sessionId, payload);
+
+        foreach (var client in _clients.Values)
+        {
+            _ = client.SendFrameAsync(frame);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        _disposed = true;
+
+        _cts.Cancel();
+
+        foreach (var client in _clients.Values)
+        {
+            await client.DisposeAsync().ConfigureAwait(false);
+        }
+        _clients.Clear();
+
+        await _server.DisposeAsync().ConfigureAwait(false);
+        _cts.Dispose();
+    }
+}
+
+internal sealed class ClientHandler : IAsyncDisposable
+{
+    private readonly int _clientId;
+    private readonly IIpcTransport _transport;
+    private readonly SessionManager _sessionManager;
+    private readonly Action<int> _onDisconnect;
+    private readonly SemaphoreSlim _sendLock = new(1, 1);
+    private bool _disposed;
+
+    public ClientHandler(
+        int clientId,
+        IIpcTransport transport,
+        SessionManager sessionManager,
+        Action<int> onDisconnect)
+    {
+        _clientId = clientId;
+        _transport = transport;
+        _sessionManager = sessionManager;
+        _onDisconnect = onDisconnect;
+    }
+
+    public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested && _transport.IsConnected)
+            {
+                var frame = await _transport.ReadFrameAsync(cancellationToken).ConfigureAwait(false);
+                if (frame is null)
+                {
+                    break;
+                }
+
+                await HandleFrameAsync(frame.Value, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Client {_clientId} error: {ex.Message}");
+        }
+        finally
+        {
+            _onDisconnect(_clientId);
+            await DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    private async Task HandleFrameAsync(IpcFrame frame, CancellationToken cancellationToken)
+    {
+        switch (frame.Type)
+        {
+            case IpcMessageType.Handshake:
+                await HandleHandshakeAsync(frame, cancellationToken).ConfigureAwait(false);
+                break;
+
+            case IpcMessageType.CreateSession:
+                await HandleCreateSessionAsync(frame, cancellationToken).ConfigureAwait(false);
+                break;
+
+            case IpcMessageType.CloseSession:
+                HandleCloseSession(frame);
+                break;
+
+            case IpcMessageType.Input:
+                await HandleInputAsync(frame).ConfigureAwait(false);
+                break;
+
+            case IpcMessageType.Resize:
+                HandleResize(frame);
+                break;
+
+            case IpcMessageType.ListSessions:
+                await HandleListSessionsAsync(cancellationToken).ConfigureAwait(false);
+                break;
+
+            case IpcMessageType.GetBuffer:
+                await HandleGetBufferAsync(frame, cancellationToken).ConfigureAwait(false);
+                break;
+
+            case IpcMessageType.Heartbeat:
+                await SendFrameAsync(new IpcFrame(IpcMessageType.Heartbeat)).ConfigureAwait(false);
+                break;
+        }
+    }
+
+    private async Task HandleHandshakeAsync(IpcFrame frame, CancellationToken cancellationToken)
+    {
+        var (version, _) = SidecarProtocol.ParseHandshakePayload(frame.Payload.Span);
+        if (version != SidecarProtocol.ProtocolVersion)
+        {
+            var error = SidecarProtocol.CreateErrorPayload($"Protocol version mismatch: expected {SidecarProtocol.ProtocolVersion}, got {version}");
+            await SendFrameAsync(new IpcFrame(IpcMessageType.Error, string.Empty, error)).ConfigureAwait(false);
+            return;
+        }
+
+        var ackPayload = SidecarProtocol.CreateHandshakePayload(string.Empty);
+        await SendFrameAsync(new IpcFrame(IpcMessageType.HandshakeAck, string.Empty, ackPayload)).ConfigureAwait(false);
+    }
+
+    private async Task HandleCreateSessionAsync(IpcFrame frame, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var request = SidecarProtocol.ParseCreateSessionPayload(frame.Payload.Span);
+            var session = _sessionManager.CreateSession(request);
+            var payload = SidecarProtocol.CreateSessionCreatedPayload(session.ToSnapshot());
+            await SendFrameAsync(new IpcFrame(IpcMessageType.SessionCreated, session.Id, payload)).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            var error = SidecarProtocol.CreateErrorPayload(ex.Message);
+            await SendFrameAsync(new IpcFrame(IpcMessageType.Error, string.Empty, error)).ConfigureAwait(false);
+        }
+    }
+
+    private void HandleCloseSession(IpcFrame frame)
+    {
+        _sessionManager.CloseSession(frame.SessionId);
+    }
+
+    private async Task HandleInputAsync(IpcFrame frame)
+    {
+        await _sessionManager.SendInputAsync(frame.SessionId, frame.Payload).ConfigureAwait(false);
+    }
+
+    private void HandleResize(IpcFrame frame)
+    {
+        var (cols, rows) = SidecarProtocol.ParseResizePayload(frame.Payload.Span);
+        _sessionManager.ResizeSession(frame.SessionId, cols, rows);
+    }
+
+    private async Task HandleListSessionsAsync(CancellationToken cancellationToken)
+    {
+        var snapshots = _sessionManager.GetAllSnapshots();
+        var payload = SidecarProtocol.CreateSessionListPayload(snapshots);
+        await SendFrameAsync(new IpcFrame(IpcMessageType.SessionList, string.Empty, payload)).ConfigureAwait(false);
+    }
+
+    private async Task HandleGetBufferAsync(IpcFrame frame, CancellationToken cancellationToken)
+    {
+        var buffer = _sessionManager.GetBuffer(frame.SessionId);
+        if (buffer is not null)
+        {
+            await SendFrameAsync(new IpcFrame(IpcMessageType.Buffer, frame.SessionId, buffer)).ConfigureAwait(false);
+        }
+    }
+
+    public async Task SendFrameAsync(IpcFrame frame)
+    {
+        if (_disposed || !_transport.IsConnected)
+        {
+            return;
+        }
+
+        await _sendLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await _transport.WriteFrameAsync(frame).ConfigureAwait(false);
+        }
+        finally
+        {
+            _sendLock.Release();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+        _disposed = true;
+
+        await _transport.DisposeAsync().ConfigureAwait(false);
+        _sendLock.Dispose();
+    }
+}

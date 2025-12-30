@@ -78,4 +78,84 @@ public class StateListenerTests : IDisposable
 
         Assert.Equal(1, count);
     }
+
+    [Fact]
+    public void GetSessionList_ContainsCreatedSession()
+    {
+        var session = _sessionManager.CreateSession();
+
+        var list = _sessionManager.GetSessionList();
+
+        Assert.Single(list.Sessions);
+        Assert.Equal(session.Id, list.Sessions[0].Id);
+    }
+
+    [Fact]
+    public void GetSessionList_ContainsMultipleSessions()
+    {
+        var session1 = _sessionManager.CreateSession();
+        var session2 = _sessionManager.CreateSession();
+        var session3 = _sessionManager.CreateSession();
+
+        var list = _sessionManager.GetSessionList();
+
+        Assert.Equal(3, list.Sessions.Count);
+        var ids = list.Sessions.Select(s => s.Id).ToHashSet();
+        Assert.Contains(session1.Id, ids);
+        Assert.Contains(session2.Id, ids);
+        Assert.Contains(session3.Id, ids);
+    }
+
+    [Fact]
+    public void GetSessionList_SessionsOrderedByCreatedAt()
+    {
+        var session1 = _sessionManager.CreateSession();
+        Thread.Sleep(10); // Ensure different timestamps
+        var session2 = _sessionManager.CreateSession();
+        Thread.Sleep(10);
+        var session3 = _sessionManager.CreateSession();
+
+        var list = _sessionManager.GetSessionList();
+
+        Assert.Equal(3, list.Sessions.Count);
+        Assert.Equal(session1.Id, list.Sessions[0].Id);
+        Assert.Equal(session2.Id, list.Sessions[1].Id);
+        Assert.Equal(session3.Id, list.Sessions[2].Id);
+    }
+
+    [Fact]
+    public void GetSessionList_SessionRemovedAfterClose()
+    {
+        var session1 = _sessionManager.CreateSession();
+        var session2 = _sessionManager.CreateSession();
+
+        _sessionManager.CloseSession(session1.Id);
+        var list = _sessionManager.GetSessionList();
+
+        Assert.Single(list.Sessions);
+        Assert.Equal(session2.Id, list.Sessions[0].Id);
+    }
+
+    [Fact]
+    public void GetSessionList_EmptyWhenNoSessions()
+    {
+        var list = _sessionManager.GetSessionList();
+
+        Assert.Empty(list.Sessions);
+    }
+
+    [Fact]
+    public void GetSessionList_SessionHasCorrectProperties()
+    {
+        var session = _sessionManager.CreateSession(cols: 100, rows: 40);
+
+        var list = _sessionManager.GetSessionList();
+        var info = list.Sessions[0];
+
+        Assert.Equal(session.Id, info.Id);
+        Assert.Equal(100, info.Cols);
+        Assert.Equal(40, info.Rows);
+        Assert.True(info.IsRunning);
+        Assert.NotNull(info.ShellType);
+    }
 }

@@ -35,7 +35,7 @@ public sealed class SessionManager : IDisposable
         var effectiveShellType = shellType ?? settings.DefaultShell;
         var shellConfig = _shellRegistry.GetConfigurationOrDefault(effectiveShellType);
 
-        var workingDirectory = GetDefaultWorkingDirectory();
+        var workingDirectory = GetDefaultWorkingDirectory(settings);
 
         // Pass runAs settings for privilege de-elevation when running as service
         var session = TerminalSession.Create(
@@ -135,8 +135,14 @@ public sealed class SessionManager : IDisposable
         return true;
     }
 
-    private static string GetDefaultWorkingDirectory()
+    private static string GetDefaultWorkingDirectory(Settings.MiddleManagerSettings settings)
     {
+        if (!string.IsNullOrWhiteSpace(settings.DefaultWorkingDirectory) &&
+            Directory.Exists(settings.DefaultWorkingDirectory))
+        {
+            return settings.DefaultWorkingDirectory;
+        }
+
         try
         {
             return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
