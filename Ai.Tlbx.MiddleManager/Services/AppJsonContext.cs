@@ -14,7 +14,15 @@ namespace Ai.Tlbx.MiddleManager.Services;
 [JsonSerializable(typeof(ShellInfoDto))]
 [JsonSerializable(typeof(List<ShellInfoDto>))]
 [JsonSerializable(typeof(MiddleManagerSettings))]
+[JsonSerializable(typeof(UpdateInfo))]
+[JsonSerializable(typeof(StateUpdate))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, UseStringEnumConverter = true)]
 public partial class AppJsonContext : JsonSerializerContext
 {
+}
+
+public sealed class StateUpdate
+{
+    public SessionListDto? Sessions { get; init; }
+    public UpdateInfo? Update { get; init; }
 }

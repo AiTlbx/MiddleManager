@@ -1,0 +1,352 @@
+#!/bin/bash
+# MiddleManager macOS/Linux Installer
+# Usage: curl -fsSL https://raw.githubusercontent.com/AiTlbx/MiddleManager/main/install.sh | bash
+
+set -e
+
+REPO_OWNER="AiTlbx"
+REPO_NAME="MiddleManager"
+SERVICE_NAME="middlemanager"
+LAUNCHD_LABEL="com.aitlbx.middlemanager"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+GRAY='\033[0;90m'
+NC='\033[0m' # No Color
+
+print_header() {
+    echo ""
+    echo -e "${CYAN}  MiddleManager Installer${NC}"
+    echo -e "${CYAN}  ========================${NC}"
+    echo ""
+}
+
+detect_platform() {
+    OS=$(uname -s)
+    ARCH=$(uname -m)
+
+    case "$OS" in
+        Darwin)
+            PLATFORM="osx"
+            ;;
+        Linux)
+            PLATFORM="linux"
+            ;;
+        *)
+            echo -e "${RED}Unsupported OS: $OS${NC}"
+            exit 1
+            ;;
+    esac
+
+    case "$ARCH" in
+        x86_64|amd64)
+            ARCH="x64"
+            ;;
+        arm64|aarch64)
+            ARCH="arm64"
+            ;;
+        *)
+            echo -e "${RED}Unsupported architecture: $ARCH${NC}"
+            exit 1
+            ;;
+    esac
+
+    # Linux only supports x64 for now
+    if [ "$PLATFORM" = "linux" ] && [ "$ARCH" = "arm64" ]; then
+        echo -e "${RED}Linux ARM64 is not yet supported. Using x64.${NC}"
+        ARCH="x64"
+    fi
+
+    ASSET_NAME="mm-${PLATFORM}-${ARCH}.tar.gz"
+    echo -e "${GRAY}Detected: $OS $ARCH${NC}"
+}
+
+get_latest_release() {
+    echo -e "${GRAY}Fetching latest release...${NC}"
+    RELEASE_INFO=$(curl -fsSL "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/releases/latest")
+    VERSION=$(echo "$RELEASE_INFO" | grep '"tag_name"' | sed -E 's/.*"tag_name": *"v?([^"]+)".*/\1/')
+    ASSET_URL=$(echo "$RELEASE_INFO" | grep "browser_download_url.*$ASSET_NAME" | sed -E 's/.*"browser_download_url": *"([^"]+)".*/\1/')
+
+    if [ -z "$ASSET_URL" ]; then
+        echo -e "${RED}Could not find $ASSET_NAME in release assets${NC}"
+        exit 1
+    fi
+
+    echo -e "  Latest version: ${CYAN}$VERSION${NC}"
+    echo ""
+}
+
+prompt_service_mode() {
+    echo -e "  ${CYAN}Install as system service? [Y/n]${NC}"
+    echo ""
+    echo -e "    ${GREEN}✓ Recommended: Starts automatically on boot${NC}"
+    echo -e "    ${GREEN}✓ Available even before login (great for remote access)${NC}"
+    echo -e "    ${GREEN}✓ Survives unexpected reboots${NC}"
+    echo ""
+    echo -e "    ${GRAY}Requires sudo privileges (will prompt)${NC}"
+    echo ""
+
+    read -p "  Your choice [Y/n]: " choice
+    case "$choice" in
+        n|N)
+            SERVICE_MODE=false
+            ;;
+        *)
+            SERVICE_MODE=true
+            ;;
+    esac
+}
+
+install_binary() {
+    local install_dir="$1"
+    local temp_dir=$(mktemp -d)
+
+    echo -e "${GRAY}Downloading...${NC}"
+    curl -fsSL "$ASSET_URL" -o "$temp_dir/mm.tar.gz"
+
+    echo -e "${GRAY}Extracting...${NC}"
+    tar -xzf "$temp_dir/mm.tar.gz" -C "$temp_dir"
+
+    # Create install directory
+    mkdir -p "$install_dir"
+
+    # Copy files
+    cp "$temp_dir/mm" "$install_dir/"
+    chmod +x "$install_dir/mm"
+
+    # Copy pty_helper if present (macOS)
+    if [ -f "$temp_dir/pty_helper" ]; then
+        cp "$temp_dir/pty_helper" "$install_dir/"
+        chmod +x "$install_dir/pty_helper"
+    fi
+
+    # Cleanup
+    rm -rf "$temp_dir"
+}
+
+install_as_service() {
+    local install_dir="/usr/local/bin"
+    local lib_dir="/usr/local/lib/middlemanager"
+
+    # Check for root
+    if [ "$EUID" -ne 0 ]; then
+        echo ""
+        echo -e "${YELLOW}Requesting sudo privileges...${NC}"
+        exec sudo "$0" --service
+    fi
+
+    install_binary "$install_dir"
+
+    # Create lib directory for support files
+    mkdir -p "$lib_dir"
+
+    # Move pty_helper to lib dir if present
+    if [ -f "$install_dir/pty_helper" ]; then
+        mv "$install_dir/pty_helper" "$lib_dir/"
+    fi
+
+    if [ "$(uname -s)" = "Darwin" ]; then
+        install_launchd "$install_dir"
+    else
+        install_systemd "$install_dir"
+    fi
+
+    # Create uninstall script
+    create_uninstall_script "$lib_dir" true
+
+    echo ""
+    echo -e "${GREEN}Installation complete!${NC}"
+    echo ""
+    echo -e "  ${GRAY}Location: $install_dir/mm${NC}"
+    echo -e "  ${CYAN}URL:      http://localhost:2000${NC}"
+    echo ""
+}
+
+install_launchd() {
+    local install_dir="$1"
+    local plist_path="/Library/LaunchDaemons/${LAUNCHD_LABEL}.plist"
+    local log_dir="/usr/local/var/log"
+
+    echo -e "${GRAY}Creating launchd service...${NC}"
+
+    # Create log directory
+    mkdir -p "$log_dir"
+
+    # Unload existing service if present
+    launchctl unload "$plist_path" 2>/dev/null || true
+
+    # Create plist
+    cat > "$plist_path" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${LAUNCHD_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${install_dir}/mm</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>${log_dir}/middlemanager.log</string>
+    <key>StandardErrorPath</key>
+    <string>${log_dir}/middlemanager.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+</dict>
+</plist>
+EOF
+
+    # Load service
+    echo -e "${GRAY}Starting service...${NC}"
+    launchctl load "$plist_path"
+}
+
+install_systemd() {
+    local install_dir="$1"
+    local service_path="/etc/systemd/system/${SERVICE_NAME}.service"
+
+    echo -e "${GRAY}Creating systemd service...${NC}"
+
+    # Stop existing service if present
+    systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+
+    # Create service file
+    cat > "$service_path" << EOF
+[Unit]
+Description=MiddleManager Terminal Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=${install_dir}/mm
+Restart=always
+RestartSec=5
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Reload and start
+    echo -e "${GRAY}Starting service...${NC}"
+    systemctl daemon-reload
+    systemctl enable "$SERVICE_NAME"
+    systemctl start "$SERVICE_NAME"
+}
+
+install_as_user() {
+    local install_dir="$HOME/.local/bin"
+
+    install_binary "$install_dir"
+
+    # Check if ~/.local/bin is in PATH
+    if [[ ":$PATH:" != *":$install_dir:"* ]]; then
+        echo ""
+        echo -e "${YELLOW}Add this to your shell profile (~/.bashrc or ~/.zshrc):${NC}"
+        echo ""
+        echo -e "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+        echo ""
+    fi
+
+    # Create uninstall script
+    local lib_dir="$HOME/.local/lib/middlemanager"
+    mkdir -p "$lib_dir"
+
+    # Move pty_helper if present
+    if [ -f "$install_dir/pty_helper" ]; then
+        mv "$install_dir/pty_helper" "$lib_dir/"
+    fi
+
+    create_uninstall_script "$lib_dir" false
+
+    echo ""
+    echo -e "${GREEN}Installation complete!${NC}"
+    echo ""
+    echo -e "  ${GRAY}Location: $install_dir/mm${NC}"
+    echo -e "  ${YELLOW}Run 'mm' to start MiddleManager${NC}"
+    echo ""
+}
+
+create_uninstall_script() {
+    local lib_dir="$1"
+    local is_service="$2"
+
+    local uninstall_script="$lib_dir/uninstall.sh"
+
+    if [ "$is_service" = true ]; then
+        cat > "$uninstall_script" << 'EOF'
+#!/bin/bash
+# MiddleManager Uninstaller
+
+set -e
+
+echo "Uninstalling MiddleManager..."
+
+if [ "$(uname -s)" = "Darwin" ]; then
+    # macOS
+    sudo launchctl unload /Library/LaunchDaemons/com.aitlbx.middlemanager.plist 2>/dev/null || true
+    sudo rm -f /Library/LaunchDaemons/com.aitlbx.middlemanager.plist
+else
+    # Linux
+    sudo systemctl stop middlemanager 2>/dev/null || true
+    sudo systemctl disable middlemanager 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/middlemanager.service
+    sudo systemctl daemon-reload
+fi
+
+sudo rm -f /usr/local/bin/mm
+sudo rm -rf /usr/local/lib/middlemanager
+
+echo "MiddleManager uninstalled."
+EOF
+    else
+        cat > "$uninstall_script" << EOF
+#!/bin/bash
+# MiddleManager Uninstaller
+
+set -e
+
+echo "Uninstalling MiddleManager..."
+
+rm -f "$HOME/.local/bin/mm"
+rm -rf "$HOME/.local/lib/middlemanager"
+
+echo "MiddleManager uninstalled."
+EOF
+    fi
+
+    chmod +x "$uninstall_script"
+}
+
+# Handle --service flag for sudo re-exec
+if [ "$1" = "--service" ]; then
+    SERVICE_MODE=true
+    # Re-read release info (lost during sudo)
+    detect_platform
+    get_latest_release
+    install_as_service
+    exit 0
+fi
+
+# Main
+print_header
+detect_platform
+get_latest_release
+prompt_service_mode
+
+if [ "$SERVICE_MODE" = true ]; then
+    install_as_service
+else
+    install_as_user
+fi

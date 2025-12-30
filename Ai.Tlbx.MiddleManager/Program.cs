@@ -18,18 +18,82 @@ public class Program
 
     public static void Main(string[] args)
     {
+        if (HandleSpecialCommands(args))
+        {
+            return;
+        }
+
         var (port, bindAddress) = ParseCommandLineArgs(args);
         var builder = CreateBuilder(args);
         var app = builder.Build();
         var version = GetVersion();
 
         ConfigureStaticFiles(app);
-        var (sessionManager, muxManager) = ConfigureServices(app);
-        MapApiEndpoints(app, sessionManager, version);
-        MapWebSocketMiddleware(app, sessionManager, muxManager);
+        var (sessionManager, muxManager, updateService) = ConfigureServices(app);
+        MapApiEndpoints(app, sessionManager, updateService, version);
+        MapWebSocketMiddleware(app, sessionManager, muxManager, updateService);
 
         PrintWelcomeBanner(port, bindAddress, app.Services.GetRequiredService<SettingsService>(), version);
         RunWithPortErrorHandling(app, port, bindAddress);
+    }
+
+    private static bool HandleSpecialCommands(string[] args)
+    {
+        if (args.Contains("--check-update"))
+        {
+            var updateService = new UpdateService();
+            var update = updateService.CheckForUpdateAsync().GetAwaiter().GetResult();
+            if (update is not null && update.Available)
+            {
+                Console.WriteLine($"Update available: {update.CurrentVersion} -> {update.LatestVersion}");
+                Console.WriteLine($"Download: {update.ReleaseUrl}");
+            }
+            else
+            {
+                Console.WriteLine($"You are running the latest version ({updateService.CurrentVersion})");
+            }
+            updateService.Dispose();
+            return true;
+        }
+
+        if (args.Contains("--update"))
+        {
+            var updateService = new UpdateService();
+            Console.WriteLine("Checking for updates...");
+            var update = updateService.CheckForUpdateAsync().GetAwaiter().GetResult();
+
+            if (update is null || !update.Available)
+            {
+                Console.WriteLine($"You are running the latest version ({updateService.CurrentVersion})");
+                updateService.Dispose();
+                return true;
+            }
+
+            Console.WriteLine($"Downloading {update.LatestVersion}...");
+            var extractedDir = updateService.DownloadUpdateAsync().GetAwaiter().GetResult();
+
+            if (string.IsNullOrEmpty(extractedDir))
+            {
+                Console.WriteLine("Failed to download update.");
+                updateService.Dispose();
+                return true;
+            }
+
+            Console.WriteLine("Applying update...");
+            var scriptPath = UpdateScriptGenerator.GenerateUpdateScript(extractedDir, UpdateService.GetCurrentBinaryPath());
+            UpdateScriptGenerator.ExecuteUpdateScript(scriptPath);
+            Console.WriteLine("Update script started. Exiting...");
+            updateService.Dispose();
+            return true;
+        }
+
+        if (args.Contains("--version") || args.Contains("-v"))
+        {
+            Console.WriteLine(GetVersion());
+            return true;
+        }
+
+        return false;
     }
 
     private static (int port, string bindAddress) ParseCommandLineArgs(string[] args)
@@ -69,6 +133,7 @@ public class Program
         builder.Services.AddSingleton<ShellRegistry>();
         builder.Services.AddSingleton<SettingsService>();
         builder.Services.AddSingleton<SessionManager>();
+        builder.Services.AddSingleton<UpdateService>();
 
         return builder;
     }
@@ -113,17 +178,55 @@ public class Program
         app.UseWebSockets();
     }
 
-    private static (SessionManager, MuxConnectionManager) ConfigureServices(WebApplication app)
+    private static (SessionManager, MuxConnectionManager, UpdateService) ConfigureServices(WebApplication app)
     {
         var sessionManager = app.Services.GetRequiredService<SessionManager>();
+        var updateService = app.Services.GetRequiredService<UpdateService>();
         var muxManager = new MuxConnectionManager(sessionManager);
         sessionManager.SetMuxManager(muxManager);
-        return (sessionManager, muxManager);
+        return (sessionManager, muxManager, updateService);
     }
 
-    private static void MapApiEndpoints(WebApplication app, SessionManager sessionManager, string version)
+    private static void MapApiEndpoints(WebApplication app, SessionManager sessionManager, UpdateService updateService, string version)
     {
         app.MapGet("/api/version", () => Results.Text(version));
+
+        app.MapGet("/api/update/check", async () =>
+        {
+            var update = await updateService.CheckForUpdateAsync();
+            return Results.Json(update ?? new UpdateInfo
+            {
+                Available = false,
+                CurrentVersion = updateService.CurrentVersion,
+                LatestVersion = updateService.CurrentVersion
+            }, AppJsonContext.Default.UpdateInfo);
+        });
+
+        app.MapPost("/api/update/apply", async () =>
+        {
+            var update = updateService.LatestUpdate;
+            if (update is null || !update.Available)
+            {
+                return Results.BadRequest("No update available");
+            }
+
+            var extractedDir = await updateService.DownloadUpdateAsync();
+            if (string.IsNullOrEmpty(extractedDir))
+            {
+                return Results.Problem("Failed to download update");
+            }
+
+            var scriptPath = UpdateScriptGenerator.GenerateUpdateScript(extractedDir, UpdateService.GetCurrentBinaryPath());
+
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(1000);
+                UpdateScriptGenerator.ExecuteUpdateScript(scriptPath);
+                Environment.Exit(0);
+            });
+
+            return Results.Ok("Update started. Server will restart shortly.");
+        });
 
         app.MapGet("/api/networks", () =>
         {
@@ -239,7 +342,7 @@ public class Program
         });
     }
 
-    private static void MapWebSocketMiddleware(WebApplication app, SessionManager sessionManager, MuxConnectionManager muxManager)
+    private static void MapWebSocketMiddleware(WebApplication app, SessionManager sessionManager, MuxConnectionManager muxManager, UpdateService updateService)
     {
         app.Use(async (context, next) =>
         {
@@ -259,7 +362,7 @@ public class Program
 
             if (path == "/ws/state")
             {
-                await HandleStateWebSocketAsync(context, sessionManager);
+                await HandleStateWebSocketAsync(context, sessionManager, updateService);
                 return;
             }
 
@@ -374,12 +477,13 @@ public class Program
         }
     }
 
-    private static async Task HandleStateWebSocketAsync(HttpContext context, SessionManager sessionManager)
+    private static async Task HandleStateWebSocketAsync(HttpContext context, SessionManager sessionManager, UpdateService updateService)
     {
         using var ws = await context.WebSockets.AcceptWebSocketAsync();
         var sendLock = new SemaphoreSlim(1, 1);
+        UpdateInfo? lastUpdate = null;
 
-        async void OnStateChange()
+        async Task SendStateAsync()
         {
             if (ws.State != WebSocketState.Open)
             {
@@ -394,7 +498,12 @@ public class Program
                     return;
                 }
 
-                var json = JsonSerializer.Serialize(sessionManager.GetSessionList(), AppJsonContext.Default.SessionListDto);
+                var state = new StateUpdate
+                {
+                    Sessions = sessionManager.GetSessionList(),
+                    Update = lastUpdate
+                };
+                var json = JsonSerializer.Serialize(state, AppJsonContext.Default.StateUpdate);
                 var bytes = Encoding.UTF8.GetBytes(json);
                 await ws.SendAsync(bytes, WebSocketMessageType.Text, true, CancellationToken.None);
             }
@@ -407,11 +516,21 @@ public class Program
             }
         }
 
-        var listenerId = sessionManager.AddStateListener(OnStateChange);
+        void OnStateChange() => _ = SendStateAsync();
+
+        void OnUpdateAvailable(UpdateInfo update)
+        {
+            lastUpdate = update;
+            _ = SendStateAsync();
+        }
+
+        var sessionListenerId = sessionManager.AddStateListener(OnStateChange);
+        var updateListenerId = updateService.AddUpdateListener(OnUpdateAvailable);
 
         try
         {
-            OnStateChange();
+            lastUpdate = updateService.LatestUpdate;
+            await SendStateAsync();
 
             var buffer = new byte[1024];
             while (ws.State == WebSocketState.Open)
@@ -432,7 +551,8 @@ public class Program
         }
         finally
         {
-            sessionManager.RemoveStateListener(listenerId);
+            sessionManager.RemoveStateListener(sessionListenerId);
+            updateService.RemoveUpdateListener(updateListenerId);
             sendLock.Dispose();
 
             if (ws.State == WebSocketState.Open)

@@ -58,10 +58,33 @@ MiddleManager: HTTP works everywhere. Your machine, your power, your keys.
 - **Instant startup** — Native AOT compiled, sub-second launch
 - **Multi-session** — Multiple terminals, one WebSocket connection
 - **Any shell** — Zsh, Bash, PowerShell, CMD
+- **Auto-update** — Checks for updates hourly, one-click update from the UI
 
 ## Installation
 
-Download the latest release for your platform:
+### One-liner Install
+
+**macOS / Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/AiTlbx/MiddleManager/main/install.sh | bash
+```
+
+**Windows (PowerShell as Admin):**
+```powershell
+irm https://raw.githubusercontent.com/AiTlbx/MiddleManager/main/install.ps1 | iex
+```
+
+The installer will:
+1. Download the latest binary for your platform
+2. Ask if you want to install as a system service (recommended)
+3. Add to PATH and register for uninstall
+
+**System service benefits:**
+- Starts automatically on boot
+- Available before login (great for headless/remote machines)
+- Auto-restarts if it crashes
+
+### Manual Download
 
 | Platform | Download |
 |----------|----------|
@@ -101,8 +124,11 @@ Other options:
 ```
 mm [options]
 
-  --port 2000     Port to listen on (default: 2000)
-  --bind 0.0.0.0  Address to bind to (default: 0.0.0.0)
+  --port 2000       Port to listen on (default: 2000)
+  --bind 0.0.0.0    Address to bind to (default: 0.0.0.0)
+  --version         Show version and exit
+  --check-update    Check for updates (JSON output)
+  --update          Download and apply update, then restart
 ```
 
 ## Configuration

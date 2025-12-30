@@ -64,6 +64,7 @@
     var settingsOpen = false;       // Settings panel visibility
     var sidebarOpen = false;        // Mobile sidebar visibility
     var clientId = null;            // This client's unique ID (assigned by server)
+    var updateInfo = null;          // Available update info from server
 
     // WebSocket connections
     var stateWs = null;
@@ -171,6 +172,7 @@
             try {
                 var data = JSON.parse(event.data);
                 handleStateUpdate(data.sessions || []);
+                handleUpdateInfo(data.update);
             } catch (e) {
                 console.error('Error parsing state:', e);
             }
@@ -224,6 +226,65 @@
         }
 
         updateMobileTitle();
+    }
+
+    function handleUpdateInfo(update) {
+        var hadUpdate = updateInfo && updateInfo.available;
+        updateInfo = update;
+        renderUpdatePanel();
+
+        // Show notification when update first becomes available
+        if (update && update.available && !hadUpdate) {
+            console.log('Update available:', update.currentVersion, '->', update.latestVersion);
+        }
+    }
+
+    function renderUpdatePanel() {
+        var panel = document.getElementById('update-panel');
+        if (!panel) return;
+
+        if (!updateInfo || !updateInfo.available) {
+            panel.classList.add('hidden');
+            return;
+        }
+
+        panel.classList.remove('hidden');
+        var currentEl = panel.querySelector('.update-current');
+        var latestEl = panel.querySelector('.update-latest');
+
+        if (currentEl) currentEl.textContent = updateInfo.currentVersion;
+        if (latestEl) latestEl.textContent = updateInfo.latestVersion;
+    }
+
+    function applyUpdate() {
+        if (!updateInfo || !updateInfo.available) return;
+
+        var panel = document.getElementById('update-panel');
+        var btn = panel ? panel.querySelector('.update-btn') : null;
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Updating...';
+        }
+
+        fetch('/api/update/apply', { method: 'POST' })
+            .then(function(r) {
+                if (r.ok) {
+                    if (btn) btn.textContent = 'Restarting...';
+                } else {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.textContent = 'Update & Restart';
+                    }
+                    console.error('Update failed');
+                }
+            })
+            .catch(function(e) {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Update & Restart';
+                }
+                console.error('Update error:', e);
+            });
     }
 
     // ========================================================================
@@ -867,6 +928,9 @@
         if (settingsBtn) {
             settingsBtn.addEventListener('click', toggleSettings);
         }
+
+        // Update button
+        bindClick('update-btn', applyUpdate);
 
         bindSettingsAutoSave();
     }

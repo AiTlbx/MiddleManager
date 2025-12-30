@@ -35,7 +35,9 @@ Program.cs                    Entry point, API endpoints, WebSocket handlers
 │   ├── SessionManager        Manages all terminal sessions
 │   ├── TerminalSession       Individual session (wraps PTY + I/O)
 │   ├── MuxConnectionManager  WebSocket multiplexing (multiple sessions over one socket)
-│   └── MuxProtocol           Binary protocol: [1-byte type][2-byte sessionId][2-byte length][payload]
+│   ├── MuxProtocol           Binary protocol: [1-byte type][2-byte sessionId][2-byte length][payload]
+│   ├── UpdateService         GitHub release check, download, background timer
+│   └── UpdateScriptGenerator Platform-specific update scripts
 ├── Pty/
 │   ├── IPtyConnection        Interface for PTY implementations
 │   ├── PtyConnectionFactory  Platform selector
@@ -66,6 +68,8 @@ GET  /api/shells             Available shells for platform
 GET  /api/settings           Current settings
 PUT  /api/settings           Update settings
 GET  /api/version            Server version
+GET  /api/update/check       Check for updates {available, currentVersion, latestVersion}
+POST /api/update/apply       Download update and restart
 ```
 
 ## WebSocket Endpoints
@@ -85,6 +89,8 @@ GET  /api/version            Server version
 - Settings persistence
 - Embedded static file serving (AOT compatible)
 - ASCII art welcome banner with version/port/platform info
+- Auto-update from GitHub releases (background check + UI notification)
+- Install scripts with system service registration (launchd, systemd, Windows Service)
 
 ## Code Style
 
