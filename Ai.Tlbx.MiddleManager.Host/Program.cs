@@ -7,7 +7,7 @@ namespace Ai.Tlbx.MiddleManager.Host;
 
 public static class Program
 {
-    public const string Version = "2.0.3";
+    public const string Version = "2.1.0";
 
     public static async Task<int> Main(string[] args)
     {
