@@ -127,3 +127,72 @@ Default shell: Zsh (macOS), Pwsh (Windows), Bash (Linux)
 - Aim for 0 build warnings
 - Use interfaces + DI, not static classes
 - Platform checks: `OperatingSystem.IsWindows()`, `.IsLinux()`, `.IsMacOS()`
+
+## Release Process
+
+1. Bump `<Version>` in `Ai.Tlbx.MiddleManager/Ai.Tlbx.MiddleManager.csproj`
+2. Update `CHANGELOG.md`
+3. Commit, push, tag: `git tag v1.x.x && git push origin v1.x.x`
+4. GitHub Actions builds all platforms and creates release
+
+**GitHub Actions workflow** (`.github/workflows/release.yml`):
+- Triggers on `v*` tags
+- Matrix build: `win-x64`, `linux-x64`, `osx-arm64`, `osx-x64`
+- Uploads raw binaries as artifacts (not pre-zipped)
+- Release job packages artifacts: `.zip` for Windows, `.tar.gz` for Unix
+- macOS includes `pty_helper` native binary (built with clang)
+
+## Install System
+
+**Install scripts:**
+- `install.ps1` — Windows (PowerShell)
+- `install.sh` — macOS/Linux (Bash)
+
+**Install modes:**
+| Mode | Location | Settings Path |
+|------|----------|---------------|
+| System service | `C:\Program Files\MiddleManager` (Win) / `/usr/local/bin` (Unix) | `%ProgramData%\MiddleManager` (Win) / `/usr/local/etc/middlemanager` (Unix) |
+| User install | `%LOCALAPPDATA%\MiddleManager` (Win) / `~/.local/bin` (Unix) | `~/.middlemanager` |
+
+**Service registration:**
+- Windows: `sc.exe create` Windows Service, runs as LocalSystem
+- macOS: launchd plist in `/Library/LaunchDaemons`
+- Linux: systemd unit in `/etc/systemd/system`
+
+**User de-elevation:** When running as service (root/LocalSystem), terminals spawn as the installing user via:
+- Windows: `CreateProcessAsUser` with `WTSQueryUserToken`
+- Unix: `sudo -u` wrapper
+
+**Settings migration on update:**
+1. Installer renames `settings.json` → `settings.json.old`
+2. Installer writes minimal bootstrap settings (runAs* fields only)
+3. App on startup detects `.old`, migrates user preferences (theme, fontSize, shell, etc.)
+4. App deletes `.old` after successful migration
+
+**Important installer gotchas:**
+- Must stop service BEFORE copying binary (file locked by running process)
+- Capture user identity BEFORE elevation (for runAs* settings)
+- Windows installer re-downloads script for elevated process (can't pass complex state)
+
+## Embedded Resources
+
+Static files in `wwwroot/` are embedded as resources via:
+```xml
+<EmbeddedResource Include="wwwroot\**\*" LinkBase="wwwroot" />
+```
+
+Served by `EmbeddedWebRootFileProvider` with namespace prefix `Ai.Tlbx.MiddleManager.wwwroot.*`
+
+**Gotcha:** The namespace must match the project folder name exactly, not assembly name or any `.Aot` suffix.
+
+## Windows Service Hosting
+
+Requires `Microsoft.Extensions.Hosting.WindowsServices` package (Windows only, conditional in csproj).
+
+```csharp
+#if WINDOWS
+    builder.Host.UseWindowsService();
+#endif
+```
+
+The `WINDOWS` define is set conditionally when `RuntimeIdentifier.StartsWith('win')`.
