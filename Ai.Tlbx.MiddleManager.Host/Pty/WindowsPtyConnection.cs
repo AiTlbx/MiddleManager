@@ -344,10 +344,17 @@ public sealed class WindowsPtyConnection : IPtyConnection
             _readerStream = new FileStream(_outputReadHandle, FileAccess.Read, 4096, false);
 
             // Send escape sequences to configure ConPTY for better TUI compatibility:
-            // - Disable win32-input-mode which can cause issues with some TUI frameworks
-            // - Request DECSET for bracketed paste mode (common TUI expectation)
-            var initSequence = "\x1b[?9001l"u8;  // Disable win32-input-mode
-            _writerStream.Write(initSequence);
+            // 1. Disable win32-input-mode which can cause issues with some TUI frameworks
+            // 2. Send device status report request to "prime" the input buffer
+            //    (workaround for ReadConsoleInput empty read bug)
+            // 3. Request terminal capabilities
+            var initSequences = new byte[]
+            {
+                0x1b, 0x5b, 0x3f, 0x39, 0x30, 0x30, 0x31, 0x6c,  // ESC[?9001l - disable win32-input-mode
+                0x1b, 0x5b, 0x35, 0x6e,                          // ESC[5n - device status report (priming)
+                0x1b, 0x5b, 0x63                                 // ESC[c - request terminal ID
+            };
+            _writerStream.Write(initSequences);
             _writerStream.Flush();
         }
         catch
