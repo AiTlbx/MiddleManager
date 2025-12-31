@@ -489,6 +489,19 @@ public sealed class WindowsPtyConnection : IPtyConnection
         }
 
         CloseHandle(token);
+
+        // Explicitly set the session ID on the token to ensure the process
+        // starts in the user's interactive session, not Session 0
+        if (!SetTokenInformation(
+            duplicatedToken,
+            TokenSessionId,
+            ref sessionId,
+            sizeof(uint)))
+        {
+            CloseHandle(duplicatedToken);
+            return IntPtr.Zero;
+        }
+
         return duplicatedToken;
     }
 

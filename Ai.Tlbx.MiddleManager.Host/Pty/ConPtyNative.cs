@@ -134,6 +134,15 @@ internal static class ConPtyNative
     public const int SecurityImpersonation = 2;
     public const int TokenPrimary = 1;
 
+    [DllImport("advapi32.dll", SetLastError = true)]
+    public static extern bool SetTokenInformation(
+        IntPtr TokenHandle,
+        int TokenInformationClass,
+        ref uint TokenInformation,
+        int TokenInformationLength);
+
+    public const int TokenSessionId = 12;
+
     [DllImport("userenv.dll", SetLastError = true)]
     public static extern bool CreateEnvironmentBlock(out IntPtr lpEnvironment, IntPtr hToken, bool bInherit);
 
