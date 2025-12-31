@@ -220,6 +220,7 @@ public sealed class WindowsPtyConnection : IPtyConnection
             IntPtr userToken = IntPtr.Zero;
             IntPtr userEnvBlock = IntPtr.Zero;
             IntPtr customEnvPtr = IntPtr.Zero;
+            IntPtr desktopPtr = IntPtr.Zero;
             try
             {
                 var startupInfo = new StartupInfoEx
@@ -234,6 +235,11 @@ public sealed class WindowsPtyConnection : IPtyConnection
                 if (willRunAsUser)
                 {
                     userToken = GetUserTokenFromSession();
+
+                    // Set desktop to interactive station to enable user input
+                    // Without this, CreateProcessAsUser creates on non-interactive station
+                    desktopPtr = Marshal.StringToHGlobalUni("winsta0\\default");
+                    startupInfo.StartupInfo.lpDesktop = desktopPtr;
                 }
 
                 IntPtr envPtr;
@@ -324,6 +330,10 @@ public sealed class WindowsPtyConnection : IPtyConnection
                 if (customEnvPtr != IntPtr.Zero)
                 {
                     Marshal.FreeHGlobal(customEnvPtr);
+                }
+                if (desktopPtr != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(desktopPtr);
                 }
             }
 
