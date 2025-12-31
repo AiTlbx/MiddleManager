@@ -30,7 +30,14 @@ public abstract class ShellConfigurationBase : IShellConfiguration
                 env[key] = entry.Value?.ToString() ?? string.Empty;
             }
         }
+        // Terminal type and capabilities
         env["TERM"] = "xterm-256color";
+        env["COLORTERM"] = "truecolor";
+        // Force UTF-8 for better TUI compatibility
+        env["LANG"] = "en_US.UTF-8";
+        env["LC_ALL"] = "en_US.UTF-8";
+        // Enable pseudo console for MSYS2/MinGW tools
+        env["MSYS"] = "enable_pcon";
         return env;
     }
 
@@ -78,26 +85,30 @@ public abstract class ShellConfigurationBase : IShellConfiguration
 
 public sealed class PwshShellConfiguration : ShellConfigurationBase
 {
-    private const string Osc7PromptScript =
+    // Set UTF-8 console encoding + OSC7 prompt for better TUI compatibility
+    private const string StartupScript =
+        "[Console]::OutputEncoding=[Console]::InputEncoding=[Text.UTF8Encoding]::new();" +
         "function prompt{$e=[char]27;$b=[char]7;$p='/'+($PWD.Path-replace'\\\\','/');\"$e]7;file://$env:COMPUTERNAME$p$b\"+\"PS $PWD> \"}";
 
     public override ShellType ShellType => ShellType.Pwsh;
     public override string DisplayName => "PowerShell 7";
     public override string ExecutablePath => "pwsh";
     public override bool SupportsOsc7 => true;
-    public override string[] Arguments => ["-NoLogo", "-NoExit", "-Command", Osc7PromptScript];
+    public override string[] Arguments => ["-NoLogo", "-NoExit", "-Command", StartupScript];
 }
 
 public sealed class PowerShellShellConfiguration : ShellConfigurationBase
 {
-    private const string Osc7PromptScript =
+    // Set UTF-8 console encoding + OSC7 prompt for better TUI compatibility
+    private const string StartupScript =
+        "[Console]::OutputEncoding=[Console]::InputEncoding=[Text.UTF8Encoding]::new();" +
         "function prompt{$e=[char]27;$b=[char]7;$p='/'+($PWD.Path-replace'\\\\','/');\"$e]7;file://$env:COMPUTERNAME$p$b\"+\"PS $PWD> \"}";
 
     public override ShellType ShellType => ShellType.PowerShell;
     public override string DisplayName => "Windows PowerShell";
     public override string ExecutablePath => "powershell";
     public override bool SupportsOsc7 => true;
-    public override string[] Arguments => ["-NoLogo", "-NoExit", "-Command", Osc7PromptScript];
+    public override string[] Arguments => ["-NoLogo", "-NoExit", "-Command", StartupScript];
 
     public override bool IsAvailable()
     {

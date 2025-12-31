@@ -257,7 +257,10 @@ public sealed class WindowsPtyConnection : IPtyConnection
                     if (environment is not null)
                     {
                         // Only merge terminal-related variables, not system paths
-                        string[] terminalVars = ["TERM", "COLORTERM", "PROMPT_COMMAND", "precmd", "PS1"];
+                        string[] terminalVars = [
+                            "TERM", "COLORTERM", "PROMPT_COMMAND", "precmd", "PS1",
+                            "LANG", "LC_ALL", "MSYS"
+                        ];
                         foreach (var varName in terminalVars)
                         {
                             if (environment.TryGetValue(varName, out var value))
@@ -339,6 +342,13 @@ public sealed class WindowsPtyConnection : IPtyConnection
 
             _writerStream = new FileStream(_inputWriteHandle, FileAccess.Write, 4096, false);
             _readerStream = new FileStream(_outputReadHandle, FileAccess.Read, 4096, false);
+
+            // Send escape sequences to configure ConPTY for better TUI compatibility:
+            // - Disable win32-input-mode which can cause issues with some TUI frameworks
+            // - Request DECSET for bracketed paste mode (common TUI expectation)
+            var initSequence = "\x1b[?9001l"u8;  // Disable win32-input-mode
+            _writerStream.Write(initSequence);
+            _writerStream.Flush();
         }
         catch
         {
