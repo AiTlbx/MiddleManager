@@ -26,7 +26,6 @@ public sealed class ConHostMuxConnectionManager
 
     private void HandleOutput(string sessionId, ReadOnlyMemory<byte> data)
     {
-        Console.WriteLine($"[ConHostMux] HandleOutput for {sessionId}: {data.Length} bytes, clients: {_clients.Count}");
         _outputQueue.Writer.TryWrite((sessionId, data.ToArray()));
     }
 
@@ -37,9 +36,16 @@ public sealed class ConHostMuxConnectionManager
             var frame = MuxProtocol.CreateOutputFrame(sessionId, data);
             foreach (var client in _clients.Values)
             {
-                if (client.WebSocket.State == WebSocketState.Open)
+                try
                 {
-                    await client.SendAsync(frame).ConfigureAwait(false);
+                    if (client.WebSocket.State == WebSocketState.Open)
+                    {
+                        await client.SendAsync(frame).ConfigureAwait(false);
+                    }
+                }
+                catch
+                {
+                    // Client disconnected - ignore, it will be removed on next receive failure
                 }
             }
         }

@@ -41,9 +41,8 @@ public sealed class ConHostClient : IAsyncDisposable
             // Don't start ReadLoopAsync here - wait until after initial handshake (GetInfoAsync)
             return true;
         }
-        catch (Exception ex)
+        catch
         {
-            Console.WriteLine($"[ConHostClient] Connect to {_pipeName} failed: {ex.Message}");
             _pipe?.Dispose();
             _pipe = null;
             return false;
@@ -89,9 +88,9 @@ public sealed class ConHostClient : IAsyncDisposable
             var msg = ConHostProtocol.CreateInputMessage(data.Span);
             await _pipe!.WriteAsync(msg, ct).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch
         {
-            Console.WriteLine($"[ConHostClient] SendInput failed: {ex.Message}");
+            // Pipe disconnected
         }
     }
 
@@ -265,7 +264,6 @@ public sealed class ConHostClient : IAsyncDisposable
                 switch (msgType)
                 {
                     case ConHostMessageType.Output:
-                        Console.WriteLine($"[ConHostClient] Received output for {_sessionId}: {payloadLength} bytes");
                         OnOutput?.Invoke(_sessionId, payload);
                         break;
 
@@ -289,9 +287,8 @@ public sealed class ConHostClient : IAsyncDisposable
             {
                 break;
             }
-            catch (Exception ex)
+            catch
             {
-                Console.WriteLine($"[ConHostClient] Read error: {ex.Message}");
                 break;
             }
         }
