@@ -2,14 +2,34 @@
     box-sizing: border-box;
 }
 
+/* Tokyo Night Theme Variables */
+:root {
+    --bg-primary: #1A1B26;
+    --bg-sidebar: #16161E;
+    --bg-input: #1F2029;
+    --border-color: #101014;
+    --text-primary: #C0CAF5;
+    --text-secondary: #787C99;
+    --text-muted: #565B73;
+    --accent-blue: #7AA2F7;
+    --accent-cyan: #7DCFFF;
+    --accent-green: #9ECE6A;
+    --accent-orange: #FF9E64;
+    --accent-red: #F7768E;
+    --btn-primary: #7AA2F7;
+    --btn-primary-hover: #89B4FF;
+    --btn-secondary: #414868;
+    --btn-secondary-hover: #545C7E;
+}
+
 html, body {
     margin: 0;
     padding: 0;
     height: 100%;
     width: 100%;
     overflow: hidden;
-    background-color: #1e1e1e;
-    color: #d4d4d4;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -23,8 +43,8 @@ html, body {
 .sidebar {
     width: 200px;
     min-width: 200px;
-    background-color: #252526;
-    border-right: 1px solid #3c3c3c;
+    background-color: var(--bg-sidebar);
+    border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
 }
@@ -34,19 +54,19 @@ html, body {
     align-items: center;
     justify-content: space-between;
     padding: 12px 12px;
-    border-bottom: 1px solid #3c3c3c;
+    border-bottom: 1px solid var(--border-color);
     font-size: 12px;
     font-weight: 600;
     text-transform: uppercase;
-    color: #888;
+    color: var(--accent-blue);
 }
 
 .add-session-btn {
     width: 24px;
     height: 24px;
     border: none;
-    background-color: #0e639c;
-    color: white;
+    background-color: var(--btn-primary);
+    color: var(--bg-primary);
     border-radius: 4px;
     cursor: pointer;
     font-size: 18px;
@@ -57,7 +77,7 @@ html, body {
 }
 
 .add-session-btn:hover {
-    background-color: #1177bb;
+    background-color: var(--btn-primary-hover);
 }
 
 .session-list {
@@ -75,12 +95,12 @@ html, body {
 }
 
 .session-item:hover {
-    background-color: #2a2d2e;
+    background-color: #1F2335;
 }
 
 .session-item.active {
-    background-color: #37373d;
-    border-left-color: #0e639c;
+    background-color: #24283B;
+    border-left-color: var(--accent-blue);
 }
 
 .session-info {
@@ -91,6 +111,7 @@ html, body {
 
 .session-title {
     font-size: 13px;
+    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -99,7 +120,7 @@ html, body {
 
 .session-details {
     font-size: 11px;
-    color: #888;
+    color: var(--text-secondary);
     display: flex;
     align-items: center;
     gap: 4px;
@@ -113,17 +134,17 @@ html, body {
 .session-rename-input {
     font-size: 13px;
     padding: 2px 4px;
-    border: 1px solid #555;
+    border: 1px solid var(--btn-secondary);
     border-radius: 3px;
-    background: #2a2a2a;
-    color: #fff;
+    background: var(--bg-input);
+    color: var(--text-primary);
     width: 100%;
     box-sizing: border-box;
 }
 
 .session-rename-input:focus {
     outline: none;
-    border-color: #007acc;
+    border-color: var(--accent-blue);
 }
 
 .session-actions {
@@ -139,7 +160,7 @@ html, body {
     height: 22px;
     border: none;
     background: transparent;
-    color: #888;
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 12px;
     line-height: 1;
@@ -157,11 +178,11 @@ html, body {
 }
 
 .session-rename:hover {
-    background-color: #3c3c3c;
+    background-color: var(--btn-secondary);
 }
 
 .session-close:hover {
-    background-color: #ff6b6b;
+    background-color: var(--accent-red);
     color: white;
 }
 
@@ -181,18 +202,18 @@ html, body {
 }
 
 .dot-running {
-    background-color: #00d400;
+    background-color: var(--accent-green);
 }
 
 .dot-exited {
-    background-color: #888;
+    background-color: var(--text-muted);
 }
 
 .sidebar-footer {
     padding: 6px 12px;
-    border-top: 1px solid #3c3c3c;
+    border-top: 1px solid var(--border-color);
     font-size: 11px;
-    color: #666;
+    color: var(--text-muted);
 }
 
 .sidebar-footer .footer-row {
@@ -203,13 +224,13 @@ html, body {
 
 .sidebar-footer .version {
     font-size: 10px;
-    color: #555;
+    color: var(--text-muted);
 }
 
 .network-list {
     margin-bottom: 6px;
     font-size: 9px;
-    color: #888;
+    color: var(--text-secondary);
     line-height: 1.4;
 }
 
@@ -221,7 +242,7 @@ html, body {
 }
 
 .network-name {
-    color: #666;
+    color: var(--text-muted);
     flex-shrink: 0;
     max-width: 60px;
     overflow: hidden;
@@ -229,7 +250,7 @@ html, body {
 }
 
 .network-ip {
-    color: #0e639c;
+    color: var(--accent-blue);
     font-family: monospace;
 }
 
@@ -238,7 +259,7 @@ html, body {
     height: 20px;
     border: none;
     background: transparent;
-    color: #888;
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 16px;
     line-height: 1;
@@ -256,7 +277,7 @@ html, body {
 }
 
 .close-session-btn:hover {
-    background-color: #ff6b6b;
+    background-color: var(--accent-red);
     color: white;
 }
 
@@ -266,6 +287,7 @@ html, body {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    background-color: var(--bg-primary);
 }
 
 /* Terminals area */
@@ -310,12 +332,12 @@ html, body {
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(122, 162, 247, 0.3);
     border-radius: 5px;
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.3);
+    background: rgba(122, 162, 247, 0.5);
 }
 
 /* Mobile header - hidden on desktop */
@@ -367,8 +389,8 @@ html, body {
         display: flex;
         align-items: center;
         padding: 6px 12px;
-        background-color: #252526;
-        border-bottom: 1px solid #3c3c3c;
+        background-color: var(--bg-sidebar);
+        border-bottom: 1px solid var(--border-color);
         gap: 10px;
         flex-shrink: 0;
     }
@@ -378,7 +400,7 @@ html, body {
         height: 30px;
         border: none;
         background: transparent;
-        color: #d4d4d4;
+        color: var(--text-primary);
         font-size: 20px;
         cursor: pointer;
         border-radius: 4px;
@@ -389,7 +411,7 @@ html, body {
     }
 
     .hamburger-btn:hover {
-        background-color: #3c3c3c;
+        background-color: var(--btn-secondary);
     }
 
     .mobile-title {
@@ -398,7 +420,7 @@ html, body {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        color: #d4d4d4;
+        color: var(--text-primary);
     }
 
     .mobile-add {
@@ -444,7 +466,7 @@ html, body {
     align-items: center;
     justify-content: center;
     height: 100%;
-    color: #888;
+    color: var(--text-secondary);
 }
 
 .empty-state.hidden {
@@ -457,16 +479,17 @@ html, body {
 
 .empty-state button {
     padding: 8px 24px;
-    background-color: #0e639c;
-    color: white;
+    background-color: var(--btn-primary);
+    color: var(--bg-primary);
     border: none;
     border-radius: 4px;
     cursor: pointer;
     font-size: 14px;
+    font-weight: 500;
 }
 
 .empty-state button:hover {
-    background-color: #1177bb;
+    background-color: var(--btn-primary-hover);
 }
 
 /* Connection status indicator */
@@ -477,8 +500,8 @@ html, body {
     padding: 4px 8px;
     border-radius: 4px;
     font-size: 11px;
-    background-color: #333;
-    color: #888;
+    background-color: var(--btn-secondary);
+    color: var(--text-secondary);
     opacity: 0;
     transition: opacity 0.3s;
 }
@@ -488,20 +511,20 @@ html, body {
 }
 
 .connection-status.connecting {
-    background-color: #0e639c;
-    color: white;
+    background-color: var(--accent-blue);
+    color: var(--bg-primary);
     opacity: 1;
 }
 
 .connection-status.disconnected {
-    background-color: #ff6b6b;
+    background-color: var(--accent-red);
     color: white;
     opacity: 1;
 }
 
 .connection-status.reconnecting {
-    background-color: #d4d400;
-    color: #1e1e1e;
+    background-color: var(--accent-orange);
+    color: var(--bg-primary);
     opacity: 1;
 }
 
@@ -524,7 +547,7 @@ html, body {
 
 .host-status.disconnected {
     display: block;
-    background-color: #b33;
+    background-color: var(--accent-red);
     color: white;
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
@@ -541,8 +564,8 @@ html, body {
     bottom: 8px;
     left: 8px;
     padding: 4px 8px;
-    background-color: rgba(100, 100, 100, 0.8);
-    color: #ccc;
+    background-color: rgba(65, 72, 104, 0.9);
+    color: var(--text-secondary);
     font-size: 10px;
     border-radius: 4px;
     pointer-events: none;
@@ -558,8 +581,8 @@ html, body {
     width: 24px;
     height: 24px;
     border: none;
-    background-color: #3c3c3c;
-    color: #d4d4d4;
+    background-color: var(--btn-secondary);
+    color: var(--text-primary);
     border-radius: 4px;
     cursor: pointer;
     font-size: 14px;
@@ -570,34 +593,34 @@ html, body {
 }
 
 .sidebar-btn:hover {
-    background-color: #4c4c4c;
+    background-color: var(--btn-secondary-hover);
 }
 
 .sidebar-btn.primary {
-    background-color: #0e639c;
-    color: white;
+    background-color: var(--btn-primary);
+    color: var(--bg-primary);
     font-size: 18px;
 }
 
 .sidebar-btn.primary:hover {
-    background-color: #1177bb;
+    background-color: var(--btn-primary-hover);
 }
 
 .sidebar-btn.active {
-    background-color: #0e639c;
-    color: white;
+    background-color: var(--accent-blue);
+    color: var(--bg-primary);
 }
 
 .sidebar-btn:disabled {
-    background-color: #555;
-    color: #888;
+    background-color: var(--btn-secondary);
+    color: var(--text-muted);
     cursor: not-allowed;
-    opacity: 0.6;
+    opacity: 0.5;
 }
 
 .empty-state button:disabled {
-    background-color: #555;
-    color: #888;
+    background-color: var(--btn-secondary);
+    color: var(--text-muted);
     cursor: not-allowed;
 }
 
@@ -608,7 +631,7 @@ html, body {
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: #1e1e1e;
+    background-color: var(--bg-primary);
     overflow-y: auto;
     padding: 24px;
     z-index: 100;
@@ -627,7 +650,7 @@ html, body {
     margin: 0 0 24px 0;
     font-size: 24px;
     font-weight: 500;
-    color: #d4d4d4;
+    color: var(--text-primary);
 }
 
 .settings-section {
@@ -639,8 +662,8 @@ html, body {
     font-size: 14px;
     font-weight: 600;
     text-transform: uppercase;
-    color: #888;
-    border-bottom: 1px solid #3c3c3c;
+    color: var(--accent-blue);
+    border-bottom: 1px solid var(--border-color);
     padding-bottom: 8px;
 }
 
@@ -649,19 +672,19 @@ html, body {
     align-items: center;
     justify-content: space-between;
     padding: 12px 0;
-    border-bottom: 1px solid #2a2a2a;
+    border-bottom: 1px solid #1F2335;
 }
 
 .setting-row label {
     font-size: 14px;
-    color: #d4d4d4;
+    color: var(--text-primary);
 }
 
 .setting-row select {
     padding: 8px 12px;
-    background-color: #3c3c3c;
-    color: #d4d4d4;
-    border: 1px solid #555;
+    background-color: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--btn-secondary);
     border-radius: 4px;
     font-size: 14px;
     min-width: 180px;
@@ -669,12 +692,12 @@ html, body {
 }
 
 .setting-row select:hover {
-    border-color: #0e639c;
+    border-color: var(--accent-blue);
 }
 
 .setting-row select:focus {
     outline: none;
-    border-color: #0e639c;
+    border-color: var(--accent-blue);
 }
 
 .settings-footer {
@@ -695,7 +718,7 @@ html, body {
 }
 
 .text-input-wrapper.unsaved input {
-    border-color: #d4a000;
+    border-color: var(--accent-orange);
 }
 
 .inline-save-btn {
@@ -703,7 +726,7 @@ html, body {
     height: 28px;
     border: none;
     background-color: transparent;
-    color: #888;
+    color: var(--text-secondary);
     border-radius: 4px;
     cursor: pointer;
     font-size: 16px;
@@ -717,23 +740,23 @@ html, body {
 
 .text-input-wrapper.unsaved .inline-save-btn {
     opacity: 1;
-    color: #00d400;
+    color: var(--accent-green);
 }
 
 .inline-save-btn:hover {
-    background-color: #3c3c3c;
+    background-color: var(--btn-secondary);
 }
 
 .inline-save-btn.saving {
     opacity: 1;
-    color: #888;
+    color: var(--text-secondary);
     cursor: default;
 }
 
 .btn-primary {
     padding: 10px 24px;
-    background-color: #0e639c;
-    color: white;
+    background-color: var(--btn-primary);
+    color: var(--bg-primary);
     border: none;
     border-radius: 4px;
     cursor: pointer;
@@ -742,30 +765,30 @@ html, body {
 }
 
 .btn-primary:hover {
-    background-color: #1177bb;
+    background-color: var(--btn-primary-hover);
 }
 
 .btn-secondary {
     padding: 10px 24px;
     background-color: transparent;
-    color: #d4d4d4;
-    border: 1px solid #555;
+    color: var(--text-primary);
+    border: 1px solid var(--btn-secondary);
     border-radius: 4px;
     cursor: pointer;
     font-size: 14px;
 }
 
 .btn-secondary:hover {
-    background-color: #3c3c3c;
+    background-color: var(--btn-secondary);
 }
 
 /* Additional settings input styles */
 .setting-row input[type="text"],
 .setting-row input[type="number"] {
     padding: 8px 12px;
-    background-color: #3c3c3c;
-    color: #d4d4d4;
-    border: 1px solid #555;
+    background-color: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--btn-secondary);
     border-radius: 4px;
     font-size: 14px;
     min-width: 180px;
@@ -773,13 +796,13 @@ html, body {
 
 .setting-row input[type="text"]:hover,
 .setting-row input[type="number"]:hover {
-    border-color: #0e639c;
+    border-color: var(--accent-blue);
 }
 
 .setting-row input[type="text"]:focus,
 .setting-row input[type="number"]:focus {
     outline: none;
-    border-color: #0e639c;
+    border-color: var(--accent-blue);
 }
 
 .setting-row input[type="number"] {
@@ -790,32 +813,32 @@ html, body {
 .setting-row input[type="checkbox"] {
     width: 18px;
     height: 18px;
-    accent-color: #0e639c;
+    accent-color: var(--accent-blue);
     cursor: pointer;
 }
 
 /* Settings hint and info text */
 .setting-hint {
     font-size: 13px;
-    color: #888;
+    color: var(--text-secondary);
     margin: 0 0 12px 0;
 }
 
 .setting-info {
     padding: 8px 12px;
-    background-color: #2a2a2a;
+    background-color: #1F2335;
     border-radius: 4px;
     margin-bottom: 8px;
     font-size: 13px;
-    color: #d4d4d4;
+    color: var(--text-primary);
 }
 
 .setting-info code {
-    background-color: #3c3c3c;
+    background-color: var(--bg-input);
     padding: 2px 6px;
     border-radius: 3px;
     font-family: 'Cascadia Mono NF', Consolas, monospace;
-    color: #4ec9b0;
+    color: var(--accent-cyan);
 }
 
 /* License items */
@@ -825,31 +848,31 @@ html, body {
     align-items: center;
     gap: 8px;
     padding: 12px;
-    background-color: #2a2a2a;
+    background-color: #1F2335;
     border-radius: 4px;
     margin-bottom: 8px;
 }
 
 .license-item strong {
-    color: #d4d4d4;
+    color: var(--text-primary);
 }
 
 .license-version {
     font-size: 12px;
-    color: #888;
+    color: var(--text-secondary);
 }
 
 .license-type {
     font-size: 12px;
-    color: #4ec9b0;
-    background-color: #1e3a2f;
+    color: var(--accent-green);
+    background-color: #1A2F23;
     padding: 2px 8px;
     border-radius: 3px;
 }
 
 .license-item a {
     font-size: 12px;
-    color: #3794ff;
+    color: var(--accent-blue);
     text-decoration: none;
     margin-left: auto;
 }
@@ -864,7 +887,7 @@ html, body {
 }
 
 @keyframes bell-flash {
-    0% { background-color: rgba(255, 255, 255, 0.3); }
+    0% { background-color: rgba(122, 162, 247, 0.2); }
     100% { background-color: transparent; }
 }
 
@@ -872,8 +895,8 @@ html, body {
 .update-panel {
     margin-bottom: 12px;
     padding: 10px;
-    background-color: #1a3a1a;
-    border: 1px solid #2d5a2d;
+    background-color: #1A2F23;
+    border: 1px solid #2D5A3D;
     border-radius: 4px;
 }
 
@@ -884,14 +907,14 @@ html, body {
 .update-header {
     font-size: 11px;
     font-weight: 600;
-    color: #4ec9b0;
+    color: var(--accent-green);
     text-transform: uppercase;
     margin-bottom: 6px;
 }
 
 .update-versions {
     font-size: 12px;
-    color: #d4d4d4;
+    color: var(--text-primary);
     margin-bottom: 8px;
     display: flex;
     align-items: center;
@@ -899,23 +922,23 @@ html, body {
 }
 
 .update-current {
-    color: #888;
+    color: var(--text-secondary);
 }
 
 .update-arrow {
-    color: #4ec9b0;
+    color: var(--accent-green);
 }
 
 .update-latest {
-    color: #4ec9b0;
+    color: var(--accent-green);
     font-weight: 600;
 }
 
 .update-btn {
     width: 100%;
     padding: 6px 12px;
-    background-color: #0e639c;
-    color: white;
+    background-color: var(--btn-primary);
+    color: var(--bg-primary);
     border: none;
     border-radius: 4px;
     cursor: pointer;
@@ -924,33 +947,33 @@ html, body {
 }
 
 .update-btn:hover {
-    background-color: #1177bb;
+    background-color: var(--btn-primary-hover);
 }
 
 .update-btn:disabled {
-    background-color: #555;
+    background-color: var(--btn-secondary);
     cursor: not-allowed;
 }
 
 .update-note {
     font-size: 10px;
-    color: #888;
+    color: var(--text-secondary);
     margin-top: 6px;
     text-align: center;
 }
 
 .update-note-safe {
-    color: #4ec9b0;
+    color: var(--accent-green);
 }
 
 .update-note-warning {
-    color: #ce9178;
+    color: var(--accent-orange);
 }
 
 /* About & Updates section in settings */
 .about-section {
-    background-color: #1a1a2e;
-    border: 1px solid #333;
+    background-color: #1F2335;
+    border: 1px solid var(--border-color);
 }
 
 .version-info {
@@ -967,14 +990,14 @@ html, body {
 
 .version-label {
     font-size: 11px;
-    color: #888;
+    color: var(--text-secondary);
     text-transform: uppercase;
 }
 
 .version-value {
     font-size: 14px;
     font-family: 'Consolas', 'Monaco', monospace;
-    color: #4ec9b0;
+    color: var(--accent-cyan);
 }
 
 .update-actions {
@@ -1001,21 +1024,21 @@ html, body {
 }
 
 .update-status-available {
-    background-color: #1a3a1a;
-    border: 1px solid #2d5a2d;
-    color: #4ec9b0;
+    background-color: #1A2F23;
+    border: 1px solid #2D5A3D;
+    color: var(--accent-green);
 }
 
 .update-status-current {
-    background-color: #1a1a2e;
-    border: 1px solid #333;
-    color: #888;
+    background-color: #1F2335;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
 }
 
 .update-status-error {
-    background-color: #3a1a1a;
-    border: 1px solid #5a2d2d;
-    color: #ce9178;
+    background-color: #2F1A1A;
+    border: 1px solid #5A2D2D;
+    color: var(--accent-orange);
 }
 
 /* Modal styles */
@@ -1046,8 +1069,8 @@ html, body {
 
 .modal-content {
     position: relative;
-    background-color: #252526;
-    border: 1px solid #3c3c3c;
+    background-color: var(--bg-sidebar);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     max-width: 600px;
     max-height: 80vh;
@@ -1062,19 +1085,19 @@ html, body {
     justify-content: space-between;
     align-items: center;
     padding: 16px 20px;
-    border-bottom: 1px solid #3c3c3c;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .modal-header h3 {
     margin: 0;
     font-size: 16px;
-    color: #fff;
+    color: var(--text-primary);
 }
 
 .modal-close {
     background: none;
     border: none;
-    color: #888;
+    color: var(--text-secondary);
     font-size: 24px;
     cursor: pointer;
     padding: 0;
@@ -1082,7 +1105,7 @@ html, body {
 }
 
 .modal-close:hover {
-    color: #fff;
+    color: var(--text-primary);
 }
 
 .modal-body {
@@ -1098,14 +1121,14 @@ html, body {
 
 .changelog-loading {
     text-align: center;
-    color: #888;
+    color: var(--text-secondary);
     padding: 40px;
 }
 
 .changelog-release {
     margin-bottom: 24px;
     padding-bottom: 24px;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .changelog-release:last-child {
@@ -1117,31 +1140,31 @@ html, body {
 .changelog-version {
     font-size: 18px;
     font-weight: bold;
-    color: #4ec9b0;
+    color: var(--accent-cyan);
     margin-bottom: 4px;
 }
 
 .changelog-date {
     font-size: 12px;
-    color: #888;
+    color: var(--text-secondary);
     margin-bottom: 12px;
 }
 
 .changelog-notes {
     font-size: 13px;
     line-height: 1.6;
-    color: #d4d4d4;
+    color: var(--text-primary);
 }
 
 .changelog-notes h3 {
     font-size: 14px;
-    color: #fff;
+    color: var(--text-primary);
     margin: 16px 0 8px 0;
 }
 
 .changelog-notes h4 {
     font-size: 13px;
-    color: #ddd;
+    color: var(--text-secondary);
     margin: 12px 0 6px 0;
 }
 
@@ -1155,7 +1178,7 @@ html, body {
 }
 
 .changelog-notes a {
-    color: #569cd6;
+    color: var(--accent-blue);
 }
 
 .changelog-notes a:hover {
@@ -1163,17 +1186,17 @@ html, body {
 }
 
 .changelog-error {
-    color: #ce9178;
+    color: var(--accent-orange);
     text-align: center;
 }
 
 .changelog-error a {
-    color: #569cd6;
+    color: var(--accent-blue);
 }
 
 /* System Status Section */
 .system-status-section .status-loading {
-    color: #888;
+    color: var(--text-secondary);
     font-style: italic;
 }
 
@@ -1185,7 +1208,7 @@ html, body {
 }
 
 .status-item {
-    background-color: #2d2d2d;
+    background-color: #1F2335;
     padding: 12px;
     border-radius: 6px;
 }
@@ -1193,7 +1216,7 @@ html, body {
 .status-label {
     display: block;
     font-size: 11px;
-    color: #888;
+    color: var(--text-secondary);
     text-transform: uppercase;
     margin-bottom: 4px;
 }
@@ -1204,19 +1227,19 @@ html, body {
 }
 
 .status-value.status-healthy {
-    color: #4ec9b0;
+    color: var(--accent-green);
 }
 
 .status-value.status-ok {
-    color: #4ec9b0;
+    color: var(--accent-green);
 }
 
 .status-value.status-error {
-    color: #f14c4c;
+    color: var(--accent-red);
 }
 
 .status-details {
-    background-color: #252525;
+    background-color: #1A1B26;
     border-radius: 6px;
     padding: 12px;
     font-size: 12px;
@@ -1226,7 +1249,7 @@ html, body {
     display: flex;
     justify-content: space-between;
     padding: 6px 0;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid #1F2335;
 }
 
 .status-detail-row:last-child {
@@ -1234,15 +1257,15 @@ html, body {
 }
 
 .detail-label {
-    color: #888;
+    color: var(--text-secondary);
 }
 
 .detail-value {
-    color: #d4d4d4;
+    color: var(--text-primary);
 }
 
 .detail-value code {
-    background-color: #1e1e1e;
+    background-color: var(--bg-input);
     padding: 2px 6px;
     border-radius: 3px;
     font-family: 'Cascadia Mono NF', Consolas, monospace;
@@ -1252,10 +1275,10 @@ html, body {
 .status-error-msg {
     margin-top: 12px;
     padding: 10px;
-    background-color: #4a1515;
-    border: 1px solid #6b2020;
+    background-color: #2F1A1A;
+    border: 1px solid #5A2D2D;
     border-radius: 6px;
-    color: #f48771;
+    color: var(--accent-red);
     font-size: 13px;
 }
 

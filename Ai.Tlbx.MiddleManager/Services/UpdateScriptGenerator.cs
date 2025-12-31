@@ -48,6 +48,11 @@ if ($hostService) {{
     Start-Sleep -Seconds 2
 }}
 
+# Kill any remaining mm.exe and mm-con-host processes (orphaned sessions)
+Get-Process -Name 'mm' -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process -Name 'mm-con-host' -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 1
+
 # Backup current binaries
 $webBinary = '{currentBinaryPath}'
 $hostBinary = '{currentHostBinaryPath}'
@@ -128,6 +133,11 @@ sleep 2
 
 # Stop host service
 {stopHostService}
+
+# Kill any remaining mm and mm-con-host processes (orphaned sessions)
+pkill -f '/mm$' 2>/dev/null || true
+pkill -f 'mm-con-host' 2>/dev/null || true
+sleep 1
 
 # Backup current binaries
 WEB_BINARY='{currentBinaryPath}'

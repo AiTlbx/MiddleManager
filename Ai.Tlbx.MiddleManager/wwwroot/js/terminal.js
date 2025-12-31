@@ -25,18 +25,18 @@
     /** Terminal color themes */
     var THEMES = {
         dark: {
-            background: '#1e1e1e',
-            foreground: '#d4d4d4',
-            cursor: '#ffffff',
-            cursorAccent: '#1e1e1e',
-            selectionBackground: '#264f78'
+            background: '#1A1B26',
+            foreground: '#C0CAF5',
+            cursor: '#C0CAF5',
+            cursorAccent: '#1A1B26',
+            selectionBackground: '#283457'
         },
         light: {
-            background: '#ffffff',
-            foreground: '#1e1e1e',
-            cursor: '#1e1e1e',
-            cursorAccent: '#ffffff',
-            selectionBackground: '#add6ff'
+            background: '#D5D6DB',
+            foreground: '#343B58',
+            cursor: '#343B58',
+            cursorAccent: '#D5D6DB',
+            selectionBackground: '#9AA5CE'
         },
         solarizedDark: {
             background: '#002b36',
