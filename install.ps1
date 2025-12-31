@@ -123,6 +123,11 @@ function Install-MiddleManager
             Write-Host "Stopping existing service..." -ForegroundColor Gray
             Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
             Start-Sleep -Seconds 1
+
+            # Kill any lingering processes that might hold file locks
+            Write-Host "Stopping any running processes..." -ForegroundColor Gray
+            Get-Process -Name "mm-host", "mm" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 1
         }
 
         # Migration: remove old MiddleManagerHost service from v2.1.x
@@ -163,10 +168,32 @@ function Install-MiddleManager
     $destWebBinary = Join-Path $installDir $WebBinaryName
     $destHostBinary = Join-Path $installDir $HostBinaryName
 
-    Copy-Item $sourceWebBinary $destWebBinary -Force
+    Write-Host "Installing binaries..." -ForegroundColor Gray
+    try
+    {
+        Copy-Item $sourceWebBinary $destWebBinary -Force -ErrorAction Stop
+        Write-Host "  Installed: $WebBinaryName" -ForegroundColor Gray
+    }
+    catch
+    {
+        Write-Host "  Failed to copy $WebBinaryName - file may be locked" -ForegroundColor Red
+        Write-Host "  Error: $_" -ForegroundColor Red
+        throw
+    }
+
     if (Test-Path $sourceHostBinary)
     {
-        Copy-Item $sourceHostBinary $destHostBinary -Force
+        try
+        {
+            Copy-Item $sourceHostBinary $destHostBinary -Force -ErrorAction Stop
+            Write-Host "  Installed: $HostBinaryName" -ForegroundColor Gray
+        }
+        catch
+        {
+            Write-Host "  Failed to copy $HostBinaryName - file may be locked" -ForegroundColor Red
+            Write-Host "  Error: $_" -ForegroundColor Red
+            throw
+        }
     }
 
     # Copy version manifest
@@ -254,6 +281,11 @@ function Install-AsService
     {
         Write-Host "Removing existing service..." -ForegroundColor Gray
         Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+
+        # Kill any lingering processes
+        Get-Process -Name "mm-host", "mm" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
+
         sc.exe delete $ServiceName | Out-Null
         Start-Sleep -Seconds 1
     }
