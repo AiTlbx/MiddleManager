@@ -57,21 +57,21 @@ $versionJson.pty = $newVersion
 $versionJson | ConvertTo-Json | Set-Content $versionJsonPath
 Write-Host "  Updated: version.json" -ForegroundColor Gray
 
-# Update web csproj
+# Update web csproj (use flexible regex to handle version mismatch)
 $content = Get-Content $webCsprojPath -Raw
-$content = $content -replace "<Version>$currentVersion</Version>", "<Version>$newVersion</Version>"
+$content = $content -replace "<Version>\d+\.\d+\.\d+</Version>", "<Version>$newVersion</Version>"
 Set-Content $webCsprojPath $content -NoNewline
 Write-Host "  Updated: Ai.Tlbx.MiddleManager.csproj" -ForegroundColor Gray
 
 # Update host csproj
 $content = Get-Content $hostCsprojPath -Raw
-$content = $content -replace "<Version>$currentVersion</Version>", "<Version>$newVersion</Version>"
+$content = $content -replace "<Version>\d+\.\d+\.\d+</Version>", "<Version>$newVersion</Version>"
 Set-Content $hostCsprojPath $content -NoNewline
 Write-Host "  Updated: Ai.Tlbx.MiddleManager.Host.csproj" -ForegroundColor Gray
 
 # Update host Program.cs
 $content = Get-Content $hostProgramPath -Raw
-$content = $content -replace "public const string Version = `"$currentVersion`"", "public const string Version = `"$newVersion`""
+$content = $content -replace 'public const string Version = "\d+\.\d+\.\d+"', "public const string Version = `"$newVersion`""
 Set-Content $hostProgramPath $content -NoNewline
 Write-Host "  Updated: Program.cs" -ForegroundColor Gray
 
