@@ -265,6 +265,7 @@ public sealed class ConHostClient : IAsyncDisposable
                 switch (msgType)
                 {
                     case ConHostMessageType.Output:
+                        Console.WriteLine($"[ConHostClient] Received output for {_sessionId}: {payloadLength} bytes");
                         OnOutput?.Invoke(_sessionId, payload);
                         break;
 

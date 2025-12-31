@@ -26,6 +26,7 @@ public sealed class ConHostMuxConnectionManager
 
     private void HandleOutput(string sessionId, ReadOnlyMemory<byte> data)
     {
+        Console.WriteLine($"[ConHostMux] HandleOutput for {sessionId}: {data.Length} bytes, clients: {_clients.Count}");
         _outputQueue.Writer.TryWrite((sessionId, data.ToArray()));
     }
 

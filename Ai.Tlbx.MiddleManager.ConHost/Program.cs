@@ -8,7 +8,7 @@ namespace Ai.Tlbx.MiddleManager.ConHost;
 
 public static class Program
 {
-    public const string Version = "2.6.6";
+    public const string Version = "2.6.7";
 
     private static readonly string LogDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
@@ -142,11 +142,19 @@ public static class Program
                 {
                     if (pipe.IsConnected)
                     {
+                        Log($"Sending output: {data.Length} bytes");
                         var msg = ConHostProtocol.CreateOutputMessage(data.Span);
                         pipe.Write(msg);
                     }
+                    else
+                    {
+                        Log($"Output dropped (pipe not connected): {data.Length} bytes");
+                    }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    Log($"Output write failed: {ex.Message}");
+                }
             }
 
             void OnStateChange()
