@@ -21,14 +21,12 @@ dotnet build Ai.Tlbx.MiddleManager/Ai.Tlbx.MiddleManager.csproj
 dotnet build Ai.Tlbx.MiddleManager.Host/Ai.Tlbx.MiddleManager.Host.csproj
 
 # Test
-dotnet test Ai.Tlbx.MiddleManager.Aot.Tests/Ai.Tlbx.MiddleManager.Aot.Tests.csproj
+dotnet test Ai.Tlbx.MiddleManager.Tests/Ai.Tlbx.MiddleManager.Tests.csproj
 
 # AOT publish (platform-specific)
-Ai.Tlbx.MiddleManager.Aot/build-aot.cmd        # Windows
-./Ai.Tlbx.MiddleManager.Aot/build-aot-linux.sh # Linux
-./Ai.Tlbx.MiddleManager.Aot/build-aot-macos.sh # macOS
-
-# Output: Ai.Tlbx.MiddleManager.Aot/publish/mm[.exe]
+Ai.Tlbx.MiddleManager/build-aot.cmd        # Windows
+./Ai.Tlbx.MiddleManager/build-aot-linux.sh # Linux
+./Ai.Tlbx.MiddleManager/build-aot-macos.sh # macOS
 ```
 
 ## Architecture (v2.2+ Supervisor Model)
@@ -77,31 +75,11 @@ Ai.Tlbx.MiddleManager.Aot/build-aot.cmd        # Windows
 - `--port <n>` — Listen on port (default: 2000)
 - `--bind <addr>` — Bind address (default: localhost)
 
-### Heartbeat Protocol
+### Heartbeat & Recovery
 
-```
-mm-host                                 mm.exe
-   │                                      │
-   │──────── Ping (0xF0) ────────────────▶│
-   │                                      │
-   │◀─────── Pong (0xF3) ─────────────────│
-   │         (every 5 seconds)            │
-```
-
-**Timeouts:**
-- Ping interval: 5 seconds
-- Pong timeout: 8 seconds (mm-host closes connection if no Pong)
-- mm.exe considers host dead if no Ping for 15 seconds
-
-**Auto-reconnect (mm.exe):**
-- On disconnect: exponential backoff 100ms → 200ms → 400ms → ... → 5s max
-- On reconnect: re-sync sessions from mm-host
-- UI shows "Host disconnected" indicator when connection lost
-
-**Auto-restart (mm-host):**
-- Monitors mm.exe process handle
-- On exit: restart with exponential backoff 1s → 2s → 4s → ... → 30s max
-- Reset backoff after 60s of stable running
+- mm-host sends Ping every 5s, expects Pong within 8s
+- mm.exe auto-reconnects on disconnect (exponential backoff 100ms → 5s)
+- mm-host auto-restarts mm.exe on crash (exponential backoff 1s → 30s)
 
 ### Project Structure
 
@@ -158,20 +136,14 @@ POST /api/update/apply       Download update and restart
 - `/ws/mux` — Multiplexed terminal I/O (binary protocol)
 - `/ws/state` — Session state changes (JSON, for sidebar sync)
 
-## What's Already Done (Don't Re-implement)
+## Features (Already Implemented)
 
-- Cross-platform PTY support (Windows ConPTY, Linux/macOS forkpty)
-- Shell configurations for Pwsh, PowerShell, Cmd, Bash, Zsh
-- WebSocket multiplexing protocol
-- Session rename with server-side storage and cross-browser sync
-- Active/passive viewer indicator (LastActiveViewerId)
-- OSC-7 working directory tracking
-- Terminal resize
-- Settings persistence
-- Embedded static file serving (AOT compatible)
-- ASCII art welcome banner with version/port/platform info
-- Auto-update from GitHub releases (background check + UI notification)
-- Install scripts with system service registration (launchd, systemd, Windows Service)
+- Cross-platform PTY (Windows ConPTY, Unix forkpty)
+- Multiple shells (Pwsh, PowerShell, Cmd, Bash, Zsh)
+- WebSocket multiplexing, session rename, resize, OSC-7 directory tracking
+- Auto-update from GitHub releases
+- Install scripts with service registration (launchd, systemd, Windows Service)
+- Embedded static files (AOT compatible), JSON source generators
 
 ## Code Style
 
@@ -183,13 +155,6 @@ POST /api/update/apply       Download update and restart
 - **Namespaces:** File-scoped (`namespace Foo;`)
 - **Null checks:** `is null` / `is not null`
 - **Comments:** Minimal, only for complex logic
-
-## AOT Gotchas
-
-- **JSON:** Must use source generators (AppJsonContext, SettingsJsonContext)
-- **Reflection:** Avoid, or annotate with `[DynamicallyAccessedMembers]`
-- **CsWin32:** Only included when building for Windows RID (conditional in csproj)
-- **Static files:** Embedded as resources, served via EmbeddedWebRootFileProvider
 
 ## Platform-Specific
 
@@ -232,148 +197,23 @@ The script:
 - Builds both `mm` and `mm-host` for each platform
 - Packages both binaries together per platform
 
-## Update System & Version Comparison
+## Update System
 
-### Version Manifest (`version.json`)
+**Version manifest** (`version.json`): Contains `web`, `pty`, `protocol` versions.
 
-```json
-{
-  "web": "2.0.0",      // mm.exe version
-  "pty": "2.0.0",      // mm-host.exe version
-  "protocol": 1,       // IPC protocol version (must match exactly)
-  "minCompatiblePty": "2.0.0"  // Minimum mm-host version web server can work with
-}
-```
-
-### Determining Update Type
-
-**Web-Only Update** (sessions preserved):
-- `release.pty == installed.pty` (PTY host version unchanged)
-- Only mm.exe is replaced
-- Sessions continue running in mm-host
-- User message: "Quick update - your terminals will stay alive"
-
-**Full Update** (sessions lost):
-- `release.pty != installed.pty` (PTY host version changed)
-- Both binaries replaced
-- mm-host restarts, killing all sessions
-- User message: "Full update - please save your work, terminals will restart"
-
-**Protocol Mismatch** (requires full update):
-- `release.protocol != installed.protocol`
-- IPC protocol changed, both must update together
-- Always a full update
-
-### Version Comparison Logic (in UpdateService)
-
-```csharp
-public UpdateType DetermineUpdateType(VersionManifest installed, VersionManifest release)
-{
-    // Protocol change = always full update
-    if (release.Protocol != installed.Protocol)
-        return UpdateType.Full;
-
-    // PTY version change = full update (host restarts)
-    if (release.Pty != installed.Pty)
-        return UpdateType.Full;
-
-    // Only web version changed = web-only update (sessions preserved)
-    if (release.Web != installed.Web)
-        return UpdateType.WebOnly;
-
-    return UpdateType.None;
-}
-```
-
-### Update Scenarios
-
-| Scenario | Web Version | PTY Version | Protocol | Update Type | Sessions |
-|----------|-------------|-------------|----------|-------------|----------|
-| Bug fix in UI | 2.0.0 → 2.0.1 | 2.0.0 | 1 | Web-Only | Preserved |
-| New web feature | 2.0.0 → 2.1.0 | 2.0.0 | 1 | Web-Only | Preserved |
-| PTY bug fix | 2.0.0 | 2.0.0 → 2.0.1 | 1 | Full | Lost |
-| New PTY feature | 2.0.0 → 2.1.0 | 2.0.0 → 2.1.0 | 1 | Full | Lost |
-| Protocol change | 2.0.0 → 3.0.0 | 2.0.0 → 3.0.0 | 1 → 2 | Full | Lost |
-
-### UI Messaging
-
-**Web-Only Update Toast:**
-```
-Update Available: v2.0.1
-Quick update - your terminals will stay alive!
-[Update Now]
-```
-
-**Full Update Toast:**
-```
-Update Available: v2.1.0
-⚠️ This update requires restarting the terminal host.
-Please save your work - all terminal sessions will close.
-[Update Now] [Later]
-```
+**Update types:**
+- **Web-only** (sessions preserved): Only `web` version changed
+- **Full** (sessions lost): `pty` or `protocol` version changed
 
 ## Install System
 
-**Install scripts:**
-- `install.ps1` — Windows (PowerShell)
-- `install.sh` — macOS/Linux (Bash)
+**Scripts:** `install.ps1` (Windows), `install.sh` (macOS/Linux)
 
-**Install modes:**
-| Mode | Location | Settings Path |
-|------|----------|---------------|
-| System service | `C:\Program Files\MiddleManager` (Win) / `/usr/local/bin` (Unix) | `%ProgramData%\MiddleManager` (Win) / `/usr/local/etc/middlemanager` (Unix) |
-| User install | `%LOCALAPPDATA%\MiddleManager` (Win) / `~/.local/bin` (Unix) | `~/.middlemanager` |
+**Modes:**
+- **System service**: `C:\Program Files\MiddleManager` or `/usr/local/bin`, runs `mm-host --service`
+- **User install**: `%LOCALAPPDATA%\MiddleManager` or `~/.local/bin`, user runs `mm` manually
 
-**Single Service Architecture (v2.2+):**
-- One service runs `mm-host --service`
-- mm-host spawns and supervises mm.exe internally
-- No service dependencies to manage
-
-**Service registration:**
-- Windows: `sc.exe create MiddleManager binPath= "mm-host.exe --service"`
-- macOS: launchd plist runs `mm-host --service`
-- Linux: systemd unit runs `mm-host --service`
-
-**Migration from v2.1.x:**
-Install scripts automatically detect old two-service architecture and migrate:
-- Stop old services (MiddleManagerHost, MiddleManager)
-- Remove old service registrations
-- Install new single service
-
-**User de-elevation:** When running as service (root/LocalSystem), terminals spawn as the installing user via:
-- Windows: `CreateProcessAsUser` with `WTSQueryUserToken`
-- Unix: `sudo -u` wrapper
-
-**Settings migration on update:**
-1. Installer renames `settings.json` → `settings.json.old`
-2. Installer writes minimal bootstrap settings (runAs* fields only)
-3. App on startup detects `.old`, migrates user preferences (theme, fontSize, shell, etc.)
-4. App deletes `.old` after successful migration
-
-**Important installer gotchas:**
-- Must stop service BEFORE copying binary (file locked by running process)
-- Capture user identity BEFORE elevation (for runAs* settings)
-- Windows installer re-downloads script for elevated process (can't pass complex state)
-
-## Embedded Resources
-
-Static files in `wwwroot/` are embedded as resources via:
-```xml
-<EmbeddedResource Include="wwwroot\**\*" LinkBase="wwwroot" />
-```
-
-Served by `EmbeddedWebRootFileProvider` with namespace prefix `Ai.Tlbx.MiddleManager.wwwroot.*`
-
-**Gotcha:** The namespace must match the project folder name exactly, not assembly name or any `.Aot` suffix.
-
-## Windows Service Hosting
-
-Requires `Microsoft.Extensions.Hosting.WindowsServices` package (Windows only, conditional in csproj).
-
-```csharp
-#if WINDOWS
-    builder.Host.UseWindowsService();
-#endif
-```
-
-The `WINDOWS` define is set conditionally when `RuntimeIdentifier.StartsWith('win')`.
+**Key behaviors:**
+- Installer kills running `mm-host`/`mm` processes before copying (avoids locked files)
+- Service runs as SYSTEM/root but spawns terminals as the installing user
+- Settings stored in `%ProgramData%\MiddleManager` (service) or `~/.middlemanager` (user)
