@@ -8,7 +8,7 @@ namespace Ai.Tlbx.MiddleManager.ConHost;
 
 public static class Program
 {
-    public const string Version = "2.6.15";
+    public const string Version = "2.6.16";
 
     private static readonly string LogDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
@@ -16,6 +16,7 @@ public static class Program
 
     private static string? _sessionId;
     private static string? _logPath;
+    private static bool _debugEnabled;
 
     public static async Task<int> Main(string[] args)
     {
@@ -40,6 +41,7 @@ public static class Program
 
         _sessionId = config.SessionId;
         _logPath = Path.Combine(LogDir, $"mm-con-{_sessionId}.log");
+        _debugEnabled = config.Debug;
 
         Log($"mm-con-host {Version} starting for session {config.SessionId}");
 
@@ -150,7 +152,7 @@ public static class Program
                             // Buffer output until handshake completes
                             if (data.Length < 50)
                             {
-                                Log($"[BUFFER] Buffering {data.Length} bytes (handshake pending)");
+                                DebugLog($"[BUFFER] Buffering {data.Length} bytes (handshake pending)");
                             }
                             pendingOutput.Add(data.ToArray());
                             return;
@@ -162,7 +164,7 @@ public static class Program
                         var msg = ConHostProtocol.CreateOutputMessage(data.Span);
                         if (data.Length < 50)
                         {
-                            Log($"[PIPE-OUTPUT] {BitConverter.ToString(data.ToArray())}");
+                            DebugLog($"[PIPE-OUTPUT] {BitConverter.ToString(data.ToArray())}");
                         }
                         lock (pipe)
                         {
@@ -171,7 +173,7 @@ public static class Program
                     }
                     else
                     {
-                        Log($"[PIPE-OUTPUT] Pipe not connected, discarding {data.Length} bytes");
+                        DebugLog($"[PIPE-OUTPUT] Pipe not connected, discarding {data.Length} bytes");
                     }
                 }
                 catch (Exception ex)
@@ -201,12 +203,12 @@ public static class Program
                 lock (outputLock)
                 {
                     handshakeComplete = true;
-                    Log($"[HANDSHAKE] Complete, pipe connected: {pipe.IsConnected}");
+                    DebugLog($"[HANDSHAKE] Complete, pipe connected: {pipe.IsConnected}");
 
                     // Send any buffered output
                     if (pendingOutput.Count > 0)
                     {
-                        Log($"[HANDSHAKE] Sending {pendingOutput.Count} buffered output chunks");
+                        DebugLog($"[HANDSHAKE] Sending {pendingOutput.Count} buffered output chunks");
                         foreach (var data in pendingOutput)
                         {
                             try
@@ -216,7 +218,7 @@ public static class Program
                                     var msg = ConHostProtocol.CreateOutputMessage(data);
                                     if (data.Length < 50)
                                     {
-                                        Log($"[PIPE-OUTPUT] (buffered) {BitConverter.ToString(data)}");
+                                        DebugLog($"[PIPE-OUTPUT] (buffered) {BitConverter.ToString(data)}");
                                     }
                                     lock (pipe)
                                     {
@@ -326,7 +328,7 @@ public static class Program
                 case ConHostMessageType.Input:
                     if (payloadLength < 20)
                     {
-                        Log($"[PIPE-INPUT] {BitConverter.ToString(payload.ToArray())}");
+                        DebugLog($"[PIPE-INPUT] {BitConverter.ToString(payload.ToArray())}");
                     }
                     await session.SendInputAsync(payload.ToArray(), ct).ConfigureAwait(false);
                     break;
@@ -372,6 +374,7 @@ public static class Program
         string? workingDir = null;
         int cols = 80;
         int rows = 24;
+        bool debug = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -394,6 +397,9 @@ public static class Program
                     rows = r;
                     i++;
                     break;
+                case "--debug":
+                    debug = true;
+                    break;
             }
         }
 
@@ -404,7 +410,7 @@ public static class Program
 
         workingDir ??= Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
-        return new SessionConfig(sessionId, shellType, workingDir, cols, rows);
+        return new SessionConfig(sessionId, shellType, workingDir, cols, rows, debug);
     }
 
     private static void PrintHelp()
@@ -442,7 +448,13 @@ public static class Program
         catch { }
     }
 
-    private sealed record SessionConfig(string SessionId, string? ShellType, string WorkingDirectory, int Cols, int Rows);
+    internal static void DebugLog(string message)
+    {
+        if (!_debugEnabled) return;
+        Log(message);
+    }
+
+    private sealed record SessionConfig(string SessionId, string? ShellType, string WorkingDirectory, int Cols, int Rows, bool Debug);
 }
 
 internal sealed class TerminalSession
@@ -505,7 +517,7 @@ internal sealed class TerminalSession
                 var data = buffer.AsMemory(0, bytesRead);
                 if (bytesRead < 50)
                 {
-                    Program.Log($"[PTY-READ] {BitConverter.ToString(data.ToArray())}");
+                    Program.DebugLog($"[PTY-READ] {BitConverter.ToString(data.ToArray())}");
                 }
                 AppendToBuffer(data.Span);
                 ParseOscSequences(data.Span);
@@ -523,7 +535,7 @@ internal sealed class TerminalSession
     {
         if (data.Length < 20)
         {
-            Program.Log($"[PTY-WRITE] {BitConverter.ToString(data)}");
+            Program.DebugLog($"[PTY-WRITE] {BitConverter.ToString(data)}");
         }
         await _pty.WriterStream.WriteAsync(data, ct).ConfigureAwait(false);
         await _pty.WriterStream.FlushAsync(ct).ConfigureAwait(false);

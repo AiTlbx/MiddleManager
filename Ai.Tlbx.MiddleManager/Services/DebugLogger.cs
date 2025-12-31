@@ -8,6 +8,8 @@ public static class DebugLogger
 
     private static readonly string LogPath = Path.Combine(LogDir, "mm-debug.log");
 
+    public static bool Enabled { get; set; } = false;
+
     public static void ClearLogs()
     {
         try
@@ -25,6 +27,8 @@ public static class DebugLogger
 
     public static void Log(string message)
     {
+        if (!Enabled) return;
+
         try
         {
             Directory.CreateDirectory(LogDir);

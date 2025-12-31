@@ -40,5 +40,8 @@ namespace Ai.Tlbx.MiddleManager.Settings
         public string? RunAsUserSid { get; set; }  // Windows: User SID for token lookup
         public int? RunAsUid { get; set; }         // Unix: User ID
         public int? RunAsGid { get; set; }         // Unix: Group ID
+
+        // Diagnostics
+        public bool DebugLogging { get; set; } = false;
     }
 }

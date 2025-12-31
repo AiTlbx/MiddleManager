@@ -98,7 +98,7 @@ public sealed class ConHostSessionManager : IAsyncDisposable
         return null;
 #else
 #pragma warning disable CA1416 // Platform compatibility - already guarded by #if !WINDOWS early return
-        if (!ConHostSpawner.SpawnConHost(sessionId, shellType, workingDirectory, cols, rows, out _))
+        if (!ConHostSpawner.SpawnConHost(sessionId, shellType, workingDirectory, cols, rows, DebugLogger.Enabled, out _))
         {
             return null;
         }

@@ -25,9 +25,6 @@ public class Program
             return;
         }
 
-        // Clear old debug logs on startup for clean signal
-        DebugLogger.ClearLogs();
-
         var (port, bindAddress, useConHost) = ParseCommandLineArgs(args);
         var builder = CreateBuilder(args);
         var app = builder.Build();
@@ -37,6 +34,15 @@ public class Program
 
         var settingsService = app.Services.GetRequiredService<SettingsService>();
         var updateService = app.Services.GetRequiredService<UpdateService>();
+
+        // Configure debug logging from settings
+        var settings = settingsService.Load();
+        DebugLogger.Enabled = settings.DebugLogging;
+        if (DebugLogger.Enabled)
+        {
+            DebugLogger.ClearLogs();
+            DebugLogger.Log("Debug logging enabled");
+        }
 
         // Con-host mode: mm.exe spawns mm-con-host per session (service mode)
         ConHostSessionManager? conHostSessionManager = null;

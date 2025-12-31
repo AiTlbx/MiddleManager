@@ -19,6 +19,7 @@ public sealed class ConHostSpawner
         string? workingDirectory,
         int cols,
         int rows,
+        bool debug,
         out int processId)
     {
         processId = 0;
@@ -29,7 +30,7 @@ public sealed class ConHostSpawner
             return false;
         }
 
-        var args = BuildArgs(sessionId, shellType, workingDirectory, cols, rows);
+        var args = BuildArgs(sessionId, shellType, workingDirectory, cols, rows, debug);
         var commandLine = $"\"{ConHostPath}\" {args}";
 
         if (IsRunningAsSystem())
@@ -42,7 +43,7 @@ public sealed class ConHostSpawner
         }
     }
 
-    private static string BuildArgs(string sessionId, string? shellType, string? workingDirectory, int cols, int rows)
+    private static string BuildArgs(string sessionId, string? shellType, string? workingDirectory, int cols, int rows, bool debug)
     {
         var args = $"--session {sessionId} --cols {cols} --rows {rows}";
         if (!string.IsNullOrEmpty(shellType))
@@ -52,6 +53,10 @@ public sealed class ConHostSpawner
         if (!string.IsNullOrEmpty(workingDirectory))
         {
             args += $" --cwd \"{workingDirectory}\"";
+        }
+        if (debug)
+        {
+            args += " --debug";
         }
         return args;
     }
