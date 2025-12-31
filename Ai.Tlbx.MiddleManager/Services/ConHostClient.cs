@@ -292,6 +292,7 @@ public sealed class ConHostClient : IAsyncDisposable
                 if (bytesRead == 0)
                 {
                     Log("Read returned 0 bytes - pipe closed");
+                    DebugLogger.Log($"[PIPE-ERR] {_sessionId}: Read returned 0 bytes - pipe closed");
                     HandleDisconnect();
                     continue;
                 }
@@ -350,11 +351,13 @@ public sealed class ConHostClient : IAsyncDisposable
             catch (IOException ex)
             {
                 Log($"Read error: {ex.Message}");
+                DebugLogger.Log($"[PIPE-ERR] {_sessionId}: IOException - {ex.Message}");
                 HandleDisconnect();
             }
             catch (Exception ex)
             {
                 Log($"Unexpected read error: {ex.Message}");
+                DebugLogger.Log($"[PIPE-ERR] {_sessionId}: {ex.GetType().Name} - {ex.Message}");
                 HandleDisconnect();
             }
         }
@@ -367,6 +370,10 @@ public sealed class ConHostClient : IAsyncDisposable
             case ConHostMessageType.Output:
                 try
                 {
+                    if (payload.Length < 50)
+                    {
+                        DebugLogger.Log($"[PIPE-RECV] {_sessionId}: {BitConverter.ToString(payload.ToArray())}");
+                    }
                     OnOutput?.Invoke(_sessionId, payload);
                 }
                 catch (Exception ex)
