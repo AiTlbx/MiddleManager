@@ -223,7 +223,6 @@
             if (state && (state.serverCols !== session.cols || state.serverRows !== session.rows)) {
                 state.serverCols = session.cols;
                 state.serverRows = session.rows;
-                state.fitAddon.fit();
             }
         });
 
@@ -307,6 +306,8 @@
             .then(function(r) {
                 if (r.ok) {
                     if (btn) btn.textContent = 'Restarting...';
+                    // Wait for server to restart, then reload page
+                    waitForServerAndReload();
                 } else {
                     if (btn) {
                         btn.disabled = false;
@@ -322,6 +323,32 @@
                 }
                 console.error('Update error:', e);
             });
+    }
+
+    function waitForServerAndReload() {
+        var attempts = 0;
+        var maxAttempts = 30;
+        var interval = 2000;
+
+        function checkServer() {
+            attempts++;
+            fetch('/api/version', { cache: 'no-store' })
+                .then(function(r) {
+                    if (r.ok) {
+                        location.reload();
+                    } else if (attempts < maxAttempts) {
+                        setTimeout(checkServer, interval);
+                    }
+                })
+                .catch(function() {
+                    if (attempts < maxAttempts) {
+                        setTimeout(checkServer, interval);
+                    }
+                });
+        }
+
+        // Wait a bit for server to start shutting down
+        setTimeout(checkServer, 3000);
     }
 
     function checkForUpdates() {
@@ -797,7 +824,6 @@
             state.terminal.options.cursorStyle = options.cursorStyle;
             state.terminal.options.fontSize = options.fontSize;
             state.terminal.options.theme = options.theme;
-            state.fitAddon.fit();
         });
     }
 
@@ -806,38 +832,9 @@
     // ========================================================================
 
     function createSession() {
-        // Measure dimensions using explicit pixel sizes from container
-        var rect = terminalsArea.getBoundingClientRect();
-        var cols = 120;
-        var rows = 30;
-
-        // Only measure if container has valid dimensions
-        if (rect.width > 100 && rect.height > 100) {
-            var tempContainer = document.createElement('div');
-            tempContainer.style.cssText = 'position:absolute;left:-9999px;width:' + Math.floor(rect.width) + 'px;height:' + Math.floor(rect.height) + 'px;';
-            document.body.appendChild(tempContainer);
-
-            try {
-                var tempTerminal = new Terminal(getTerminalOptions());
-                var tempFitAddon = new FitAddon.FitAddon();
-                tempTerminal.loadAddon(tempFitAddon);
-                tempTerminal.open(tempContainer);
-                tempFitAddon.fit();
-
-                if (tempTerminal.cols > 10 && tempTerminal.rows > 5) {
-                    cols = tempTerminal.cols;
-                    rows = tempTerminal.rows;
-                }
-
-                tempTerminal.dispose();
-            } catch (e) {
-                console.warn('Dimension measurement failed:', e);
-            }
-
-            tempContainer.remove();
-        }
-
-        console.log('Creating session with dimensions:', cols, 'x', rows, '(container:', Math.floor(rect.width), 'x', Math.floor(rect.height), 'px)');
+        // Use default dimensions from settings
+        var cols = currentSettings.defaultCols || 120;
+        var rows = currentSettings.defaultRows || 30;
 
         fetch('/api/sessions', {
             method: 'POST',
@@ -869,12 +866,10 @@
         activeSessionId = sessionId;
 
         var state = createTerminalForSession(sessionId);
-        var isNewTerminal = state.serverCols === 0; // Never been fitted before
+        var isNewTerminal = state.serverCols === 0;
         state.container.classList.remove('hidden');
 
         requestAnimationFrame(function() {
-            state.fitAddon.fit();
-            sendResize(sessionId, state.terminal);
             state.terminal.focus();
 
             // Fetch buffer for existing sessions only (not newly created ones)
@@ -999,6 +994,15 @@
             var actions = document.createElement('div');
             actions.className = 'session-actions';
 
+            var resizeBtn = document.createElement('button');
+            resizeBtn.className = 'session-resize';
+            resizeBtn.innerHTML = '⤢';
+            resizeBtn.title = 'Fit to screen';
+            resizeBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                fitSessionToScreen(session.id);
+            });
+
             var renameBtn = document.createElement('button');
             renameBtn.className = 'session-rename';
             renameBtn.innerHTML = '✏️';
@@ -1017,6 +1021,7 @@
                 deleteSession(session.id);
             });
 
+            actions.appendChild(resizeBtn);
             actions.appendChild(renameBtn);
             actions.appendChild(closeBtn);
 
@@ -1136,7 +1141,6 @@
             if (state) {
                 state.container.classList.remove('hidden');
                 requestAnimationFrame(function() {
-                    state.fitAddon.fit();
                     state.terminal.focus();
                 });
             }
@@ -1353,19 +1357,27 @@
     // ========================================================================
 
     function setupResizeObserver() {
-        if (typeof ResizeObserver === 'undefined' || !terminalsArea) return;
+        // No-op: terminal resize is now manual via sidebar button
+    }
 
-        var observer = new ResizeObserver(function() {
-            requestAnimationFrame(function() {
-                if (!activeSessionId) return;
-                var state = sessionTerminals.get(activeSessionId);
-                if (state && state.container.offsetWidth > 0) {
-                    state.fitAddon.fit();
-                    sendResize(activeSessionId, state.terminal);
-                }
-            });
+    function fitSessionToScreen(sessionId) {
+        var state = sessionTerminals.get(sessionId);
+        if (!state) return;
+
+        // Ensure terminal is visible for accurate measurement
+        var wasHidden = state.container.classList.contains('hidden');
+        if (wasHidden) {
+            state.container.classList.remove('hidden');
+        }
+
+        requestAnimationFrame(function() {
+            state.fitAddon.fit();
+            sendResize(sessionId, state.terminal);
+
+            if (wasHidden) {
+                state.container.classList.add('hidden');
+            }
         });
-        observer.observe(terminalsArea);
     }
 
     function setupVisualViewport() {
@@ -1388,16 +1400,7 @@
 
             var availableHeight = Math.floor((vh - headerHeight) * 0.99);
             terminalsArea.style.height = availableHeight + 'px';
-
-            if (activeSessionId) {
-                var state = sessionTerminals.get(activeSessionId);
-                if (state && state.container.offsetWidth > 0) {
-                    requestAnimationFrame(function() {
-                        state.fitAddon.fit();
-                        sendResize(activeSessionId, state.terminal);
-                    });
-                }
-            }
+            // Terminal resize is now manual via sidebar button
         }
 
         window.visualViewport.addEventListener('resize', updateViewportHeight);
