@@ -1,9 +1,11 @@
 using System.Text.Json.Serialization;
 using Ai.Tlbx.MiddleManager.Models;
 using Ai.Tlbx.MiddleManager.Settings;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Ai.Tlbx.MiddleManager.Services;
 
+[JsonSerializable(typeof(ProblemDetails))]
 [JsonSerializable(typeof(SessionListDto))]
 [JsonSerializable(typeof(SessionInfoDto))]
 [JsonSerializable(typeof(CreateSessionRequest))]

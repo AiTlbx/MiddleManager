@@ -8,7 +8,7 @@ namespace Ai.Tlbx.MiddleManager.ConHost;
 
 public static class Program
 {
-    public const string Version = "2.7.0";
+    public const string Version = "2.8.0";
 
     private static readonly string LogDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
@@ -101,6 +101,10 @@ public static class Program
         }
     }
 
+    // Track current client to disconnect when a new one connects
+    private static CancellationTokenSource? _currentClientCts;
+    private static readonly object _clientLock = new();
+
     private static async Task AcceptClientsAsync(TerminalSession session, string pipeName, CancellationToken ct)
     {
         while (!ct.IsCancellationRequested && session.IsRunning)
@@ -118,8 +122,16 @@ public static class Program
                 await pipe.WaitForConnectionAsync(ct).ConfigureAwait(false);
                 Log("Client connected");
 
-                // Handle this client (don't await - allow multiple clients)
-                _ = HandleClientAsync(session, pipe, ct);
+                // Cancel any existing client - only one active client per session
+                lock (_clientLock)
+                {
+                    _currentClientCts?.Cancel();
+                    _currentClientCts?.Dispose();
+                    _currentClientCts = new CancellationTokenSource();
+                }
+
+                var clientCt = CancellationTokenSource.CreateLinkedTokenSource(ct, _currentClientCts!.Token).Token;
+                _ = HandleClientAsync(session, pipe, clientCt);
             }
             catch (OperationCanceledException)
             {
@@ -162,13 +174,11 @@ public static class Program
                     if (pipe.IsConnected)
                     {
                         var msg = ConHostProtocol.CreateOutputMessage(data.Span);
-                        if (data.Length < 50)
-                        {
-                            DebugLog($"[PIPE-OUTPUT] {BitConverter.ToString(data.ToArray())}");
-                        }
+                        Log($"Writing output: type=0x{msg[0]:X2}, len={BitConverter.ToInt32(msg, 1)}, total={msg.Length}");
                         lock (pipe)
                         {
                             pipe.Write(msg);
+                            pipe.Flush();
                         }
                     }
                     else
@@ -192,6 +202,7 @@ public static class Program
                         lock (pipe)
                         {
                             pipe.Write(msg);
+                            pipe.Flush();
                         }
                     }
                 }
@@ -208,7 +219,7 @@ public static class Program
                     // Send any buffered output
                     if (pendingOutput.Count > 0)
                     {
-                        DebugLog($"[HANDSHAKE] Sending {pendingOutput.Count} buffered output chunks");
+                        Log($"Flushing {pendingOutput.Count} buffered output chunks");
                         foreach (var data in pendingOutput)
                         {
                             try
@@ -216,13 +227,11 @@ public static class Program
                                 if (pipe.IsConnected)
                                 {
                                     var msg = ConHostProtocol.CreateOutputMessage(data);
-                                    if (data.Length < 50)
-                                    {
-                                        DebugLog($"[PIPE-OUTPUT] (buffered) {BitConverter.ToString(data)}");
-                                    }
+                                    Log($"Writing buffered: type=0x{msg[0]:X2}, len={BitConverter.ToInt32(msg, 1)}, total={msg.Length}");
                                     lock (pipe)
                                     {
                                         pipe.Write(msg);
+                                        pipe.Flush();
                                     }
                                 }
                             }
@@ -237,11 +246,16 @@ public static class Program
             }
 
             session.OnOutput += OnOutput;
-            session.OnStateChanged += OnStateChange;
+            // Don't subscribe to OnStateChanged until after handshake - OSC-7 during startup
+            // can fire StateChange before Info response, breaking the handshake
 
             try
             {
-                await ProcessMessagesAsync(session, pipe, ct, OnHandshakeComplete).ConfigureAwait(false);
+                await ProcessMessagesAsync(session, pipe, ct, () =>
+                {
+                    OnHandshakeComplete();
+                    session.OnStateChanged += OnStateChange; // Subscribe after handshake
+                }).ConfigureAwait(false);
             }
             finally
             {
@@ -320,7 +334,12 @@ public static class Program
                 case ConHostMessageType.GetInfo:
                     var info = session.GetInfo();
                     var infoMsg = ConHostProtocol.CreateInfoResponse(info);
-                    await pipe.WriteAsync(infoMsg, ct).ConfigureAwait(false);
+                    Log($"Writing Info response: type=0x{infoMsg[0]:X2}, len={BitConverter.ToInt32(infoMsg, 1)}, total={infoMsg.Length}");
+                    lock (pipe)
+                    {
+                        pipe.Write(infoMsg);
+                        pipe.Flush();
+                    }
                     // Signal that handshake is complete - safe to start sending output
                     onHandshakeComplete?.Invoke();
                     break;
@@ -337,27 +356,45 @@ public static class Program
                     var (cols, rows) = ConHostProtocol.ParseResize(payload);
                     session.Resize(cols, rows);
                     var resizeAck = ConHostProtocol.CreateResizeAck();
-                    await pipe.WriteAsync(resizeAck, ct).ConfigureAwait(false);
+                    lock (pipe)
+                    {
+                        pipe.Write(resizeAck);
+                        pipe.Flush();
+                    }
                     break;
 
                 case ConHostMessageType.GetBuffer:
                     var buffer = session.GetBuffer();
                     var bufferMsg = ConHostProtocol.CreateBufferResponse(buffer);
-                    await pipe.WriteAsync(bufferMsg, ct).ConfigureAwait(false);
+                    lock (pipe)
+                    {
+                        pipe.Write(bufferMsg);
+                        pipe.Flush();
+                    }
                     break;
 
                 case ConHostMessageType.SetName:
                     var name = ConHostProtocol.ParseSetName(payload);
                     session.SetName(string.IsNullOrEmpty(name) ? null : name);
                     var nameAck = ConHostProtocol.CreateSetNameAck();
-                    await pipe.WriteAsync(nameAck, ct).ConfigureAwait(false);
+                    lock (pipe)
+                    {
+                        pipe.Write(nameAck);
+                        pipe.Flush();
+                    }
                     break;
 
                 case ConHostMessageType.Close:
-                    Log("Received close request");
+                    Log("Received close request, shutting down");
                     var closeAck = ConHostProtocol.CreateCloseAck();
-                    await pipe.WriteAsync(closeAck, ct).ConfigureAwait(false);
+                    lock (pipe)
+                    {
+                        pipe.Write(closeAck);
+                        pipe.Flush();
+                    }
                     session.Kill();
+                    // Exit the entire process - AcceptClientsAsync is stuck on WaitForConnectionAsync
+                    Environment.Exit(0);
                     return;
 
                 default:

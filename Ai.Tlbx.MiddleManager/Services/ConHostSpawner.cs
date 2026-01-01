@@ -198,7 +198,22 @@ public sealed class ConHostSpawner
             return string.Empty;
         }
 
-        return Path.Combine(dir, "mm-con-host.exe");
+        // Check same directory first (production/published builds)
+        var sameDirPath = Path.Combine(dir, "mm-con-host.exe");
+        if (File.Exists(sameDirPath))
+        {
+            return sameDirPath;
+        }
+
+        // Development fallback: check sibling ConHost project's output
+        var repoRoot = Path.GetFullPath(Path.Combine(dir, "..", "..", "..", ".."));
+        var devPath = Path.Combine(repoRoot, "Ai.Tlbx.MiddleManager.ConHost", "bin", "Debug", "net10.0", "win-x64", "mm-con-host.exe");
+        if (File.Exists(devPath))
+        {
+            return devPath;
+        }
+
+        return sameDirPath;
     }
 
     #region P/Invoke

@@ -13,6 +13,7 @@ public sealed class ConHostClient : IAsyncDisposable
     private readonly string _pipeName;
     private readonly object _pipeLock = new();
     private readonly object _responseLock = new();
+    private readonly SemaphoreSlim _requestLock = new(1, 1); // Serialize requests to avoid response routing conflicts
 
     private NamedPipeClientStream? _pipe;
     private CancellationTokenSource? _cts;
@@ -93,7 +94,6 @@ public sealed class ConHostClient : IAsyncDisposable
     {
         if (_readTask is not null) return;
         _cts = new CancellationTokenSource();
-        DebugLogger.Log($"[READ-LOOP] {_sessionId}: Starting read loop");
         _readTask = ReadLoopWithReconnectAsync(_cts.Token);
     }
 
@@ -109,13 +109,23 @@ public sealed class ConHostClient : IAsyncDisposable
 
             try
             {
-                var request = ConHostProtocol.CreateInfoRequest();
-                await WriteAsync(request, ct).ConfigureAwait(false);
+                // If read loop is running, use request/response pattern to avoid concurrent reads
+                if (_readTask is not null)
+                {
+                    var request = ConHostProtocol.CreateInfoRequest();
+                    var response = await SendRequestAsync(request, ConHostMessageType.Info, ct).ConfigureAwait(false);
+                    if (response is null) continue;
+                    return ConHostProtocol.ParseInfo(response);
+                }
 
-                var response = await ReadMessageAsync(ct).ConfigureAwait(false);
-                if (response is null) continue;
+                // Before read loop starts (initial handshake), read directly
+                var requestBytes = ConHostProtocol.CreateInfoRequest();
+                await WriteAsync(requestBytes, ct).ConfigureAwait(false);
 
-                var (type, payload) = response.Value;
+                var directResponse = await ReadMessageAsync(ct).ConfigureAwait(false);
+                if (directResponse is null) continue;
+
+                var (type, payload) = directResponse.Value;
                 if (type != ConHostMessageType.Info)
                 {
                     Log($"GetInfo got unexpected message type: {type}");
@@ -233,29 +243,38 @@ public sealed class ConHostClient : IAsyncDisposable
 
     private async Task<byte[]?> SendRequestAsync(byte[] request, ConHostMessageType expectedType, CancellationToken ct)
     {
-        var tcs = new TaskCompletionSource<(ConHostMessageType type, byte[] payload)>();
-
-        lock (_responseLock)
-        {
-            _pendingResponse = tcs;
-        }
-
+        // Serialize requests to prevent response routing conflicts
+        await _requestLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            await WriteAsync(request, ct).ConfigureAwait(false);
+            var tcs = new TaskCompletionSource<(ConHostMessageType type, byte[] payload)>();
 
-            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+            lock (_responseLock)
+            {
+                _pendingResponse = tcs;
+            }
 
-            var response = await tcs.Task.WaitAsync(linkedCts.Token).ConfigureAwait(false);
-            return response.type == expectedType ? response.payload : null;
+            try
+            {
+                await WriteAsync(request, ct).ConfigureAwait(false);
+
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+
+                var response = await tcs.Task.WaitAsync(linkedCts.Token).ConfigureAwait(false);
+                return response.type == expectedType ? response.payload : null;
+            }
+            finally
+            {
+                lock (_responseLock)
+                {
+                    _pendingResponse = null;
+                }
+            }
         }
         finally
         {
-            lock (_responseLock)
-            {
-                _pendingResponse = null;
-            }
+            _requestLock.Release();
         }
     }
 
@@ -275,7 +294,6 @@ public sealed class ConHostClient : IAsyncDisposable
     {
         var headerBuffer = new byte[ConHostProtocol.HeaderSize];
         var payloadBuffer = new byte[ConHostProtocol.MaxPayloadSize];
-        DebugLogger.Log($"[READ-LOOP] {_sessionId}: Entered read loop, IsConnected: {IsConnected}");
 
         while (!ct.IsCancellationRequested && !_disposed)
         {
@@ -317,8 +335,10 @@ public sealed class ConHostClient : IAsyncDisposable
 
                 if (!ConHostProtocol.TryReadHeader(headerBuffer, out var msgType, out var payloadLength))
                 {
-                    Log("Invalid message header");
-                    continue;
+                    Log($"Invalid header: {BitConverter.ToString(headerBuffer)}");
+                    // Protocol desync'd - can't recover without reconnecting
+                    HandleDisconnect();
+                    break;
                 }
 
                 // Read payload
@@ -326,8 +346,10 @@ public sealed class ConHostClient : IAsyncDisposable
                 {
                     if (payloadLength > ConHostProtocol.MaxPayloadSize)
                     {
-                        Log($"Payload too large: {payloadLength}");
-                        continue;
+                        Log($"Payload too large: {payloadLength}, header bytes: {BitConverter.ToString(headerBuffer)}, msgType: 0x{(byte)msgType:X2}");
+                        // Protocol desync'd - can't recover without reconnecting
+                        HandleDisconnect();
+                        break;
                     }
 
                     var totalRead = 0;
@@ -375,10 +397,6 @@ public sealed class ConHostClient : IAsyncDisposable
             case ConHostMessageType.Output:
                 try
                 {
-                    if (payload.Length < 50)
-                    {
-                        DebugLogger.Log($"[PIPE-RECV] {_sessionId}: {BitConverter.ToString(payload.ToArray())}");
-                    }
                     OnOutput?.Invoke(_sessionId, payload);
                 }
                 catch (Exception ex)
@@ -544,6 +562,7 @@ public sealed class ConHostClient : IAsyncDisposable
         }
 
         _cts?.Dispose();
+        _requestLock.Dispose();
 
         lock (_pipeLock)
         {

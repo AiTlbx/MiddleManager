@@ -98,7 +98,7 @@ public sealed class ConHostSessionManager : IAsyncDisposable
         return null;
 #else
 #pragma warning disable CA1416 // Platform compatibility - already guarded by #if !WINDOWS early return
-        if (!ConHostSpawner.SpawnConHost(sessionId, shellType, workingDirectory, cols, rows, DebugLogger.Enabled, out _))
+        if (!ConHostSpawner.SpawnConHost(sessionId, shellType, workingDirectory, cols, rows, DebugLogger.Enabled, out var processId))
         {
             return null;
         }
@@ -122,7 +122,8 @@ public sealed class ConHostSessionManager : IAsyncDisposable
 
         if (!connected)
         {
-            Console.WriteLine($"[ConHostSessionManager] Failed to connect to new session {sessionId}");
+            Console.WriteLine($"[ConHostSessionManager] Failed to connect to new session {sessionId}, killing orphan process {processId}");
+            KillProcess(processId);
             await client.DisposeAsync().ConfigureAwait(false);
             return null;
         }
@@ -130,7 +131,8 @@ public sealed class ConHostSessionManager : IAsyncDisposable
         var info = await client.GetInfoAsync(ct).ConfigureAwait(false);
         if (info is null)
         {
-            Console.WriteLine($"[ConHostSessionManager] Failed to get info for session {sessionId}");
+            Console.WriteLine($"[ConHostSessionManager] Failed to get info for session {sessionId}, killing orphan process {processId}");
+            KillProcess(processId);
             await client.DisposeAsync().ConfigureAwait(false);
             return null;
         }
@@ -316,5 +318,19 @@ public sealed class ConHostSessionManager : IAsyncDisposable
         _clients.Clear();
         _sessionCache.Clear();
         _stateListeners.Clear();
+    }
+
+    private static void KillProcess(int processId)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            process.Kill();
+            Console.WriteLine($"[ConHostSessionManager] Killed orphan process {processId}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ConHostSessionManager] Failed to kill process {processId}: {ex.Message}");
+        }
     }
 }
