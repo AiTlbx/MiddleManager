@@ -264,7 +264,8 @@ public class Program
             string? conHostExpected = null;
             bool? conHostCompatible = null;
 
-            if (OperatingSystem.IsWindows() && isConHostMode)
+#if WINDOWS
+            if (isConHostMode)
             {
                 conHostVersion = ConHostSpawner.GetConHostVersion();
                 var manifest = updateService.InstalledManifest;
@@ -273,6 +274,7 @@ public class Program
                     (conHostVersion is not null && manifest.MinCompatiblePty is not null &&
                      UpdateService.CompareVersions(conHostVersion, manifest.MinCompatiblePty) >= 0);
             }
+#endif
 
             var health = new SystemHealth
             {
