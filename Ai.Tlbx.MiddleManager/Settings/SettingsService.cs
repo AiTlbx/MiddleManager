@@ -118,7 +118,7 @@ namespace Ai.Tlbx.MiddleManager.Settings
                         }
                         catch
                         {
-                            // Migration failed, continue with current settings
+                            // Migration is best-effort, continue with loaded settings
                         }
                     }
                 }

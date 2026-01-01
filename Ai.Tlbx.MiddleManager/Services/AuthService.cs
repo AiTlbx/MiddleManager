@@ -100,20 +100,13 @@ public sealed class AuthService
         }
 
         var parts = token.Split(':');
-        if (parts.Length != 2)
-        {
-            return false;
-        }
-
-        if (!long.TryParse(parts[0], out var timestamp))
+        if (parts.Length != 2 || !long.TryParse(parts[0], out var timestamp))
         {
             return false;
         }
 
         var tokenTime = DateTimeOffset.FromUnixTimeSeconds(timestamp);
-        var now = DateTimeOffset.UtcNow;
-
-        if (now - tokenTime > TimeSpan.FromHours(SessionTokenValidityHours))
+        if (DateTimeOffset.UtcNow - tokenTime > TimeSpan.FromHours(SessionTokenValidityHours))
         {
             return false;
         }
