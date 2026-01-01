@@ -432,6 +432,21 @@ public class Program
 
             var mode = isConHostMode ? "service" : "direct";
 
+            // Get mm-con-host version info (Windows only)
+            string? conHostVersion = null;
+            string? conHostExpected = null;
+            bool? conHostCompatible = null;
+
+            if (OperatingSystem.IsWindows() && isConHostMode)
+            {
+                conHostVersion = ConHostSpawner.GetConHostVersion();
+                var manifest = updateService.InstalledManifest;
+                conHostExpected = manifest.Pty;
+                conHostCompatible = conHostVersion == conHostExpected ||
+                    (conHostVersion is not null && manifest.MinCompatiblePty is not null &&
+                     CompareVersions(conHostVersion, manifest.MinCompatiblePty) >= 0);
+            }
+
             var health = new SystemHealth
             {
                 Healthy = true,
@@ -440,7 +455,10 @@ public class Program
                 Version = version,
                 WebProcessId = Environment.ProcessId,
                 UptimeSeconds = (long)(DateTime.UtcNow - System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalSeconds,
-                Platform = OperatingSystem.IsWindows() ? "Windows" : OperatingSystem.IsMacOS() ? "macOS" : "Linux"
+                Platform = OperatingSystem.IsWindows() ? "Windows" : OperatingSystem.IsMacOS() ? "macOS" : "Linux",
+                ConHostVersion = conHostVersion,
+                ConHostExpected = conHostExpected,
+                ConHostCompatible = conHostCompatible
             };
             return Results.Json(health, AppJsonContext.Default.SystemHealth);
         });
@@ -1066,5 +1084,27 @@ public class Program
         }
 
         Console.WriteLine();
+    }
+
+    private static int CompareVersions(string v1, string v2)
+    {
+        var v1Clean = v1.Split('+')[0];
+        var v2Clean = v2.Split('+')[0];
+
+        var v1Parts = v1Clean.Split('.').Select(s => int.TryParse(s, out var n) ? n : 0).ToArray();
+        var v2Parts = v2Clean.Split('.').Select(s => int.TryParse(s, out var n) ? n : 0).ToArray();
+
+        for (var i = 0; i < Math.Max(v1Parts.Length, v2Parts.Length); i++)
+        {
+            var p1 = i < v1Parts.Length ? v1Parts[i] : 0;
+            var p2 = i < v2Parts.Length ? v2Parts[i] : 0;
+
+            if (p1 != p2)
+            {
+                return p1 - p2;
+            }
+        }
+
+        return 0;
     }
 }

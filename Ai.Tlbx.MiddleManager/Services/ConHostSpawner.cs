@@ -13,6 +13,24 @@ public sealed class ConHostSpawner
 {
     private static readonly string ConHostPath = GetConHostPath();
 
+    public static string? GetConHostVersion()
+    {
+        if (!File.Exists(ConHostPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            var versionInfo = System.Diagnostics.FileVersionInfo.GetVersionInfo(ConHostPath);
+            return versionInfo.ProductVersion ?? versionInfo.FileVersion;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public static bool SpawnConHost(
         string sessionId,
         string? shellType,

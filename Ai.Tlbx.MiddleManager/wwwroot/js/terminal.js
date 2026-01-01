@@ -676,7 +676,13 @@
     }
 
     function checkSystemHealth() {
-        // No-op: Host health check removed (always connected in con-host mode)
+        // Check for mm-con-host version mismatch on startup
+        fetch('/api/health')
+            .then(function(response) { return response.json(); })
+            .then(function(health) {
+                updateConHostWarning(health);
+            })
+            .catch(function() {});
     }
 
     function fetchSystemStatus() {
@@ -689,6 +695,19 @@
                 var statusClass = health.healthy ? 'status-healthy' : 'status-error';
                 var statusText = health.healthy ? 'Healthy' : 'Unhealthy';
                 var uptimeStr = formatUptime(health.uptimeSeconds);
+
+                var conHostHtml = '';
+                if (health.conHostVersion !== null && health.conHostVersion !== undefined) {
+                    var versionClass = health.conHostCompatible ? '' : 'status-error';
+                    conHostHtml =
+                        '<div class="status-detail-row">' +
+                            '<span class="detail-label">mm-con-host</span>' +
+                            '<span class="detail-value ' + versionClass + '">' +
+                                health.conHostVersion +
+                                (health.conHostCompatible ? '' : ' ⚠️ expected ' + health.conHostExpected) +
+                            '</span>' +
+                        '</div>';
+                }
 
                 container.innerHTML =
                     '<div class="status-grid">' +
@@ -718,11 +737,38 @@
                             '<span class="detail-label">Process ID</span>' +
                             '<span class="detail-value">' + health.webProcessId + '</span>' +
                         '</div>' +
+                        conHostHtml +
                     '</div>';
+
+                // Show warning banner if mm-con-host version mismatch
+                updateConHostWarning(health);
             })
             .catch(function(err) {
                 container.innerHTML = '<div class="status-error-msg">Failed to load system status: ' + err.message + '</div>';
             });
+    }
+
+    function updateConHostWarning(health) {
+        var banner = document.getElementById('conhost-warning');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'conhost-warning';
+            banner.className = 'warning-banner';
+            var header = document.querySelector('.app-header');
+            if (header) {
+                header.parentNode.insertBefore(banner, header.nextSibling);
+            }
+        }
+
+        if (health.conHostVersion && health.conHostCompatible === false) {
+            banner.innerHTML =
+                '⚠️ <strong>Version mismatch:</strong> mm-con-host is ' + health.conHostVersion +
+                ', expected ' + health.conHostExpected +
+                '. Terminals may not work correctly. Please update mm-con-host.exe or restart the service.';
+            banner.style.display = 'block';
+        } else {
+            banner.style.display = 'none';
+        }
     }
 
     function formatUptime(seconds) {

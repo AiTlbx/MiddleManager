@@ -1640,3 +1640,17 @@ html, body {
     color: var(--accent-orange);
     font-size: 14px;
 }
+
+/* Version Mismatch Warning Banner */
+.warning-banner {
+    padding: 10px 16px;
+    background-color: #3D2A1A;
+    border-bottom: 1px solid var(--accent-orange);
+    color: var(--accent-orange);
+    font-size: 13px;
+    display: none;
+}
+
+.warning-banner strong {
+    color: var(--accent-red);
+}

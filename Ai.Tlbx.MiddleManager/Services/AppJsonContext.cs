@@ -70,4 +70,7 @@ public sealed class SystemHealth
     public int WebProcessId { get; init; }
     public long UptimeSeconds { get; init; }
     public string Platform { get; init; } = "";
+    public string? ConHostVersion { get; init; }
+    public string? ConHostExpected { get; init; }
+    public bool? ConHostCompatible { get; init; }
 }
