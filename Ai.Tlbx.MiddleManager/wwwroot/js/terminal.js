@@ -966,13 +966,14 @@
             item.className = 'session-item' + (session.id === activeSessionId ? ' active' : '');
             item.dataset.sessionId = session.id;
 
-            // Session info (clickable)
-            var info = document.createElement('div');
-            info.className = 'session-info';
-            info.addEventListener('click', function() {
+            // Whole row is clickable to select session
+            item.addEventListener('click', function() {
                 selectSession(session.id);
                 closeSidebar();
             });
+
+            var info = document.createElement('div');
+            info.className = 'session-info';
 
             var title = document.createElement('span');
             title.className = 'session-title';

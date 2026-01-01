@@ -106,7 +106,6 @@ html, body {
 .session-info {
     flex: 1;
     min-width: 0;
-    cursor: pointer;
 }
 
 .session-title {
@@ -714,14 +713,13 @@ html, body {
     display: flex;
     align-items: center;
     gap: 8px;
+    width: 200px;
 }
 
-.text-input-wrapper input[type="text"] {
-    width: 240px;
-}
-
+.text-input-wrapper input[type="text"],
 .text-input-wrapper input[type="number"] {
-    width: 100px;
+    flex: 1;
+    min-width: 0;
 }
 
 .text-input-wrapper.unsaved input {
@@ -809,10 +807,6 @@ html, body {
 .setting-row input[type="number"]:focus {
     outline: none;
     border-color: var(--accent-blue);
-}
-
-.setting-row input[type="number"] {
-    width: 100px;
 }
 
 .setting-row input[type="checkbox"] {
