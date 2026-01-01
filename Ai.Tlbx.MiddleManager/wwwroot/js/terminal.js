@@ -16,8 +16,11 @@
     /** Mux protocol: Header size in bytes (1 byte type + 8 byte session ID) */
     var MUX_HEADER_SIZE = 9;
 
+    /** Mux protocol: Output frame header (base header + 2 bytes cols + 2 bytes rows) */
+    var MUX_OUTPUT_HEADER_SIZE = 13;
+
     /** Mux protocol message types */
-    var MUX_TYPE_OUTPUT = 0x01;  // Server -> Client: Terminal output
+    var MUX_TYPE_OUTPUT = 0x01;  // Server -> Client: Terminal output (includes dimensions)
     var MUX_TYPE_INPUT  = 0x02;  // Client -> Server: Terminal input
     var MUX_TYPE_RESIZE = 0x03;  // Client -> Server: Terminal resize
     var MUX_TYPE_INIT   = 0xFF;  // Server -> Client: Client ID assignment
@@ -63,7 +66,6 @@
     var currentSettings = null;     // User settings from server
     var settingsOpen = false;       // Settings panel visibility
     var sidebarOpen = false;        // Mobile sidebar visibility
-    var clientId = null;            // This client's unique ID (assigned by server)
     var updateInfo = null;          // Available update info from server
 
     // WebSocket connections
@@ -244,10 +246,21 @@
             }
         });
 
-        // Update server dimensions for existing sessions
+        // Update dimensions and resize terminals when server dimensions change
         newSessions.forEach(function(session) {
             var state = sessionTerminals.get(session.id);
-            if (state && (state.serverCols !== session.cols || state.serverRows !== session.rows)) {
+            if (state && state.opened) {
+                var dimensionsChanged = state.serverCols !== session.cols || state.serverRows !== session.rows;
+                if (dimensionsChanged) {
+                    state.serverCols = session.cols;
+                    state.serverRows = session.rows;
+                    // Resize xterm.js to match server dimensions
+                    state.terminal.resize(session.cols, session.rows);
+                    // Apply scaling if terminal doesn't fit viewport
+                    applyTerminalScaling(session.id, state);
+                }
+            } else if (state) {
+                // Terminal not yet opened, just track dimensions
                 state.serverCols = session.cols;
                 state.serverRows = session.rows;
             }
@@ -517,15 +530,40 @@
             var payload = data.slice(MUX_HEADER_SIZE);
 
             if (type === MUX_TYPE_INIT) {
-                clientId = new TextDecoder().decode(payload);
-                renderSessionList();
+                // Client ID received but no longer used for active viewer tracking
                 return;
             }
 
             if (type === MUX_TYPE_OUTPUT) {
                 var state = sessionTerminals.get(sessionId);
-                if (state) {
-                    state.terminal.write(payload);
+                if (state && state.opened && payload.length >= 4) {
+                    // Parse dimensions from output frame: [cols:2][rows:2][data]
+                    var frameCols = payload[0] | (payload[1] << 8);
+                    var frameRows = payload[2] | (payload[3] << 8);
+                    var terminalData = payload.slice(4);
+
+                    // Ensure terminal matches frame dimensions before writing
+                    if (frameCols > 0 && frameRows > 0) {
+                        var currentCols = state.terminal.cols;
+                        var currentRows = state.terminal.rows;
+
+                        if (currentCols !== frameCols || currentRows !== frameRows) {
+                            // Resize terminal to match frame dimensions
+                            state.terminal.resize(frameCols, frameRows);
+                            state.serverCols = frameCols;
+                            state.serverRows = frameRows;
+                            // Apply scaling if terminal doesn't fit viewport
+                            applyTerminalScaling(sessionId, state);
+                        }
+                    }
+
+                    // Write terminal data
+                    if (terminalData.length > 0) {
+                        state.terminal.write(terminalData);
+                    }
+                } else if (state && payload.length >= 4) {
+                    // Terminal not yet opened - queue or ignore
+                    // (terminal will get buffer on open)
                 }
             }
         };
@@ -714,7 +752,7 @@
         };
     }
 
-    function createTerminalForSession(sessionId) {
+    function createTerminalForSession(sessionId, sessionInfo) {
         if (sessionTerminals.has(sessionId)) {
             return sessionTerminals.get(sessionId);
         }
@@ -730,12 +768,16 @@
         var fitAddon = new FitAddon.FitAddon();
         terminal.loadAddon(fitAddon);
 
+        // Get server dimensions from session info (if available)
+        var serverCols = sessionInfo && sessionInfo.cols > 0 ? sessionInfo.cols : 0;
+        var serverRows = sessionInfo && sessionInfo.rows > 0 ? sessionInfo.rows : 0;
+
         var state = {
             terminal: terminal,
             fitAddon: fitAddon,
             container: container,
-            serverCols: 0,
-            serverRows: 0,
+            serverCols: serverCols,
+            serverRows: serverRows,
             opened: false
         };
 
@@ -747,6 +789,13 @@
             if (!sessionTerminals.has(sessionId)) return; // Session was deleted
             terminal.open(container);
             state.opened = true;
+
+            // Resize to server dimensions (not local fit) if known
+            if (state.serverCols > 0 && state.serverRows > 0) {
+                terminal.resize(state.serverCols, state.serverRows);
+                applyTerminalScaling(sessionId, state);
+            }
+
             setupTerminalEvents(sessionId, terminal, container);
         });
 
@@ -919,7 +968,9 @@
 
         activeSessionId = sessionId;
 
-        var state = createTerminalForSession(sessionId);
+        // Find session info for dimensions
+        var sessionInfo = sessions.find(function(s) { return s.id === sessionId; });
+        var state = createTerminalForSession(sessionId, sessionInfo);
         var isNewTerminal = state.serverCols === 0;
         state.container.classList.remove('hidden');
 
@@ -1030,19 +1081,7 @@
             title.className = 'session-title';
             title.textContent = getSessionDisplayName(session);
 
-            var details = document.createElement('span');
-            details.className = 'session-details';
-
-            // Show passive indicator if another viewer controls this session
-            var isPassive = clientId &&
-                session.lastActiveViewerId &&
-                session.lastActiveViewerId !== clientId;
-            if (isPassive) {
-                details.innerHTML = '<span class="passive-indicator" title="Another viewer controls this session">👁️</span>';
-            }
-
             info.appendChild(title);
-            info.appendChild(details);
 
             // Action buttons
             var actions = document.createElement('div');
@@ -1443,7 +1482,14 @@
     // ========================================================================
 
     function setupResizeObserver() {
-        // No-op: terminal resize is now manual via sidebar button
+        // Recalculate scaling when window resizes
+        window.addEventListener('resize', debounce(function() {
+            sessionTerminals.forEach(function(state, sessionId) {
+                if (state.opened) {
+                    applyTerminalScaling(sessionId, state);
+                }
+            });
+        }, 100));
     }
 
     function fitSessionToScreen(sessionId) {
@@ -1456,6 +1502,13 @@
                 fitSessionToScreen(sessionId);
             });
             return;
+        }
+
+        // Clear any existing scaling first
+        var xterm = state.container.querySelector('.xterm');
+        if (xterm) {
+            xterm.style.transform = '';
+            state.container.classList.remove('scaled');
         }
 
         // Ensure terminal is visible for accurate measurement
@@ -1472,6 +1525,46 @@
                 state.container.classList.add('hidden');
             }
         });
+    }
+
+    function applyTerminalScaling(sessionId, state) {
+        var container = state.container;
+        var xterm = container.querySelector('.xterm');
+        if (!xterm) return;
+
+        // Use requestAnimationFrame for accurate measurements after resize
+        requestAnimationFrame(function() {
+            var availWidth = container.clientWidth - 8;
+            var availHeight = container.clientHeight - 8;
+            var termWidth = xterm.offsetWidth;
+            var termHeight = xterm.offsetHeight;
+
+            // Calculate scale (shrink only, never enlarge)
+            var scaleX = availWidth / termWidth;
+            var scaleY = availHeight / termHeight;
+            var scale = Math.min(scaleX, scaleY, 1);
+
+            if (scale < 0.99) {
+                xterm.style.transformOrigin = 'top left';
+                xterm.style.transform = 'scale(' + scale + ')';
+                container.classList.add('scaled');
+            } else {
+                xterm.style.transform = '';
+                container.classList.remove('scaled');
+            }
+        });
+    }
+
+    function debounce(fn, delay) {
+        var timer = null;
+        return function() {
+            var args = arguments;
+            var context = this;
+            clearTimeout(timer);
+            timer = setTimeout(function() {
+                fn.apply(context, args);
+            }, delay);
+        };
     }
 
     function setupVisualViewport() {

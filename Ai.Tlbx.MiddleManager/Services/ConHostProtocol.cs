@@ -30,9 +30,30 @@ public static class ConHostProtocol
         return CreateFrame(ConHostMessageType.Input, data.ToArray());
     }
 
-    public static byte[] CreateOutputMessage(ReadOnlySpan<byte> data)
+    public static byte[] CreateOutputMessage(int cols, int rows, ReadOnlySpan<byte> data)
     {
-        return CreateFrame(ConHostMessageType.Output, data.ToArray());
+        // Output message payload: [cols:2][rows:2][data]
+        var payload = new byte[4 + data.Length];
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(0, 2), (ushort)cols);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(2, 2), (ushort)rows);
+        data.CopyTo(payload.AsSpan(4));
+        return CreateFrame(ConHostMessageType.Output, payload);
+    }
+
+    public static (int cols, int rows) ParseOutputDimensions(ReadOnlySpan<byte> payload)
+    {
+        if (payload.Length < 4)
+        {
+            return (0, 0);
+        }
+        var cols = BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(0, 2));
+        var rows = BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(2, 2));
+        return (cols, rows);
+    }
+
+    public static ReadOnlySpan<byte> GetOutputData(ReadOnlySpan<byte> payload)
+    {
+        return payload.Length >= 4 ? payload.Slice(4) : payload;
     }
 
     public static byte[] CreateResizeMessage(int cols, int rows)

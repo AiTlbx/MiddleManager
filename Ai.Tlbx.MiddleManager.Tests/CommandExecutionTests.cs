@@ -27,20 +27,6 @@ public class CommandExecutionTests : IDisposable
     }
 
     [Fact]
-    public async Task SendInput_TracksActiveViewer()
-    {
-        var session = _sessionManager.CreateSession();
-
-        await session.SendInputAsync("test", "viewer1");
-
-        Assert.Equal("viewer1", session.LastActiveViewerId);
-
-        await session.SendInputAsync("test2", "viewer2");
-
-        Assert.Equal("viewer2", session.LastActiveViewerId);
-    }
-
-    [Fact]
     public async Task GetBuffer_ReturnsAccumulatedOutput()
     {
         var session = _sessionManager.CreateSession();
@@ -135,7 +121,7 @@ public class CommandExecutionTests : IDisposable
     }
 
     [Fact]
-    public async Task MuxConnectionManager_InputRoutesAndTracksViewer()
+    public async Task MuxConnectionManager_InputRoutes()
     {
         var muxManager = new MuxConnectionManager(_sessionManager);
         _sessionManager.SetMuxManager(muxManager);
@@ -146,14 +132,7 @@ public class CommandExecutionTests : IDisposable
 
         // Send input via MuxConnectionManager
         var inputData = System.Text.Encoding.UTF8.GetBytes("echo muxtest\r\n");
-        await muxManager.HandleInputAsync(session.Id, inputData, "testClient");
-
-        // Verify viewer tracking
-        Assert.Equal("testClient", session.LastActiveViewerId);
-
-        // Send from different client
-        await muxManager.HandleInputAsync(session.Id, inputData, "anotherClient");
-        Assert.Equal("anotherClient", session.LastActiveViewerId);
+        await muxManager.HandleInputAsync(session.Id, inputData);
 
         // Session should still be running
         Assert.True(session.IsRunning);

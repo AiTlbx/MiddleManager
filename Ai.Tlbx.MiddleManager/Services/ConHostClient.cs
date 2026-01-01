@@ -34,7 +34,7 @@ public sealed class ConHostClient : IAsyncDisposable
     public string SessionId => _sessionId;
     public bool IsConnected => _pipe?.IsConnected ?? false;
 
-    public event Action<string, ReadOnlyMemory<byte>>? OnOutput;
+    public event Action<string, int, int, ReadOnlyMemory<byte>>? OnOutput;
     public event Action<string>? OnStateChanged;
     public event Action<string>? OnDisconnected;
     public event Action<string>? OnReconnected;
@@ -397,7 +397,10 @@ public sealed class ConHostClient : IAsyncDisposable
             case ConHostMessageType.Output:
                 try
                 {
-                    OnOutput?.Invoke(_sessionId, payload);
+                    // Parse dimensions from output message: [cols:2][rows:2][data]
+                    var (cols, rows) = ConHostProtocol.ParseOutputDimensions(payload.Span);
+                    var data = ConHostProtocol.GetOutputData(payload.Span);
+                    OnOutput?.Invoke(_sessionId, cols, rows, data.ToArray());
                 }
                 catch (Exception ex)
                 {

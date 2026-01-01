@@ -20,7 +20,6 @@ namespace Ai.Tlbx.MiddleManager.Services
         public bool IsRunning => !_disposed && _connection.IsRunning;
         public int? ExitCode => _connection.ExitCode;
         public string? CurrentWorkingDirectory { get; private set; }
-        public string? LastActiveViewerId { get; private set; }
         public int Cols { get; private set; }
         public int Rows { get; private set; }
         public ShellType ShellType { get; private set; }
@@ -221,17 +220,11 @@ namespace Ai.Tlbx.MiddleManager.Services
             }
         }
 
-        public async Task SendInputAsync(string data, string? viewerId = null)
+        public async Task SendInputAsync(string data)
         {
             if (_disposed || string.IsNullOrEmpty(data))
             {
                 return;
-            }
-
-            if (viewerId is not null && LastActiveViewerId != viewerId)
-            {
-                LastActiveViewerId = viewerId;
-                OnStateChanged?.Invoke();
             }
 
             try
@@ -246,15 +239,9 @@ namespace Ai.Tlbx.MiddleManager.Services
             }
         }
 
-        public bool Resize(int cols, int rows, string? viewerId = null)
+        public bool Resize(int cols, int rows)
         {
             if (_disposed)
-            {
-                return false;
-            }
-
-            // Only active viewer (or first viewer) can resize
-            if (viewerId is not null && LastActiveViewerId is not null && LastActiveViewerId != viewerId)
             {
                 return false;
             }

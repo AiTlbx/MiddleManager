@@ -29,7 +29,11 @@ public sealed class MuxConnectionManager
 
     public async Task BroadcastTerminalOutputAsync(string sessionId, ReadOnlyMemory<byte> data)
     {
-        var frame = MuxProtocol.CreateOutputFrame(sessionId, data.Span);
+        var session = _sessionManager.GetSession(sessionId);
+        var cols = session?.Cols ?? 80;
+        var rows = session?.Rows ?? 24;
+
+        var frame = MuxProtocol.CreateOutputFrame(sessionId, cols, rows, data.Span);
         await BroadcastFrameAsync(frame);
     }
 
@@ -86,7 +90,7 @@ public sealed class MuxConnectionManager
         }
     }
 
-    public async Task HandleInputAsync(string sessionId, ReadOnlyMemory<byte> data, string clientId)
+    public async Task HandleInputAsync(string sessionId, ReadOnlyMemory<byte> data)
     {
         var session = _sessionManager.GetSession(sessionId);
         if (session is null)
@@ -95,12 +99,12 @@ public sealed class MuxConnectionManager
         }
 
         var input = System.Text.Encoding.UTF8.GetString(data.Span);
-        await session.SendInputAsync(input, clientId);
+        await session.SendInputAsync(input);
     }
 
-    public void HandleResize(string sessionId, int cols, int rows, string clientId)
+    public void HandleResize(string sessionId, int cols, int rows)
     {
         var session = _sessionManager.GetSession(sessionId);
-        session?.Resize(cols, rows, clientId);
+        session?.Resize(cols, rows);
     }
 }

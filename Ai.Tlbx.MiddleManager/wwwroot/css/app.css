@@ -711,8 +711,12 @@ html, body {
 }
 
 /* Scaled terminal indicator */
+.terminal-container.scaled {
+    overflow: hidden;
+}
+
 .terminal-container.scaled::after {
-    content: 'Scaled view - another viewer controls size';
+    content: 'Scaled view - click ⤢ to resize';
     position: absolute;
     bottom: 8px;
     left: 8px;
@@ -722,6 +726,7 @@ html, body {
     font-size: 10px;
     border-radius: 4px;
     pointer-events: none;
+    z-index: 10;
 }
 
 /* Sidebar header buttons */

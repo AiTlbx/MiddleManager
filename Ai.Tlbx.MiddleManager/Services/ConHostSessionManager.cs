@@ -14,7 +14,7 @@ public sealed class ConHostSessionManager : IAsyncDisposable
     private readonly ConcurrentDictionary<string, Action> _stateListeners = new();
     private bool _disposed;
 
-    public event Action<string, ReadOnlyMemory<byte>>? OnOutput;
+    public event Action<string, int, int, ReadOnlyMemory<byte>>? OnOutput;
     public event Action<string>? OnStateChanged;
 
     /// <summary>
@@ -277,7 +277,7 @@ public sealed class ConHostSessionManager : IAsyncDisposable
 
     private void SubscribeToClient(ConHostClient client)
     {
-        client.OnOutput += (sessionId, data) => OnOutput?.Invoke(sessionId, data);
+        client.OnOutput += (sessionId, cols, rows, data) => OnOutput?.Invoke(sessionId, cols, rows, data);
         client.OnStateChanged += async sessionId =>
         {
             // Update cached info

@@ -607,8 +607,7 @@ public class Program
                     Cols = session.Cols,
                     Rows = session.Rows,
                     ShellType = session.ShellType.ToString(),
-                    Name = session.Name,
-                    LastActiveViewerId = session.LastActiveViewerId
+                    Name = session.Name
                 };
                 return Results.Json(info, AppJsonContext.Default.SessionInfoDto);
             }
@@ -651,7 +650,7 @@ public class Program
                 {
                     return Results.NotFound();
                 }
-                var accepted = session.Resize(request.Cols, request.Rows, request.ViewerId);
+                var accepted = session.Resize(request.Cols, request.Rows);
                 return Results.Json(new ResizeResponse
                 {
                     Accepted = accepted,
@@ -794,7 +793,7 @@ public class Program
             Encoding.UTF8.GetBytes(clientId, initFrame.AsSpan(MuxProtocol.HeaderSize));
             await client.SendAsync(initFrame);
 
-            // Send initial buffer for existing sessions
+            // Send initial buffer for existing sessions (with current dimensions)
             if (conHostManager is not null)
             {
                 var sessions = conHostManager.GetAllSessions();
@@ -803,7 +802,7 @@ public class Program
                     var buffer = await conHostManager.GetBufferAsync(sessionInfo.Id);
                     if (buffer is not null && buffer.Length > 0)
                     {
-                        var frame = MuxProtocol.CreateOutputFrame(sessionInfo.Id, buffer);
+                        var frame = MuxProtocol.CreateOutputFrame(sessionInfo.Id, sessionInfo.Cols, sessionInfo.Rows, buffer);
                         await client.SendAsync(frame);
                     }
                 }
@@ -816,7 +815,7 @@ public class Program
                     if (!string.IsNullOrEmpty(buffer))
                     {
                         var bufferBytes = Encoding.UTF8.GetBytes(buffer);
-                        var frame = MuxProtocol.CreateOutputFrame(session.Id, bufferBytes);
+                        var frame = MuxProtocol.CreateOutputFrame(session.Id, session.Cols, session.Rows, bufferBytes);
                         await client.SendAsync(frame);
                     }
                 }
@@ -854,11 +853,11 @@ public class Program
                                 }
                                 if (conHostMuxManager is not null)
                                 {
-                                    await conHostMuxManager.HandleInputAsync(sessionId, new ReadOnlyMemory<byte>(payload.ToArray()), clientId);
+                                    await conHostMuxManager.HandleInputAsync(sessionId, new ReadOnlyMemory<byte>(payload.ToArray()));
                                 }
                                 else
                                 {
-                                    await directMuxManager!.HandleInputAsync(sessionId, payload.ToArray(), clientId);
+                                    await directMuxManager!.HandleInputAsync(sessionId, payload.ToArray());
                                 }
                                 break;
 
@@ -866,11 +865,11 @@ public class Program
                                 var (cols, rows) = MuxProtocol.ParseResizePayload(payload);
                                 if (conHostMuxManager is not null)
                                 {
-                                    await conHostMuxManager.HandleResizeAsync(sessionId, cols, rows, clientId);
+                                    await conHostMuxManager.HandleResizeAsync(sessionId, cols, rows);
                                 }
                                 else
                                 {
-                                    directMuxManager!.HandleResize(sessionId, cols, rows, clientId);
+                                    directMuxManager!.HandleResize(sessionId, cols, rows);
                                 }
                                 break;
                         }

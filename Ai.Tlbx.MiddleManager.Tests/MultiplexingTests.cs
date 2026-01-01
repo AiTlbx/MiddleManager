@@ -43,30 +43,48 @@ public class MultiplexingTests : IDisposable
     public void MuxProtocol_CreateOutputFrame_ValidFormat()
     {
         var sessionId = "abcd1234";
+        var cols = 120;
+        var rows = 30;
         var payload = Encoding.UTF8.GetBytes("test output");
 
-        var frame = MuxProtocol.CreateOutputFrame(sessionId, payload);
+        var frame = MuxProtocol.CreateOutputFrame(sessionId, cols, rows, payload);
 
-        Assert.Equal(MuxProtocol.HeaderSize + payload.Length, frame.Length);
+        // Output frame: HeaderSize + 4 bytes dims + payload
+        Assert.Equal(MuxProtocol.OutputHeaderSize + payload.Length, frame.Length);
         Assert.Equal(MuxProtocol.TypeTerminalOutput, frame[0]);
 
         var extractedId = Encoding.ASCII.GetString(frame, 1, 8);
         Assert.Equal(sessionId, extractedId);
+
+        // Verify embedded dimensions
+        var extractedCols = BitConverter.ToUInt16(frame, 9);
+        var extractedRows = BitConverter.ToUInt16(frame, 11);
+        Assert.Equal(cols, extractedCols);
+        Assert.Equal(rows, extractedRows);
     }
 
     [Fact]
     public void MuxProtocol_TryParseFrame_ParsesCorrectly()
     {
         var sessionId = "test1234";
+        var cols = 100;
+        var rows = 40;
         var payload = Encoding.UTF8.GetBytes("hello world");
-        var frame = MuxProtocol.CreateOutputFrame(sessionId, payload);
+        var frame = MuxProtocol.CreateOutputFrame(sessionId, cols, rows, payload);
 
         var success = MuxProtocol.TryParseFrame(frame, out var type, out var parsedId, out var parsedPayload);
 
         Assert.True(success);
         Assert.Equal(MuxProtocol.TypeTerminalOutput, type);
         Assert.Equal(sessionId, parsedId);
-        Assert.Equal(payload, parsedPayload.ToArray());
+
+        // Payload includes the 4-byte dimension header
+        var (parsedCols, parsedRows) = MuxProtocol.ParseOutputDimensions(parsedPayload);
+        Assert.Equal(cols, parsedCols);
+        Assert.Equal(rows, parsedRows);
+
+        var data = MuxProtocol.GetOutputData(parsedPayload);
+        Assert.Equal(payload, data.ToArray());
     }
 
     [Fact]
@@ -112,7 +130,7 @@ public class MultiplexingTests : IDisposable
         var session1 = _sessionManager.CreateSession(cols: 80, rows: 24);
         var session2 = _sessionManager.CreateSession(cols: 80, rows: 24);
 
-        _muxManager.HandleResize(session1.Id, 120, 40, "client1");
+        _muxManager.HandleResize(session1.Id, 120, 40);
 
         Assert.Equal(120, session1.Cols);
         Assert.Equal(40, session1.Rows);
@@ -123,7 +141,7 @@ public class MultiplexingTests : IDisposable
     [Fact]
     public void HandleResize_InvalidSession_DoesNotThrow()
     {
-        _muxManager.HandleResize("nonexistent", 120, 40, "client1");
+        _muxManager.HandleResize("nonexistent", 120, 40);
     }
 
     private static async Task<bool> WaitForAnyBufferContent(TerminalSession session, int timeoutMs)

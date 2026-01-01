@@ -37,52 +37,21 @@ public class ResizeTests : IDisposable
     }
 
     [Fact]
-    public void Resize_ActiveViewerOnly_AcceptsFromActiveViewer()
+    public void Resize_AnyViewerCanResize()
     {
         var session = _sessionManager.CreateSession(cols: 80, rows: 24);
 
-        // First viewer becomes active
-        session.Resize(100, 30, "viewer1");
+        // Any resize should be accepted
+        var accepted = session.Resize(120, 40);
+        Assert.True(accepted);
+        Assert.Equal(120, session.Cols);
+        Assert.Equal(40, session.Rows);
+
+        // Another resize should also be accepted
+        accepted = session.Resize(100, 30);
+        Assert.True(accepted);
         Assert.Equal(100, session.Cols);
         Assert.Equal(30, session.Rows);
-
-        // Active viewer can resize
-        var accepted = session.Resize(120, 40, "viewer1");
-        Assert.True(accepted);
-        Assert.Equal(120, session.Cols);
-        Assert.Equal(40, session.Rows);
-    }
-
-    [Fact]
-    public void Resize_InactiveViewer_Rejected()
-    {
-        var session = _sessionManager.CreateSession(cols: 80, rows: 24);
-
-        // First viewer becomes active via input
-        _ = session.SendInputAsync("test", "viewer1");
-
-        // Different viewer tries to resize - should be rejected
-        var accepted = session.Resize(120, 40, "viewer2");
-
-        Assert.False(accepted);
-        Assert.Equal(80, session.Cols);
-        Assert.Equal(24, session.Rows);
-    }
-
-    [Fact]
-    public void Resize_NoViewerId_AlwaysAccepted()
-    {
-        var session = _sessionManager.CreateSession(cols: 80, rows: 24);
-
-        // Set an active viewer
-        _ = session.SendInputAsync("test", "viewer1");
-
-        // Resize without viewerId should work (for API calls)
-        var accepted = session.Resize(120, 40, null);
-
-        Assert.True(accepted);
-        Assert.Equal(120, session.Cols);
-        Assert.Equal(40, session.Rows);
     }
 
     [Fact]

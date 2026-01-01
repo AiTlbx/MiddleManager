@@ -8,7 +8,7 @@ namespace Ai.Tlbx.MiddleManager.ConHost;
 
 public static class Program
 {
-    public const string Version = "3.1.0";
+    public const string Version = "3.2.0";
 
     private static readonly string LogDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
@@ -173,7 +173,7 @@ public static class Program
 
                     if (pipe.IsConnected)
                     {
-                        var msg = ConHostProtocol.CreateOutputMessage(data.Span);
+                        var msg = ConHostProtocol.CreateOutputMessage(session.Cols, session.Rows, data.Span);
                         Log($"Writing output: type=0x{msg[0]:X2}, len={BitConverter.ToInt32(msg, 1)}, total={msg.Length}");
                         lock (pipe)
                         {
@@ -216,7 +216,7 @@ public static class Program
                     handshakeComplete = true;
                     DebugLog($"[HANDSHAKE] Complete, pipe connected: {pipe.IsConnected}");
 
-                    // Send any buffered output
+                    // Send any buffered output (buffered before handshake, all at same initial dimensions)
                     if (pendingOutput.Count > 0)
                     {
                         Log($"Flushing {pendingOutput.Count} buffered output chunks");
@@ -226,7 +226,7 @@ public static class Program
                             {
                                 if (pipe.IsConnected)
                                 {
-                                    var msg = ConHostProtocol.CreateOutputMessage(data);
+                                    var msg = ConHostProtocol.CreateOutputMessage(session.Cols, session.Rows, data);
                                     Log($"Writing buffered: type=0x{msg[0]:X2}, len={BitConverter.ToInt32(msg, 1)}, total={msg.Length}");
                                     lock (pipe)
                                     {

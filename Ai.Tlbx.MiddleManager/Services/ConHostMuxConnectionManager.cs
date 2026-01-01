@@ -11,7 +11,7 @@ public sealed class ConHostMuxConnectionManager
 {
     private readonly ConHostSessionManager _sessionManager;
     private readonly ConcurrentDictionary<string, MuxClient> _clients = new();
-    private readonly Channel<(string sessionId, byte[] data)> _outputQueue = Channel.CreateUnbounded<(string, byte[])>();
+    private readonly Channel<(string sessionId, int cols, int rows, byte[] data)> _outputQueue = Channel.CreateUnbounded<(string, int, int, byte[])>();
     private Task? _outputProcessor;
     private CancellationTokenSource? _cts;
 
@@ -24,20 +24,22 @@ public sealed class ConHostMuxConnectionManager
         _outputProcessor = ProcessOutputQueueAsync(_cts.Token);
     }
 
-    private void HandleOutput(string sessionId, ReadOnlyMemory<byte> data)
+    private void HandleOutput(string sessionId, int cols, int rows, ReadOnlyMemory<byte> data)
     {
-        _outputQueue.Writer.TryWrite((sessionId, data.ToArray()));
+        _outputQueue.Writer.TryWrite((sessionId, cols, rows, data.ToArray()));
     }
 
     private async Task ProcessOutputQueueAsync(CancellationToken ct)
     {
-        await foreach (var (sessionId, data) in _outputQueue.Reader.ReadAllAsync(ct))
+        await foreach (var (sessionId, cols, rows, data) in _outputQueue.Reader.ReadAllAsync(ct))
         {
             if (data.Length < 50)
             {
                 DebugLogger.Log($"[WS-OUTPUT] {sessionId}: {BitConverter.ToString(data)}");
             }
-            var frame = MuxProtocol.CreateOutputFrame(sessionId, data);
+
+            // Use dimensions from the output event (embedded at capture time)
+            var frame = MuxProtocol.CreateOutputFrame(sessionId, cols, rows, data);
             foreach (var client in _clients.Values)
             {
                 try
@@ -67,19 +69,23 @@ public sealed class ConHostMuxConnectionManager
         _clients.TryRemove(clientId, out _);
     }
 
-    public async Task HandleInputAsync(string sessionId, ReadOnlyMemory<byte> data, string clientId)
+    public async Task HandleInputAsync(string sessionId, ReadOnlyMemory<byte> data)
     {
         await _sessionManager.SendInputAsync(sessionId, data).ConfigureAwait(false);
     }
 
-    public async Task HandleResizeAsync(string sessionId, int cols, int rows, string clientId)
+    public async Task HandleResizeAsync(string sessionId, int cols, int rows)
     {
         await _sessionManager.ResizeSessionAsync(sessionId, cols, rows).ConfigureAwait(false);
     }
 
     public async Task BroadcastTerminalOutputAsync(string sessionId, ReadOnlyMemory<byte> data)
     {
-        var frame = MuxProtocol.CreateOutputFrame(sessionId, data.Span);
+        var sessionInfo = _sessionManager.GetSession(sessionId);
+        var cols = sessionInfo?.Cols ?? 80;
+        var rows = sessionInfo?.Rows ?? 24;
+
+        var frame = MuxProtocol.CreateOutputFrame(sessionId, cols, rows, data.Span);
         foreach (var client in _clients.Values)
         {
             if (client.WebSocket.State == WebSocketState.Open)

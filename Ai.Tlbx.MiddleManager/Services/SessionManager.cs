@@ -119,8 +119,7 @@ public sealed class SessionManager : IDisposable
                 Cols = s.Cols,
                 Rows = s.Rows,
                 ShellType = s.ShellType.ToString(),
-                Name = s.Name,
-                LastActiveViewerId = s.LastActiveViewerId
+                Name = s.Name
             }).OrderBy(s => s.CreatedAt).ToList()
         };
     }

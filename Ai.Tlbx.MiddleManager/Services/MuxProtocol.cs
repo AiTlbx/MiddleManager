@@ -4,12 +4,14 @@ namespace Ai.Tlbx.MiddleManager.Services
 {
     /// <summary>
     /// Binary protocol for multiplexed WebSocket communication.
-    /// Frame format: [1 byte type][8 byte sessionId][payload]
+    /// Base frame format: [1 byte type][8 byte sessionId][payload]
+    /// Output frame format: [1 byte type][8 byte sessionId][2 byte cols][2 byte rows][payload]
     /// SessionId is the first 8 chars of the session GUID (already 8 chars).
     /// </summary>
     public static class MuxProtocol
     {
         public const int HeaderSize = 9; // 1 byte type + 8 bytes sessionId
+        public const int OutputHeaderSize = 13; // HeaderSize + 4 bytes (cols + rows)
         public const int MaxFrameSize = 64 * 1024;
 
         public const byte TypeTerminalOutput = 0x01;
@@ -17,12 +19,14 @@ namespace Ai.Tlbx.MiddleManager.Services
         public const byte TypeResize = 0x03;
         public const byte TypeSessionState = 0x04;
 
-        public static byte[] CreateOutputFrame(string sessionId, ReadOnlySpan<byte> data)
+        public static byte[] CreateOutputFrame(string sessionId, int cols, int rows, ReadOnlySpan<byte> data)
         {
-            var frame = new byte[HeaderSize + data.Length];
+            var frame = new byte[OutputHeaderSize + data.Length];
             frame[0] = TypeTerminalOutput;
             WriteSessionId(frame.AsSpan(1, 8), sessionId);
-            data.CopyTo(frame.AsSpan(HeaderSize));
+            BitConverter.TryWriteBytes(frame.AsSpan(9, 2), (ushort)cols);
+            BitConverter.TryWriteBytes(frame.AsSpan(11, 2), (ushort)rows);
+            data.CopyTo(frame.AsSpan(OutputHeaderSize));
             return frame;
         }
 
@@ -54,6 +58,29 @@ namespace Ai.Tlbx.MiddleManager.Services
             sessionId = System.Text.Encoding.ASCII.GetString(data.Slice(1, 8));
             payload = data.Slice(HeaderSize);
             return true;
+        }
+
+        /// <summary>
+        /// Parses dimensions from an output frame payload.
+        /// Output frame payload starts with [cols:2][rows:2][data].
+        /// </summary>
+        public static (int cols, int rows) ParseOutputDimensions(ReadOnlySpan<byte> payload)
+        {
+            if (payload.Length < 4)
+            {
+                return (0, 0);
+            }
+            var cols = BitConverter.ToUInt16(payload.Slice(0, 2));
+            var rows = BitConverter.ToUInt16(payload.Slice(2, 2));
+            return (cols, rows);
+        }
+
+        /// <summary>
+        /// Gets the data portion of an output frame payload (skipping the 4-byte dimension header).
+        /// </summary>
+        public static ReadOnlySpan<byte> GetOutputData(ReadOnlySpan<byte> payload)
+        {
+            return payload.Length >= 4 ? payload.Slice(4) : payload;
         }
 
         public static (int cols, int rows) ParseResizePayload(ReadOnlySpan<byte> payload)
