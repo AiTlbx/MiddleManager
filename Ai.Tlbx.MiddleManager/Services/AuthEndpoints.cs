@@ -34,7 +34,11 @@ public static class AuthEndpoints
             var token = context.Request.Cookies["mm-session"];
             if (token is not null && authService.ValidateSessionToken(token))
             {
-                context.Response.Cookies.Append("mm-session", token, SessionCookieOptions);
+                // Don't modify response for WebSocket upgrade requests
+                if (!context.WebSockets.IsWebSocketRequest)
+                {
+                    context.Response.Cookies.Append("mm-session", token, SessionCookieOptions);
+                }
                 await next();
                 return;
             }
