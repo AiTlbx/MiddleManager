@@ -968,6 +968,24 @@
         var cols = currentSettings.defaultCols || 120;
         var rows = currentSettings.defaultRows || 30;
 
+        function doCreateSession(finalCols, finalRows) {
+            fetch('/api/sessions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ Cols: finalCols, Rows: finalRows })
+            })
+                .then(function(r) { return r.json(); })
+                .then(function(session) {
+                    // Mark as newly created - skip buffer fetch since WebSocket will send all output
+                    newlyCreatedSessions.add(session.id);
+                    selectSession(session.id);
+                    closeSidebar();
+                })
+                .catch(function(e) {
+                    console.error('Error creating session:', e);
+                });
+        }
+
         if (rect.width > 100 && rect.height > 100) {
             var tempContainer = document.createElement('div');
             tempContainer.style.cssText = 'position:absolute;left:-9999px;width:' + Math.floor(rect.width) + 'px;height:' + Math.floor(rect.height) + 'px;';
@@ -978,36 +996,32 @@
                 var tempFitAddon = new FitAddon.FitAddon();
                 tempTerminal.loadAddon(tempFitAddon);
                 tempTerminal.open(tempContainer);
-                tempFitAddon.fit();
 
-                if (tempTerminal.cols > 10 && tempTerminal.rows > 5) {
-                    cols = tempTerminal.cols;
-                    rows = tempTerminal.rows;
-                }
+                // Defer fit() to next frame to ensure terminal is fully initialized
+                requestAnimationFrame(function() {
+                    try {
+                        tempFitAddon.fit();
 
-                tempTerminal.dispose();
+                        if (tempTerminal.cols > 10 && tempTerminal.rows > 5) {
+                            cols = tempTerminal.cols;
+                            rows = tempTerminal.rows;
+                        }
+                    } catch (e) {
+                        // Silently use defaults if measurement fails
+                    }
+
+                    tempTerminal.dispose();
+                    tempContainer.remove();
+                    doCreateSession(cols, rows);
+                });
             } catch (e) {
                 // Silently use defaults if measurement fails
+                tempContainer.remove();
+                doCreateSession(cols, rows);
             }
-
-            tempContainer.remove();
+        } else {
+            doCreateSession(cols, rows);
         }
-
-        fetch('/api/sessions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ Cols: cols, Rows: rows })
-        })
-            .then(function(r) { return r.json(); })
-            .then(function(session) {
-                // Mark as newly created - skip buffer fetch since WebSocket will send all output
-                newlyCreatedSessions.add(session.id);
-                selectSession(session.id);
-                closeSidebar();
-            })
-            .catch(function(e) {
-                console.error('Error creating session:', e);
-            });
     }
 
     function selectSession(sessionId) {
