@@ -85,11 +85,14 @@ export function getTerminalOptions(): object {
     cursorStyle: currentSettings?.cursorStyle ?? 'bar',
     fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, 'Courier New', monospace",
     fontSize: fontSize,
+    letterSpacing: 0,
+    lineHeight: 1,
     scrollback: currentSettings?.scrollbackLines ?? 10000,
     minimumContrastRatio: currentSettings?.minimumContrastRatio ?? 1,
     smoothScrollDuration: currentSettings?.smoothScrolling ? 150 : 0,
     allowProposedApi: true,
     customGlyphs: true,
+    rescaleOverlappingGlyphs: true,
     theme: THEMES[themeName] ?? THEMES.dark
   };
 
