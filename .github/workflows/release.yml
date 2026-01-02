@@ -36,6 +36,14 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install esbuild
+        run: npm install -g esbuild
+
       - name: Publish Web Server (mm)
         run: dotnet publish ${{ env.WEB_PROJECT }} -c Release -r ${{ matrix.rid }} /p:IsPublishing=true
 
