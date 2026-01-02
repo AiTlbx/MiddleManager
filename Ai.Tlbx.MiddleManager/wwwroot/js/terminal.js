@@ -80,8 +80,10 @@
 
     // Per-session terminal state: { terminal, fitAddon, container, serverCols, serverRows }
     var sessionTerminals = new Map();
-    // Track sessions created in this browser session (skip buffer fetch for these)
+    // Track sessions created in this browser session (use buffered WebSocket frames, not HTTP fetch)
     var newlyCreatedSessions = new Set();
+    // Buffer WebSocket output frames for sessions whose terminals aren't opened yet
+    var pendingOutputFrames = new Map(); // sessionId -> [payloads]
     // Font loading promise - resolved when terminal font is ready
     var fontsReadyPromise = null;
 
@@ -571,38 +573,14 @@
             if (type === MUX_TYPE_OUTPUT) {
                 var state = sessionTerminals.get(sessionId);
                 if (state && state.opened && payload.length >= 4) {
-                    // Parse dimensions from output frame: [cols:2][rows:2][data]
-                    var frameCols = payload[0] | (payload[1] << 8);
-                    var frameRows = payload[2] | (payload[3] << 8);
-                    var terminalData = payload.slice(4);
-
-                    // Validate dimensions are within sane bounds (1-500)
-                    var validDims = frameCols > 0 && frameCols <= 500 && frameRows > 0 && frameRows <= 500;
-
-                    // Ensure terminal matches frame dimensions before writing
-                    if (validDims && state.terminal._core && state.terminal._core._renderService) {
-                        var currentCols = state.terminal.cols;
-                        var currentRows = state.terminal.rows;
-
-                        if (currentCols !== frameCols || currentRows !== frameRows) {
-                            try {
-                                state.terminal.resize(frameCols, frameRows);
-                                state.serverCols = frameCols;
-                                state.serverRows = frameRows;
-                                applyTerminalScaling(sessionId, state);
-                            } catch (e) {
-                                console.warn('Terminal resize deferred:', e.message);
-                            }
-                        }
+                    // Terminal ready - write directly
+                    writeOutputFrame(sessionId, state, payload);
+                } else if (payload.length >= 4) {
+                    // Terminal not yet opened - buffer frame for replay when terminal opens
+                    if (!pendingOutputFrames.has(sessionId)) {
+                        pendingOutputFrames.set(sessionId, []);
                     }
-
-                    // Write terminal data
-                    if (terminalData.length > 0) {
-                        state.terminal.write(terminalData);
-                    }
-                } else if (state && payload.length >= 4) {
-                    // Terminal not yet opened - queue or ignore
-                    // (terminal will get buffer on open)
+                    pendingOutputFrames.get(sessionId).push(payload.slice()); // copy payload
                 }
             }
         };
@@ -616,6 +594,48 @@
         muxWs.onerror = function(e) {
             console.error('Mux WebSocket error:', e);
         };
+    }
+
+    function writeOutputFrame(sessionId, state, payload) {
+        // Parse dimensions from output frame: [cols:2][rows:2][data]
+        var frameCols = payload[0] | (payload[1] << 8);
+        var frameRows = payload[2] | (payload[3] << 8);
+        var terminalData = payload.slice(4);
+
+        // Validate dimensions are within sane bounds (1-500)
+        var validDims = frameCols > 0 && frameCols <= 500 && frameRows > 0 && frameRows <= 500;
+
+        // Ensure terminal matches frame dimensions before writing
+        if (validDims && state.terminal._core && state.terminal._core._renderService) {
+            var currentCols = state.terminal.cols;
+            var currentRows = state.terminal.rows;
+
+            if (currentCols !== frameCols || currentRows !== frameRows) {
+                try {
+                    state.terminal.resize(frameCols, frameRows);
+                    state.serverCols = frameCols;
+                    state.serverRows = frameRows;
+                    applyTerminalScaling(sessionId, state);
+                } catch (e) {
+                    console.warn('Terminal resize deferred:', e.message);
+                }
+            }
+        }
+
+        // Write terminal data
+        if (terminalData.length > 0) {
+            state.terminal.write(terminalData);
+        }
+    }
+
+    function replayPendingFrames(sessionId, state) {
+        var frames = pendingOutputFrames.get(sessionId);
+        if (frames && frames.length > 0) {
+            frames.forEach(function(payload) {
+                writeOutputFrame(sessionId, state, payload);
+            });
+            pendingOutputFrames.delete(sessionId);
+        }
     }
 
     function sendInput(sessionId, data) {
@@ -875,6 +895,9 @@
             terminal.open(container);
             state.opened = true;
 
+            // Replay any WebSocket frames that arrived before terminal was opened
+            replayPendingFrames(sessionId, state);
+
             // Defer resize to next frame - xterm.js needs a frame to fully initialize after open()
             requestAnimationFrame(function() {
                 if (!sessionTerminals.has(sessionId)) return; // Session was deleted
@@ -962,11 +985,7 @@
         });
     }
 
-    function fetchAndWriteBuffer(sessionId, terminal, retryCount) {
-        retryCount = retryCount || 0;
-        var maxRetries = 5;
-        var retryDelay = 300; // ms between retries
-
+    function fetchAndWriteBuffer(sessionId, terminal) {
         fetch('/api/sessions/' + sessionId + '/buffer')
             .then(function(response) {
                 return response.ok ? response.text() : '';
@@ -974,11 +993,6 @@
             .then(function(buffer) {
                 if (buffer) {
                     terminal.write(buffer);
-                } else if (retryCount < maxRetries) {
-                    // Buffer empty - shell may still be starting up, retry
-                    setTimeout(function() {
-                        fetchAndWriteBuffer(sessionId, terminal, retryCount + 1);
-                    }, retryDelay);
                 }
             })
             .catch(function(e) {
@@ -1003,6 +1017,7 @@
         state.terminal.dispose();
         state.container.remove();
         sessionTerminals.delete(sessionId);
+        pendingOutputFrames.delete(sessionId);
     }
 
     function applySettingsToTerminals() {
@@ -1088,18 +1103,15 @@
         requestAnimationFrame(function() {
             state.terminal.focus();
 
-            // Always fetch buffer to ensure we have all output
-            // For newly created sessions, delay to let shell start and output prompt
-            if (isNewTerminal) {
-                if (isNewlyCreated) {
-                    // Wait for shell startup, then fetch buffer (with retries if still empty)
-                    setTimeout(function() {
-                        fetchAndWriteBuffer(sessionId, state.terminal);
-                        newlyCreatedSessions.delete(sessionId);
-                    }, 500);
-                } else {
-                    fetchAndWriteBuffer(sessionId, state.terminal);
-                }
+            // For newly created sessions: WebSocket frames are buffered and replayed when terminal opens
+            // For existing sessions (page reload, reconnect): fetch buffer via HTTP
+            if (isNewTerminal && !isNewlyCreated) {
+                fetchAndWriteBuffer(sessionId, state.terminal);
+            }
+
+            // Clean up tracking for newly created sessions
+            if (isNewlyCreated) {
+                newlyCreatedSessions.delete(sessionId);
             }
         });
 
