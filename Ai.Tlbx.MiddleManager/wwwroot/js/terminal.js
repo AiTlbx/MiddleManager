@@ -962,13 +962,24 @@
         });
     }
 
-    function fetchAndWriteBuffer(sessionId, terminal) {
+    function fetchAndWriteBuffer(sessionId, terminal, retryCount) {
+        retryCount = retryCount || 0;
+        var maxRetries = 5;
+        var retryDelay = 300; // ms between retries
+
         fetch('/api/sessions/' + sessionId + '/buffer')
             .then(function(response) {
                 return response.ok ? response.text() : '';
             })
             .then(function(buffer) {
-                if (buffer) terminal.write(buffer);
+                if (buffer) {
+                    terminal.write(buffer);
+                } else if (retryCount < maxRetries) {
+                    // Buffer empty - shell may still be starting up, retry
+                    setTimeout(function() {
+                        fetchAndWriteBuffer(sessionId, terminal, retryCount + 1);
+                    }, retryDelay);
+                }
             })
             .catch(function(e) {
                 console.error('Error fetching buffer:', e);
@@ -1078,14 +1089,14 @@
             state.terminal.focus();
 
             // Always fetch buffer to ensure we have all output
-            // For newly created sessions, delay slightly to let initial output accumulate
+            // For newly created sessions, delay to let shell start and output prompt
             if (isNewTerminal) {
                 if (isNewlyCreated) {
-                    // Wait for shell prompt to be captured, then fetch buffer
+                    // Wait for shell startup, then fetch buffer (with retries if still empty)
                     setTimeout(function() {
                         fetchAndWriteBuffer(sessionId, state.terminal);
                         newlyCreatedSessions.delete(sessionId);
-                    }, 300);
+                    }, 500);
                 } else {
                     fetchAndWriteBuffer(sessionId, state.terminal);
                 }
