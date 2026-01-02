@@ -1,22 +1,32 @@
+using System.Net.Sockets;
+#if WINDOWS
 using System.IO.Pipes;
-using System.Threading.Channels;
+#endif
+using Ai.Tlbx.MiddleManager.Common.Ipc;
+using Ai.Tlbx.MiddleManager.Common.Protocol;
 
 namespace Ai.Tlbx.MiddleManager.Services;
 
 /// <summary>
-/// Robust IPC client for a single mm-con-host process.
+/// Robust IPC client for a single mmttyhost process.
 /// Auto-reconnects on failure, retries operations, buffers during disconnects.
 /// </summary>
 public sealed class ConHostClient : IAsyncDisposable
 {
     private readonly string _sessionId;
-    private readonly string _pipeName;
-    private readonly object _pipeLock = new();
+    private readonly string _endpoint;
+    private readonly object _streamLock = new();
     private readonly object _responseLock = new();
-    private readonly SemaphoreSlim _writeLock = new(1, 1); // Serialize ALL pipe writes to prevent frame interleaving
-    private readonly SemaphoreSlim _requestLock = new(1, 1); // Serialize requests to avoid response routing conflicts
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
+    private readonly SemaphoreSlim _requestLock = new(1, 1);
 
+#if WINDOWS
     private NamedPipeClientStream? _pipe;
+#else
+    private Socket? _socket;
+    private NetworkStream? _networkStream;
+#endif
+    private Stream? _stream;
     private CancellationTokenSource? _cts;
     private Task? _readTask;
     private Task? _reconnectTask;
@@ -24,16 +34,24 @@ public sealed class ConHostClient : IAsyncDisposable
     private bool _intentionalDisconnect;
     private int _reconnectAttempts;
 
-    // For request/response coordination
     private TaskCompletionSource<(ConHostMessageType type, byte[] payload)>? _pendingResponse;
 
-    // Reconnection settings
     private const int MaxReconnectAttempts = 10;
     private const int InitialReconnectDelayMs = 100;
     private const int MaxReconnectDelayMs = 5000;
 
     public string SessionId => _sessionId;
-    public bool IsConnected => _pipe?.IsConnected ?? false;
+    public bool IsConnected
+    {
+        get
+        {
+#if WINDOWS
+            return _pipe?.IsConnected ?? false;
+#else
+            return _socket?.Connected ?? false;
+#endif
+        }
+    }
 
     public event Action<string, int, int, ReadOnlyMemory<byte>>? OnOutput;
     public event Action<string>? OnStateChanged;
@@ -43,7 +61,7 @@ public sealed class ConHostClient : IAsyncDisposable
     public ConHostClient(string sessionId)
     {
         _sessionId = sessionId;
-        _pipeName = ConHostProtocol.GetPipeName(sessionId);
+        _endpoint = IpcEndpoint.GetSessionEndpoint(sessionId);
     }
 
     public async Task<bool> ConnectAsync(int timeoutMs = 5000, CancellationToken ct = default)
@@ -54,28 +72,45 @@ public sealed class ConHostClient : IAsyncDisposable
         {
             try
             {
-                lock (_pipeLock)
+#if WINDOWS
+                lock (_streamLock)
                 {
                     _pipe?.Dispose();
-                    _pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+                    _pipe = new NamedPipeClientStream(".", _endpoint, PipeDirection.InOut, PipeOptions.Asynchronous);
                 }
 
                 await _pipe.ConnectAsync(timeoutMs, ct).ConfigureAwait(false);
+                _stream = _pipe;
+#else
+                lock (_streamLock)
+                {
+                    _networkStream?.Dispose();
+                    _socket?.Dispose();
+                    _socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+                }
+
+                using var timeoutCts = new CancellationTokenSource(timeoutMs);
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+
+                await _socket.ConnectAsync(new UnixDomainSocketEndPoint(_endpoint), linkedCts.Token).ConfigureAwait(false);
+                _networkStream = new NetworkStream(_socket, ownsSocket: false);
+                _stream = _networkStream;
+#endif
                 _reconnectAttempts = 0;
-                Log($"Connected to pipe {_pipeName}");
+                Log($"Connected to {_endpoint}");
                 return true;
             }
             catch (TimeoutException)
             {
                 Log($"Connection timeout (attempt {attempt + 1}/3)");
             }
-            catch (IOException ex)
-            {
-                Log($"Connection failed (attempt {attempt + 1}/3): {ex.Message}");
-            }
             catch (OperationCanceledException)
             {
                 return false;
+            }
+            catch (Exception ex) when (ex is IOException or SocketException)
+            {
+                Log($"Connection failed (attempt {attempt + 1}/3): {ex.Message}");
             }
             catch (Exception ex)
             {
@@ -110,7 +145,6 @@ public sealed class ConHostClient : IAsyncDisposable
 
             try
             {
-                // If read loop is running, use request/response pattern to avoid concurrent reads
                 if (_readTask is not null)
                 {
                     var request = ConHostProtocol.CreateInfoRequest();
@@ -119,7 +153,6 @@ public sealed class ConHostClient : IAsyncDisposable
                     return ConHostProtocol.ParseInfo(response);
                 }
 
-                // Before read loop starts (initial handshake), read directly
                 var requestBytes = ConHostProtocol.CreateInfoRequest();
                 await WriteWithLockAsync(requestBytes, ct).ConfigureAwait(false);
 
@@ -152,7 +185,7 @@ public sealed class ConHostClient : IAsyncDisposable
         {
             if (data.Length < 20)
             {
-                DebugLogger.Log($"[PIPE-SEND] {_sessionId}: {BitConverter.ToString(data.ToArray())}");
+                DebugLogger.Log($"[IPC-SEND] {_sessionId}: {BitConverter.ToString(data.ToArray())}");
             }
             var msg = ConHostProtocol.CreateInputMessage(data.Span);
             await WriteWithLockAsync(msg, ct).ConfigureAwait(false);
@@ -252,13 +285,12 @@ public sealed class ConHostClient : IAsyncDisposable
         catch (Exception ex)
         {
             DebugLogger.LogException($"ConHostClient.CloseAsync({_sessionId})", ex);
-            return true; // Session closing anyway
+            return true;
         }
     }
 
     private async Task<byte[]?> SendRequestAsync(byte[] request, ConHostMessageType expectedType, CancellationToken ct)
     {
-        // Serialize requests to prevent response routing conflicts
         await _requestLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -295,14 +327,14 @@ public sealed class ConHostClient : IAsyncDisposable
 
     private async Task WriteAsync(byte[] data, CancellationToken ct)
     {
-        var pipe = _pipe;
-        if (pipe is null || !pipe.IsConnected)
+        var stream = _stream;
+        if (stream is null || !IsConnected)
         {
-            throw new IOException("Pipe not connected");
+            throw new IOException("Not connected");
         }
 
-        await pipe.WriteAsync(data, ct).ConfigureAwait(false);
-        await pipe.FlushAsync(ct).ConfigureAwait(false);
+        await stream.WriteAsync(data, ct).ConfigureAwait(false);
+        await stream.FlushAsync(ct).ConfigureAwait(false);
     }
 
     private async Task ReadLoopWithReconnectAsync(CancellationToken ct)
@@ -320,23 +352,22 @@ public sealed class ConHostClient : IAsyncDisposable
                     continue;
                 }
 
-                var pipe = _pipe;
-                if (pipe is null) continue;
+                var stream = _stream;
+                if (stream is null) continue;
 
-                var bytesRead = await pipe.ReadAsync(headerBuffer, ct).ConfigureAwait(false);
+                var bytesRead = await stream.ReadAsync(headerBuffer, ct).ConfigureAwait(false);
                 DebugLogger.Log($"[READ-LOOP] {_sessionId}: Read {bytesRead} bytes");
                 if (bytesRead == 0)
                 {
-                    Log("Read returned 0 bytes - pipe closed");
-                    DebugLogger.Log($"[PIPE-ERR] {_sessionId}: Read returned 0 bytes - pipe closed");
+                    Log("Read returned 0 bytes - connection closed");
+                    DebugLogger.Log($"[IPC-ERR] {_sessionId}: Read returned 0 bytes - connection closed");
                     HandleDisconnect();
                     continue;
                 }
 
-                // Read remaining header if needed
                 while (bytesRead < ConHostProtocol.HeaderSize)
                 {
-                    var more = await pipe.ReadAsync(headerBuffer.AsMemory(bytesRead), ct).ConfigureAwait(false);
+                    var more = await stream.ReadAsync(headerBuffer.AsMemory(bytesRead), ct).ConfigureAwait(false);
                     if (more == 0)
                     {
                         HandleDisconnect();
@@ -350,12 +381,10 @@ public sealed class ConHostClient : IAsyncDisposable
                 if (!ConHostProtocol.TryReadHeader(headerBuffer, out var msgType, out var payloadLength))
                 {
                     Log($"Invalid header: {BitConverter.ToString(headerBuffer)}");
-                    // Protocol desync'd - can't recover without reconnecting
                     HandleDisconnect();
                     break;
                 }
 
-                // Read payload - allocate dynamically based on actual size
                 byte[] payloadBuffer = [];
                 if (payloadLength > 0)
                 {
@@ -363,7 +392,7 @@ public sealed class ConHostClient : IAsyncDisposable
                     var totalRead = 0;
                     while (totalRead < payloadLength)
                     {
-                        var chunk = await pipe.ReadAsync(payloadBuffer.AsMemory(totalRead, payloadLength - totalRead), ct).ConfigureAwait(false);
+                        var chunk = await stream.ReadAsync(payloadBuffer.AsMemory(totalRead, payloadLength - totalRead), ct).ConfigureAwait(false);
                         if (chunk == 0)
                         {
                             HandleDisconnect();
@@ -383,7 +412,7 @@ public sealed class ConHostClient : IAsyncDisposable
             {
                 break;
             }
-            catch (IOException ex)
+            catch (Exception ex) when (ex is IOException or SocketException)
             {
                 Log($"Read error: {ex.Message}");
                 DebugLogger.LogException($"ConHostClient.ReadLoop({_sessionId})", ex);
@@ -405,7 +434,6 @@ public sealed class ConHostClient : IAsyncDisposable
             case ConHostMessageType.Output:
                 try
                 {
-                    // Parse dimensions from output message: [cols:2][rows:2][data]
                     var (cols, rows) = ConHostProtocol.ParseOutputDimensions(payload.Span);
                     var data = ConHostProtocol.GetOutputData(payload.Span);
                     OnOutput?.Invoke(_sessionId, cols, rows, data.ToArray());
@@ -427,7 +455,6 @@ public sealed class ConHostClient : IAsyncDisposable
                 }
                 break;
 
-            // Response messages - route to pending request
             case ConHostMessageType.Buffer:
             case ConHostMessageType.ResizeAck:
             case ConHostMessageType.SetNameAck:
@@ -476,15 +503,29 @@ public sealed class ConHostClient : IAsyncDisposable
 
             try
             {
-                lock (_pipeLock)
+#if WINDOWS
+                lock (_streamLock)
                 {
                     _pipe?.Dispose();
-                    _pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+                    _pipe = new NamedPipeClientStream(".", _endpoint, PipeDirection.InOut, PipeOptions.Asynchronous);
                 }
 
                 await _pipe.ConnectAsync(2000).ConfigureAwait(false);
+                _stream = _pipe;
+#else
+                lock (_streamLock)
+                {
+                    _networkStream?.Dispose();
+                    _socket?.Dispose();
+                    _socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+                }
 
-                // Re-handshake
+                using var timeoutCts = new CancellationTokenSource(2000);
+                await _socket.ConnectAsync(new UnixDomainSocketEndPoint(_endpoint), timeoutCts.Token).ConfigureAwait(false);
+                _networkStream = new NetworkStream(_socket, ownsSocket: false);
+                _stream = _networkStream;
+#endif
+
                 var info = await GetInfoAsync().ConfigureAwait(false);
                 if (info is not null)
                 {
@@ -511,16 +552,16 @@ public sealed class ConHostClient : IAsyncDisposable
 
     private async Task<(ConHostMessageType type, Memory<byte> payload)?> ReadMessageAsync(CancellationToken ct)
     {
-        var pipe = _pipe;
-        if (pipe is null || !pipe.IsConnected) return null;
+        var stream = _stream;
+        if (stream is null || !IsConnected) return null;
 
         var headerBuffer = new byte[ConHostProtocol.HeaderSize];
-        var bytesRead = await pipe.ReadAsync(headerBuffer, ct).ConfigureAwait(false);
+        var bytesRead = await stream.ReadAsync(headerBuffer, ct).ConfigureAwait(false);
         if (bytesRead == 0) return null;
 
         while (bytesRead < ConHostProtocol.HeaderSize)
         {
-            var more = await pipe.ReadAsync(headerBuffer.AsMemory(bytesRead), ct).ConfigureAwait(false);
+            var more = await stream.ReadAsync(headerBuffer.AsMemory(bytesRead), ct).ConfigureAwait(false);
             if (more == 0) return null;
             bytesRead += more;
         }
@@ -536,7 +577,7 @@ public sealed class ConHostClient : IAsyncDisposable
             var totalRead = 0;
             while (totalRead < payloadLength)
             {
-                var chunk = await pipe.ReadAsync(payload.AsMemory(totalRead), ct).ConfigureAwait(false);
+                var chunk = await stream.ReadAsync(payload.AsMemory(totalRead), ct).ConfigureAwait(false);
                 if (chunk == 0) return null;
                 totalRead += chunk;
             }
@@ -558,7 +599,6 @@ public sealed class ConHostClient : IAsyncDisposable
 
         _cts?.Cancel();
 
-        // Cancel any pending responses
         lock (_responseLock)
         {
             _pendingResponse?.TrySetCanceled();
@@ -580,9 +620,14 @@ public sealed class ConHostClient : IAsyncDisposable
         _writeLock.Dispose();
         _requestLock.Dispose();
 
-        lock (_pipeLock)
+        lock (_streamLock)
         {
+#if WINDOWS
             _pipe?.Dispose();
+#else
+            _networkStream?.Dispose();
+            _socket?.Dispose();
+#endif
         }
     }
 }

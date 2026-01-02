@@ -8,7 +8,7 @@ MiddleManager is a web-based terminal multiplexer. Native AOT compiled, runs on 
 
 **Binaries:**
 - `mm` / `mm.exe` — Web server (UI, REST API, WebSockets)
-- `mm-con-host` / `mm-con-host.exe` — ConPTY host (Windows only, spawned per terminal)
+- `mmttyhost` / `mmttyhost.exe` — TTY host (spawned per terminal, all platforms)
 
 **Default port:** 2000
 
@@ -43,8 +43,7 @@ Ai.Tlbx.MiddleManager/build-aot.cmd        # Windows
 │  └─ UpdateService (GitHub release check)                    │
 └─────────────────────────────────────────────────────────────┘
            │
-           │ Windows: spawns mm-con-host.exe per terminal
-           │ Unix: direct forkpty()
+           │ Spawns mmttyhost per terminal (all platforms)
            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  Terminal Sessions                                          │
@@ -85,10 +84,10 @@ Ai.Tlbx.MiddleManager/              Web Server (mm.exe)
     ├── js/terminal.min.js          Compiled TypeScript (generated)
     └── css/app.css                 Styles
 
-Ai.Tlbx.MiddleManager.ConHost/      ConPTY Host (Windows only)
-├── Program.cs                      Spawned per terminal for correct ConPTY context
-└── Services/
-    └── ConHostSession.cs           PTY wrapper
+Ai.Tlbx.MiddleManager.TtyHost/      TTY Host (all platforms)
+├── Program.cs                      Spawned per terminal, hosts PTY session
+└── Pty/
+    └── IPtyConnection.cs           Cross-platform PTY abstraction
 ```
 
 ## API Endpoints
@@ -188,9 +187,9 @@ export function createTerminal(sessionId: string, session: Session): TerminalSta
 
 | Platform | PTY | Shells | Default |
 |----------|-----|--------|---------|
-| Windows | ConPTY (via mm-con-host) | Pwsh, PowerShell, Cmd | Pwsh |
-| macOS | forkpty() libSystem | Zsh, Bash | Zsh |
-| Linux | forkpty() libc | Bash, Zsh | Bash |
+| Windows | ConPTY (via mmttyhost) | Pwsh, PowerShell, Cmd | Pwsh |
+| macOS | forkpty (via mmttyhost) | Zsh, Bash | Zsh |
+| Linux | forkpty (via mmttyhost) | Bash, Zsh | Bash |
 
 ## Release Process
 

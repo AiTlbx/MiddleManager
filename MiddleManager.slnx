@@ -1,6 +1,6 @@
 <Solution>
   <Project Path="Ai.Tlbx.MiddleManager/Ai.Tlbx.MiddleManager.csproj" />
-  <Project Path="Ai.Tlbx.MiddleManager.Host/Ai.Tlbx.MiddleManager.Host.csproj" />
-  <Project Path="Ai.Tlbx.MiddleManager.ConHost/Ai.Tlbx.MiddleManager.ConHost.csproj" />
+  <Project Path="Ai.Tlbx.MiddleManager.Common/Ai.Tlbx.MiddleManager.Common.csproj" />
+  <Project Path="Ai.Tlbx.MiddleManager.TtyHost/Ai.Tlbx.MiddleManager.TtyHost.csproj" />
   <Project Path="Ai.Tlbx.MiddleManager.Tests/Ai.Tlbx.MiddleManager.Tests.csproj" />
 </Solution>

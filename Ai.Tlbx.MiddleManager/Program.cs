@@ -2,7 +2,7 @@ using System.Reflection;
 using Ai.Tlbx.MiddleManager.Models;
 using Ai.Tlbx.MiddleManager.Services;
 using Ai.Tlbx.MiddleManager.Settings;
-using Ai.Tlbx.MiddleManager.Shells;
+using Ai.Tlbx.MiddleManager.Common.Shells;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
 
@@ -20,7 +20,20 @@ public class Program
             return;
         }
 
-        var (port, bindAddress, useConHost) = ParseCommandLineArgs(args);
+        // Ensure only one mm.exe instance runs system-wide
+        var instanceGuard = SingleInstanceGuard.TryAcquire(out var existingInfo);
+        if (instanceGuard is null)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"Error: {existingInfo}");
+            Console.ResetColor();
+            Console.WriteLine("Only one instance of MiddleManager can run at a time.");
+            Console.WriteLine("Stop the existing instance before starting a new one.");
+            Environment.Exit(1);
+            return;
+        }
+
+        var (port, bindAddress) = ParseCommandLineArgs(args);
         var builder = CreateBuilder(args);
         var app = builder.Build();
         var version = GetVersion();
@@ -41,47 +54,49 @@ public class Program
         AuthEndpoints.ConfigureAuthMiddleware(app, settingsService, authService);
         ConfigureStaticFiles(app);
 
-        // Session managers
-        ConHostSessionManager? conHostSessionManager = null;
-        ConHostMuxConnectionManager? conHostMuxManager = null;
-        SessionManager? directSessionManager = null;
-        MuxConnectionManager? directMuxManager = null;
-
-        string modeDescription;
-
-        if (useConHost)
-        {
-            conHostSessionManager = new ConHostSessionManager();
-            conHostMuxManager = new ConHostMuxConnectionManager(conHostSessionManager);
-            await conHostSessionManager.DiscoverExistingSessionsAsync();
-            modeDescription = "Service (sessions persist, one process per terminal)";
-        }
-        else
-        {
-            directSessionManager = app.Services.GetRequiredService<SessionManager>();
-            directMuxManager = new MuxConnectionManager(directSessionManager);
-            directSessionManager.SetMuxManager(directMuxManager);
-            modeDescription = "Direct (sessions lost on restart)";
-        }
+        // Session manager - always uses ConHost (spawned subprocess per terminal)
+        var sessionManager = new ConHostSessionManager();
+        var muxManager = new ConHostMuxConnectionManager(sessionManager);
+        await sessionManager.DiscoverExistingSessionsAsync();
 
         // Configure remaining endpoints
         AuthEndpoints.MapAuthEndpoints(app, settingsService, authService);
-        MapSystemEndpoints(app, conHostSessionManager, directSessionManager, updateService, settingsService, version);
-        SessionApiEndpoints.MapSessionEndpoints(app, conHostSessionManager, directSessionManager);
-        MapWebSocketMiddleware(app, conHostSessionManager, directSessionManager, conHostMuxManager, directMuxManager, updateService);
+        MapSystemEndpoints(app, sessionManager, updateService, settingsService, version);
+        SessionApiEndpoints.MapSessionEndpoints(app, sessionManager);
+        MapWebSocketMiddleware(app, sessionManager, muxManager, updateService);
 
-        PrintWelcomeBanner(port, bindAddress, settingsService, version, modeDescription);
+        // Register cleanup for graceful shutdown (service restart, Ctrl+C)
+        var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+        lifetime.ApplicationStopping.Register(() =>
+        {
+            Console.WriteLine("Shutdown requested, cleaning up...");
+            // Fire-and-forget cleanup with timeout - don't block service stop
+            var cleanupTask = Task.Run(async () =>
+            {
+                try
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    await muxManager.DisposeAsync().AsTask().WaitAsync(cts.Token);
+                    await sessionManager.DisposeAsync().AsTask().WaitAsync(cts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    Console.WriteLine("Cleanup timed out, forcing exit");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Cleanup error: {ex.Message}");
+                }
+                finally
+                {
+                    instanceGuard.Dispose();
+                }
+            });
+            cleanupTask.Wait(TimeSpan.FromSeconds(6));
+        });
+
+        PrintWelcomeBanner(port, bindAddress, settingsService, version);
         RunWithPortErrorHandling(app, port, bindAddress);
-
-        // Cleanup
-        if (conHostMuxManager is not null)
-        {
-            await conHostMuxManager.DisposeAsync();
-        }
-        if (conHostSessionManager is not null)
-        {
-            await conHostSessionManager.DisposeAsync();
-        }
     }
 
     private static bool HandleSpecialCommands(string[] args)
@@ -152,11 +167,10 @@ public class Program
         return false;
     }
 
-    private static (int port, string bindAddress, bool useConHost) ParseCommandLineArgs(string[] args)
+    private static (int port, string bindAddress) ParseCommandLineArgs(string[] args)
     {
         var port = DefaultPort;
         var bindAddress = DefaultBindAddress;
-        var useConHost = args.Contains("--service") || args.Contains("--spawned");
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -172,7 +186,7 @@ public class Program
             }
         }
 
-        return (port, bindAddress, useConHost);
+        return (port, bindAddress);
     }
 
     private static WebApplicationBuilder CreateBuilder(string[] args)
@@ -193,7 +207,6 @@ public class Program
 
         builder.Services.AddSingleton<ShellRegistry>();
         builder.Services.AddSingleton<SettingsService>();
-        builder.Services.AddSingleton<SessionManager>();
         builder.Services.AddSingleton<UpdateService>();
         builder.Services.AddSingleton<AuthService>();
 
@@ -242,44 +255,30 @@ public class Program
 
     private static void MapSystemEndpoints(
         WebApplication app,
-        ConHostSessionManager? conHostManager,
-        SessionManager? directManager,
+        ConHostSessionManager sessionManager,
         UpdateService updateService,
         SettingsService settingsService,
         string version)
     {
-        var shellRegistry = directManager?.ShellRegistry ?? app.Services.GetRequiredService<ShellRegistry>();
+        var shellRegistry = app.Services.GetRequiredService<ShellRegistry>();
 
         app.MapGet("/api/version", () => Results.Text(version));
 
         app.MapGet("/api/health", () =>
         {
-            var isConHostMode = conHostManager is not null;
-            var sessionCount = conHostManager?.GetAllSessions().Count
-                ?? directManager?.GetSessionList().Sessions?.Count ?? 0;
+            var sessionCount = sessionManager.GetAllSessions().Count;
 
-            var mode = isConHostMode ? "service" : "direct";
-
-            string? conHostVersion = null;
-            string? conHostExpected = null;
-            bool? conHostCompatible = null;
-
-#if WINDOWS
-            if (isConHostMode && OperatingSystem.IsWindows())
-            {
-                conHostVersion = ConHostSpawner.GetConHostVersion();
-                var manifest = updateService.InstalledManifest;
-                conHostExpected = manifest.Pty;
-                conHostCompatible = conHostVersion == conHostExpected ||
-                    (conHostVersion is not null && manifest.MinCompatiblePty is not null &&
-                     UpdateService.CompareVersions(conHostVersion, manifest.MinCompatiblePty) >= 0);
-            }
-#endif
+            string? conHostVersion = ConHostSpawner.GetConHostVersion();
+            var manifest = updateService.InstalledManifest;
+            var conHostExpected = manifest.Pty;
+            var conHostCompatible = conHostVersion == conHostExpected ||
+                (conHostVersion is not null && manifest.MinCompatiblePty is not null &&
+                 UpdateService.CompareVersions(conHostVersion, manifest.MinCompatiblePty) >= 0);
 
             var health = new SystemHealth
             {
                 Healthy = true,
-                Mode = mode,
+                Mode = "service",
                 SessionCount = sessionCount,
                 Version = version,
                 WebProcessId = Environment.ProcessId,
@@ -402,14 +401,12 @@ public class Program
 
     private static void MapWebSocketMiddleware(
         WebApplication app,
-        ConHostSessionManager? conHostManager,
-        SessionManager? directManager,
-        ConHostMuxConnectionManager? conHostMuxManager,
-        MuxConnectionManager? directMuxManager,
+        ConHostSessionManager sessionManager,
+        ConHostMuxConnectionManager muxManager,
         UpdateService updateService)
     {
-        var muxHandler = new MuxWebSocketHandler(conHostManager, directManager, conHostMuxManager, directMuxManager);
-        var stateHandler = new StateWebSocketHandler(conHostManager, directManager, updateService);
+        var muxHandler = new MuxWebSocketHandler(sessionManager, muxManager);
+        var stateHandler = new StateWebSocketHandler(sessionManager, updateService);
 
         app.Use(async (context, next) =>
         {
@@ -464,7 +461,7 @@ public class Program
         }
     }
 
-    private static void PrintWelcomeBanner(int port, string bindAddress, SettingsService settingsService, string version, string modeDescription)
+    private static void PrintWelcomeBanner(int port, string bindAddress, SettingsService settingsService, string version)
     {
         var settings = settingsService.Load();
 
@@ -493,7 +490,7 @@ public class Program
         Console.WriteLine($"  Shell:    {settings.DefaultShell}");
         Console.Write($"  Mode:     ");
         Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine(modeDescription);
+        Console.WriteLine("Service (subprocess per terminal)");
         Console.ResetColor();
         Console.WriteLine();
         Console.WriteLine($"  Listening on http://{bindAddress}:{port}");

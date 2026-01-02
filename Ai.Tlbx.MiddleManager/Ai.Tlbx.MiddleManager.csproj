@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Version>4.0.1</Version>
+    <Version>4.2.0</Version>
     <InvariantGlobalization>true</InvariantGlobalization>
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
     <EnableDefaultContentItems>false</EnableDefaultContentItems>
@@ -46,6 +46,10 @@
     <UpToDateCheckInput Include="wwwroot\**\*" />
   </ItemGroup>
 
+  <!-- Link common protocol sources -->
+  <ItemGroup>
+    <Compile Include="..\Ai.Tlbx.MiddleManager.Common\**\*.cs" LinkBase="Common" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Ai.Tlbx.MiddleManager.Tests" />

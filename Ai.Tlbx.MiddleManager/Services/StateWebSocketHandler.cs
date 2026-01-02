@@ -6,17 +6,14 @@ namespace Ai.Tlbx.MiddleManager.Services;
 
 public sealed class StateWebSocketHandler
 {
-    private readonly ConHostSessionManager? _conHostManager;
-    private readonly SessionManager? _directManager;
+    private readonly ConHostSessionManager _sessionManager;
     private readonly UpdateService _updateService;
 
     public StateWebSocketHandler(
-        ConHostSessionManager? conHostManager,
-        SessionManager? directManager,
+        ConHostSessionManager sessionManager,
         UpdateService updateService)
     {
-        _conHostManager = conHostManager;
-        _directManager = directManager;
+        _sessionManager = sessionManager;
         _updateService = updateService;
     }
 
@@ -41,7 +38,7 @@ public sealed class StateWebSocketHandler
                     return;
                 }
 
-                var sessionList = _conHostManager?.GetSessionList() ?? _directManager!.GetSessionList();
+                var sessionList = _sessionManager.GetSessionList();
                 var state = new StateUpdate
                 {
                     Sessions = sessionList,
@@ -68,15 +65,7 @@ public sealed class StateWebSocketHandler
             _ = SendStateAsync();
         }
 
-        string sessionListenerId;
-        if (_conHostManager is not null)
-        {
-            sessionListenerId = _conHostManager.AddStateListener(OnStateChange);
-        }
-        else
-        {
-            sessionListenerId = _directManager!.AddStateListener(OnStateChange);
-        }
+        var sessionListenerId = _sessionManager.AddStateListener(OnStateChange);
         var updateListenerId = _updateService.AddUpdateListener(OnUpdateAvailable);
 
         try
@@ -103,14 +92,7 @@ public sealed class StateWebSocketHandler
         }
         finally
         {
-            if (_conHostManager is not null)
-            {
-                _conHostManager.RemoveStateListener(sessionListenerId);
-            }
-            else
-            {
-                _directManager!.RemoveStateListener(sessionListenerId);
-            }
+            _sessionManager.RemoveStateListener(sessionListenerId);
             _updateService.RemoveUpdateListener(updateListenerId);
             sendLock.Dispose();
 

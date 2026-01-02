@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Text;
+using Ai.Tlbx.MiddleManager.Common.Protocol;
 using Ai.Tlbx.MiddleManager.Services;
 using Xunit;
 using Xunit.Abstractions;
@@ -8,8 +9,8 @@ using Xunit.Abstractions;
 namespace Ai.Tlbx.MiddleManager.Tests;
 
 /// <summary>
-/// Integration tests for mm-con-host.exe process directly.
-/// These tests spawn mm-con-host, connect via named pipe, and verify the IPC protocol works.
+/// Integration tests for mmttyhost.exe process directly.
+/// These tests spawn mmttyhost, connect via named pipe, and verify the IPC protocol works.
 /// </summary>
 public class ConHostIntegrationTests : IAsyncLifetime
 {
@@ -49,8 +50,8 @@ public class ConHostIntegrationTests : IAsyncLifetime
     [Fact]
     public void ConHostExe_Exists()
     {
-        _output.WriteLine($"Looking for mm-con-host.exe at: {ConHostPath}");
-        Assert.True(File.Exists(ConHostPath), $"mm-con-host.exe not found at {ConHostPath}");
+        _output.WriteLine($"Looking for mmttyhost.exe at: {ConHostPath}");
+        Assert.True(File.Exists(ConHostPath), $"mmttyhost.exe not found at {ConHostPath}");
     }
 
     [Fact]
@@ -59,7 +60,7 @@ public class ConHostIntegrationTests : IAsyncLifetime
         _sessionId = GenerateSessionId();
         var pipeName = $"mm-con-{_sessionId}";
 
-        _output.WriteLine($"Spawning mm-con-host with session {_sessionId}");
+        _output.WriteLine($"Spawning mmttyhost with session {_sessionId}");
         _conHostProcess = StartConHost(_sessionId);
 
         // Wait for pipe to be created
@@ -75,7 +76,7 @@ public class ConHostIntegrationTests : IAsyncLifetime
         _sessionId = GenerateSessionId();
         var pipeName = $"mm-con-{_sessionId}";
 
-        _output.WriteLine($"Starting mm-con-host with session {_sessionId}");
+        _output.WriteLine($"Starting mmttyhost with session {_sessionId}");
         _conHostProcess = StartConHost(_sessionId);
 
         Assert.True(await WaitForPipeAsync(pipeName, TimeSpan.FromSeconds(5)), "Pipe not created");
@@ -114,7 +115,7 @@ public class ConHostIntegrationTests : IAsyncLifetime
         _sessionId = GenerateSessionId();
         var pipeName = $"mm-con-{_sessionId}";
 
-        _output.WriteLine($"Starting mm-con-host with session {_sessionId}");
+        _output.WriteLine($"Starting mmttyhost with session {_sessionId}");
         _conHostProcess = StartConHost(_sessionId);
 
         Assert.True(await WaitForPipeAsync(pipeName, TimeSpan.FromSeconds(5)), "Pipe not created");
@@ -172,7 +173,7 @@ public class ConHostIntegrationTests : IAsyncLifetime
         _sessionId = GenerateSessionId();
         var pipeName = $"mm-con-{_sessionId}";
 
-        _output.WriteLine($"Starting mm-con-host with session {_sessionId}");
+        _output.WriteLine($"Starting mmttyhost with session {_sessionId}");
         _conHostProcess = StartConHost(_sessionId);
 
         Assert.True(await WaitForPipeAsync(pipeName, TimeSpan.FromSeconds(5)), "Pipe not created");
@@ -262,7 +263,7 @@ public class ConHostIntegrationTests : IAsyncLifetime
         _sessionId = GenerateSessionId();
         var pipeName = $"mm-con-{_sessionId}";
 
-        _output.WriteLine($"Starting mm-con-host with session {_sessionId}");
+        _output.WriteLine($"Starting mmttyhost with session {_sessionId}");
         _conHostProcess = StartConHost(_sessionId);
 
         Assert.True(await WaitForPipeAsync(pipeName, TimeSpan.FromSeconds(5)), "Pipe not created");
@@ -456,9 +457,9 @@ public class ConHostIntegrationTests : IAsyncLifetime
         // Try various locations
         var candidates = new[]
         {
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Ai.Tlbx.MiddleManager.ConHost", "bin", "Debug", "net10.0", "win-x64", "mm-con-host.exe"),
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Ai.Tlbx.MiddleManager.ConHost", "bin", "Release", "net10.0", "win-x64", "mm-con-host.exe"),
-            @"C:\Program Files\MiddleManager\mm-con-host.exe",
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Ai.Tlbx.MiddleManager.TtyHost", "bin", "Debug", "net10.0", "win-x64", "mmttyhost.exe"),
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Ai.Tlbx.MiddleManager.TtyHost", "bin", "Release", "net10.0", "win-x64", "mmttyhost.exe"),
+            @"C:\Program Files\MiddleManager\mmttyhost.exe",
         };
 
         foreach (var path in candidates)

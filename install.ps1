@@ -19,7 +19,7 @@ $Publisher = "AiTlbx"
 $RepoOwner = "AiTlbx"
 $RepoName = "MiddleManager"
 $WebBinaryName = "mm.exe"
-$ConHostBinaryName = "mm-con-host.exe"
+$TtyHostBinaryName = "mmttyhost.exe"
 $LegacyHostBinaryName = "mm-host.exe"
 $AssetPattern = "mm-win-x64.zip"
 
@@ -209,7 +209,7 @@ function Install-MiddleManager
             Write-Host "Stopping existing service..." -ForegroundColor Gray
             # Don't wait for graceful shutdown - immediately kill processes
             Stop-Service -Name $ServiceName -Force -NoWait -ErrorAction SilentlyContinue
-            Get-Process -Name "mm-host", "mm-con-host", "mm" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Get-Process -Name "mm-host", "mmttyhost", "mm" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
             Start-Sleep -Milliseconds 500
         }
 
@@ -248,9 +248,9 @@ function Install-MiddleManager
 
     # Copy binaries
     $sourceWebBinary = Join-Path $tempExtract $WebBinaryName
-    $sourceConHostBinary = Join-Path $tempExtract $ConHostBinaryName
+    $sourceConHostBinary = Join-Path $tempExtract $TtyHostBinaryName
     $destWebBinary = Join-Path $installDir $WebBinaryName
-    $destConHostBinary = Join-Path $installDir $ConHostBinaryName
+    $destConHostBinary = Join-Path $installDir $TtyHostBinaryName
 
     Write-Host "Installing binaries..." -ForegroundColor Gray
     try
@@ -270,11 +270,11 @@ function Install-MiddleManager
         try
         {
             Copy-Item $sourceConHostBinary $destConHostBinary -Force -ErrorAction Stop
-            Write-Host "  Installed: $ConHostBinaryName" -ForegroundColor Gray
+            Write-Host "  Installed: $TtyHostBinaryName" -ForegroundColor Gray
         }
         catch
         {
-            Write-Host "  Failed to copy $ConHostBinaryName - file may be locked" -ForegroundColor Red
+            Write-Host "  Failed to copy $TtyHostBinaryName - file may be locked" -ForegroundColor Red
             Write-Host "  Error: $_" -ForegroundColor Red
             throw
         }
@@ -369,17 +369,16 @@ function Install-AsService
     {
         Write-Host "Removing existing service..." -ForegroundColor Gray
         Stop-Service -Name $ServiceName -Force -NoWait -ErrorAction SilentlyContinue
-        Get-Process -Name "mm-host", "mm-con-host", "mm" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Get-Process -Name "mm-host", "mmttyhost", "mm" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 500
         sc.exe delete $ServiceName | Out-Null
         Start-Sleep -Milliseconds 500
     }
 
-    # Create service that runs mm.exe --service
-    # mm.exe spawns mm-con-host per terminal session (for correct ConPTY in user session)
+    # Create service - mm.exe spawns mmttyhost per terminal session
     Write-Host "Creating MiddleManager service..." -ForegroundColor Gray
-    $binPathWithService = "`"$webBinaryPath`" --service"
-    sc.exe create $ServiceName binPath= $binPathWithService start= auto DisplayName= "$DisplayName" | Out-Null
+    $binPath = "`"$webBinaryPath`""
+    sc.exe create $ServiceName binPath= $binPath start= auto DisplayName= "$DisplayName" | Out-Null
     sc.exe description $ServiceName "Web-based terminal multiplexer for AI coding agents and TUI apps" | Out-Null
 
     # Start service

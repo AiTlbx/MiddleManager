@@ -5,21 +5,15 @@ namespace Ai.Tlbx.MiddleManager.Services;
 
 public sealed class MuxWebSocketHandler
 {
-    private readonly ConHostSessionManager? _conHostManager;
-    private readonly SessionManager? _directManager;
-    private readonly ConHostMuxConnectionManager? _conHostMuxManager;
-    private readonly MuxConnectionManager? _directMuxManager;
+    private readonly ConHostSessionManager _sessionManager;
+    private readonly ConHostMuxConnectionManager _muxManager;
 
     public MuxWebSocketHandler(
-        ConHostSessionManager? conHostManager,
-        SessionManager? directManager,
-        ConHostMuxConnectionManager? conHostMuxManager,
-        MuxConnectionManager? directMuxManager)
+        ConHostSessionManager sessionManager,
+        ConHostMuxConnectionManager muxManager)
     {
-        _conHostManager = conHostManager;
-        _directManager = directManager;
-        _conHostMuxManager = conHostMuxManager;
-        _directMuxManager = directMuxManager;
+        _sessionManager = sessionManager;
+        _muxManager = muxManager;
     }
 
     public async Task HandleAsync(HttpContext context)
@@ -27,9 +21,7 @@ public sealed class MuxWebSocketHandler
         using var ws = await context.WebSockets.AcceptWebSocketAsync();
         var clientId = Guid.NewGuid().ToString("N");
 
-        var client = _conHostMuxManager is not null
-            ? _conHostMuxManager.AddClient(clientId, ws)
-            : _directMuxManager!.AddClient(clientId, ws);
+        var client = _muxManager.AddClient(clientId, ws);
 
         try
         {
@@ -39,7 +31,7 @@ public sealed class MuxWebSocketHandler
         }
         finally
         {
-            await RemoveClientAsync(clientId);
+            await _muxManager.RemoveClientAsync(clientId);
             await CloseWebSocketAsync(ws);
         }
     }
@@ -55,37 +47,21 @@ public sealed class MuxWebSocketHandler
 
     private async Task SendInitialBuffersAsync(MuxClient client)
     {
-        if (_conHostManager is not null)
+        var sessions = _sessionManager.GetAllSessions();
+        foreach (var sessionInfo in sessions)
         {
-            var sessions = _conHostManager.GetAllSessions();
-            foreach (var sessionInfo in sessions)
+            try
             {
-                try
+                var buffer = await _sessionManager.GetBufferAsync(sessionInfo.Id);
+                if (buffer is not null && buffer.Length > 0)
                 {
-                    var buffer = await _conHostManager.GetBufferAsync(sessionInfo.Id);
-                    if (buffer is not null && buffer.Length > 0)
-                    {
-                        var frame = MuxProtocol.CreateOutputFrame(sessionInfo.Id, sessionInfo.Cols, sessionInfo.Rows, buffer);
-                        await client.TrySendAsync(frame);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    DebugLogger.Log($"[MuxHandler] Failed to get buffer for {sessionInfo.Id}: {ex.Message}");
-                }
-            }
-        }
-        else
-        {
-            foreach (var session in _directManager!.Sessions)
-            {
-                var buffer = session.GetBuffer();
-                if (!string.IsNullOrEmpty(buffer))
-                {
-                    var bufferBytes = Encoding.UTF8.GetBytes(buffer);
-                    var frame = MuxProtocol.CreateOutputFrame(session.Id, session.Cols, session.Rows, bufferBytes);
+                    var frame = MuxProtocol.CreateOutputFrame(sessionInfo.Id, sessionInfo.Cols, sessionInfo.Rows, buffer);
                     await client.TrySendAsync(frame);
                 }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log($"[MuxHandler] Failed to get buffer for {sessionInfo.Id}: {ex.Message}");
             }
         }
     }
@@ -160,40 +136,13 @@ public sealed class MuxWebSocketHandler
                 {
                     DebugLogger.Log($"[WS-INPUT] {sessionId}: {BitConverter.ToString(payload.ToArray())}");
                 }
-
-                if (_conHostMuxManager is not null)
-                {
-                    await _conHostMuxManager.HandleInputAsync(sessionId, new ReadOnlyMemory<byte>(payload.ToArray()));
-                }
-                else
-                {
-                    await _directMuxManager!.HandleInputAsync(sessionId, payload.ToArray());
-                }
+                await _muxManager.HandleInputAsync(sessionId, new ReadOnlyMemory<byte>(payload.ToArray()));
                 break;
 
             case MuxProtocol.TypeResize:
                 var (cols, rows) = MuxProtocol.ParseResizePayload(payload);
-                if (_conHostMuxManager is not null)
-                {
-                    await _conHostMuxManager.HandleResizeAsync(sessionId, cols, rows);
-                }
-                else
-                {
-                    _directMuxManager!.HandleResize(sessionId, cols, rows);
-                }
+                await _muxManager.HandleResizeAsync(sessionId, cols, rows);
                 break;
-        }
-    }
-
-    private async Task RemoveClientAsync(string clientId)
-    {
-        if (_conHostMuxManager is not null)
-        {
-            await _conHostMuxManager.RemoveClientAsync(clientId);
-        }
-        else
-        {
-            await _directMuxManager!.RemoveClientAsync(clientId);
         }
     }
 

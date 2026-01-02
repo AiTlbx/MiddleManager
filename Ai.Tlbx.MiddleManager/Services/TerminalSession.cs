@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Text;
 using Ai.Tlbx.MiddleManager.Pty;
-using Ai.Tlbx.MiddleManager.Shells;
+using Ai.Tlbx.MiddleManager.Common.Shells;
 
 namespace Ai.Tlbx.MiddleManager.Services
 {

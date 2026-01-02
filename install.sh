@@ -7,8 +7,9 @@ set -e
 REPO_OWNER="AiTlbx"
 REPO_NAME="MiddleManager"
 SERVICE_NAME="middlemanager"
-OLD_HOST_SERVICE_NAME="middlemanager-host"
 LAUNCHD_LABEL="com.aitlbx.middlemanager"
+# Legacy service names for migration
+OLD_HOST_SERVICE_NAME="middlemanager-host"
 OLD_LAUNCHD_HOST_LABEL="com.aitlbx.middlemanager-host"
 
 # Colors
@@ -232,10 +233,10 @@ install_binary() {
     cp "$temp_dir/mm" "$install_dir/"
     chmod +x "$install_dir/mm"
 
-    # Copy host binary
-    if [ -f "$temp_dir/mm-host" ]; then
-        cp "$temp_dir/mm-host" "$install_dir/"
-        chmod +x "$install_dir/mm-host"
+    # Copy con-host binary (terminal subprocess)
+    if [ -f "$temp_dir/mmttyhost" ]; then
+        cp "$temp_dir/mmttyhost" "$install_dir/"
+        chmod +x "$install_dir/mmttyhost"
     fi
 
     # Copy version manifest
@@ -245,6 +246,9 @@ install_binary() {
 
     # Cleanup
     rm -rf "$temp_dir"
+
+    # Remove legacy mm-host if present (from pre-v4)
+    rm -f "$install_dir/mm-host"
 }
 
 install_as_service() {
@@ -304,15 +308,14 @@ install_launchd() {
     # Unload existing services if present
     launchctl unload "$plist_path" 2>/dev/null || true
 
-    # Migration: remove old host service from v2.1.x
+    # Migration: remove old host service from pre-v4
     if [ -f "$old_host_plist" ]; then
-        echo -e "${YELLOW}Migrating from old two-service architecture...${NC}"
+        echo -e "${YELLOW}Migrating from old architecture...${NC}"
         launchctl unload "$old_host_plist" 2>/dev/null || true
         rm -f "$old_host_plist"
     fi
 
-    # Create single service plist that runs mm-host --service
-    # mm-host will spawn and supervise mm.exe internally
+    # Create service plist
     cat > "$plist_path" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -322,8 +325,7 @@ install_launchd() {
     <string>${LAUNCHD_LABEL}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>${install_dir}/mm-host</string>
-        <string>--service</string>
+        <string>${install_dir}/mm</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -358,16 +360,15 @@ install_systemd() {
     systemctl stop "$SERVICE_NAME" 2>/dev/null || true
     systemctl disable "$SERVICE_NAME" 2>/dev/null || true
 
-    # Migration: remove old host service from v2.1.x
+    # Migration: remove old host service from pre-v4
     if [ -f "$old_host_service" ]; then
-        echo -e "${YELLOW}Migrating from old two-service architecture...${NC}"
+        echo -e "${YELLOW}Migrating from old architecture...${NC}"
         systemctl stop "$OLD_HOST_SERVICE_NAME" 2>/dev/null || true
         systemctl disable "$OLD_HOST_SERVICE_NAME" 2>/dev/null || true
         rm -f "$old_host_service"
     fi
 
-    # Create single service that runs mm-host --service
-    # mm-host will spawn and supervise mm internally
+    # Create systemd service
     cat > "$service_path" << EOF
 [Unit]
 Description=MiddleManager Terminal Server
@@ -375,7 +376,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=${install_dir}/mm-host --service
+ExecStart=${install_dir}/mm
 Restart=always
 RestartSec=5
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
@@ -409,11 +410,6 @@ install_as_user() {
     local lib_dir="$HOME/.local/lib/middlemanager"
     mkdir -p "$lib_dir"
 
-    # Move pty_helper if present
-    if [ -f "$install_dir/pty_helper" ]; then
-        mv "$install_dir/pty_helper" "$lib_dir/"
-    fi
-
     create_uninstall_script "$lib_dir" false
 
     echo ""
@@ -443,7 +439,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
     # macOS - unload service
     sudo launchctl unload /Library/LaunchDaemons/com.aitlbx.middlemanager.plist 2>/dev/null || true
     sudo rm -f /Library/LaunchDaemons/com.aitlbx.middlemanager.plist
-    # Cleanup old host service if present (from v2.1.x)
+    # Cleanup old host service if present (from pre-v4)
     sudo launchctl unload /Library/LaunchDaemons/com.aitlbx.middlemanager-host.plist 2>/dev/null || true
     sudo rm -f /Library/LaunchDaemons/com.aitlbx.middlemanager-host.plist
 else
@@ -451,7 +447,7 @@ else
     sudo systemctl stop middlemanager 2>/dev/null || true
     sudo systemctl disable middlemanager 2>/dev/null || true
     sudo rm -f /etc/systemd/system/middlemanager.service
-    # Cleanup old host service if present (from v2.1.x)
+    # Cleanup old host service if present (from pre-v4)
     sudo systemctl stop middlemanager-host 2>/dev/null || true
     sudo systemctl disable middlemanager-host 2>/dev/null || true
     sudo rm -f /etc/systemd/system/middlemanager-host.service
@@ -459,7 +455,8 @@ else
 fi
 
 sudo rm -f /usr/local/bin/mm
-sudo rm -f /usr/local/bin/mm-host
+sudo rm -f /usr/local/bin/mmttyhost
+sudo rm -f /usr/local/bin/mm-host  # legacy cleanup
 sudo rm -rf /usr/local/lib/middlemanager
 sudo rm -rf /usr/local/etc/middlemanager
 
@@ -475,7 +472,8 @@ set -e
 echo "Uninstalling MiddleManager..."
 
 rm -f "$HOME/.local/bin/mm"
-rm -f "$HOME/.local/bin/mm-host"
+rm -f "$HOME/.local/bin/mmttyhost"
+rm -f "$HOME/.local/bin/mm-host"  # legacy cleanup
 rm -rf "$HOME/.local/lib/middlemanager"
 
 echo "MiddleManager uninstalled."

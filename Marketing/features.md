@@ -54,7 +54,7 @@ Current feature set as of v2.4.x.
 | Feature | Details |
 |---------|---------|
 | Web server | Kestrel (ASP.NET Core), embedded static files |
-| PTY handling | ConPTY (Windows via mm-con-host.exe), forkpty() (Unix) |
+| PTY handling | ConPTY (Windows), forkpty() (Unix) via mmttyhost |
 | Protocol | Binary WebSocket mux for terminal I/O, JSON WebSocket for state |
 | Settings | JSON file, platform-appropriate location |
 

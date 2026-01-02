@@ -1,88 +1,261 @@
 using System.Collections.Concurrent;
-using System.IO.Pipes;
+using System.Diagnostics;
+using Ai.Tlbx.MiddleManager.Common.Ipc;
+using Ai.Tlbx.MiddleManager.Common.Protocol;
 using Ai.Tlbx.MiddleManager.Models;
 
 namespace Ai.Tlbx.MiddleManager.Services;
 
 /// <summary>
-/// Manages mm-con-host processes. Spawns new sessions, discovers existing ones on startup.
+/// Manages mmttyhost processes. Spawns new sessions, discovers existing ones on startup.
 /// </summary>
 public sealed class ConHostSessionManager : IAsyncDisposable
 {
     private readonly ConcurrentDictionary<string, ConHostClient> _clients = new();
     private readonly ConcurrentDictionary<string, SessionInfo> _sessionCache = new();
     private readonly ConcurrentDictionary<string, Action> _stateListeners = new();
+    private readonly string? _expectedConHostVersion;
+    private readonly string? _minCompatibleVersion;
     private bool _disposed;
 
     public event Action<string, int, int, ReadOnlyMemory<byte>>? OnOutput;
     public event Action<string>? OnStateChanged;
 
+    public ConHostSessionManager(string? expectedVersion = null, string? minCompatibleVersion = null)
+    {
+        _expectedConHostVersion = expectedVersion ?? ConHostSpawner.GetConHostVersion();
+        _minCompatibleVersion = minCompatibleVersion ?? GetMinCompatibleVersionFromManifest();
+    }
+
+    private static string? GetMinCompatibleVersionFromManifest()
+    {
+        try
+        {
+            using var updateService = new UpdateService();
+            return updateService.InstalledManifest.MinCompatiblePty;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     /// <summary>
-    /// Discover and connect to existing mm-con-host sessions.
-    /// Called on startup to reconnect to sessions from previous mm.exe instance.
+    /// Discover and connect to existing mmttyhost sessions.
+    /// Kills incompatible or unresponsive processes, cleans up stale endpoints.
     /// </summary>
     public async Task DiscoverExistingSessionsAsync(CancellationToken ct = default)
     {
         Console.WriteLine("[ConHostSessionManager] Discovering existing sessions...");
 
-        var pipeDir = @"\\.\pipe\";
-        var existingPipes = new List<string>();
+        // Step 1: Find all mmttyhost processes and IPC endpoints
+        var runningProcesses = GetRunningConHostProcesses();
+        var existingEndpoints = GetExistingEndpoints();
+
+        Console.WriteLine($"[ConHostSessionManager] Found {runningProcesses.Count} mmttyhost processes, {existingEndpoints.Count} IPC endpoints");
+
+        // Step 2: Try to connect to each endpoint
+        var connectedSessions = new HashSet<string>();
+        var orphanedProcessPids = new HashSet<int>(runningProcesses.Keys);
+
+        foreach (var sessionId in existingEndpoints)
+        {
+            if (ct.IsCancellationRequested) break;
+            if (_clients.ContainsKey(sessionId)) continue;
+
+            var result = await TryConnectToSessionAsync(sessionId, ct).ConfigureAwait(false);
+
+            switch (result)
+            {
+                case DiscoveryResult.Connected connected:
+                    connectedSessions.Add(sessionId);
+                    if (connected.Pid > 0)
+                    {
+                        orphanedProcessPids.Remove(connected.Pid);
+                    }
+                    break;
+
+                case DiscoveryResult.Incompatible incompatible:
+                    Console.WriteLine($"[ConHostSessionManager] Session {sessionId} incompatible (v{incompatible.Version}), killing");
+                    KillProcess(incompatible.Pid);
+                    orphanedProcessPids.Remove(incompatible.Pid);
+                    CleanupEndpoint(sessionId);
+                    break;
+
+                case DiscoveryResult.Unresponsive unresponsive:
+                    Console.WriteLine($"[ConHostSessionManager] Session {sessionId} unresponsive, killing");
+                    if (unresponsive.Pid > 0)
+                    {
+                        KillProcess(unresponsive.Pid);
+                        orphanedProcessPids.Remove(unresponsive.Pid);
+                    }
+                    CleanupEndpoint(sessionId);
+                    break;
+
+                case DiscoveryResult.NoProcess:
+                    Console.WriteLine($"[ConHostSessionManager] Session {sessionId} has stale endpoint, cleaning up");
+                    CleanupEndpoint(sessionId);
+                    break;
+            }
+        }
+
+        // Step 3: Kill any orphaned mmttyhost processes (no matching endpoint or couldn't connect)
+        foreach (var pid in orphanedProcessPids)
+        {
+            Console.WriteLine($"[ConHostSessionManager] Killing orphaned mmttyhost (PID: {pid})");
+            KillProcess(pid);
+        }
+
+        Console.WriteLine($"[ConHostSessionManager] Discovered {_clients.Count} active sessions");
+    }
+
+    private async Task<DiscoveryResult> TryConnectToSessionAsync(string sessionId, CancellationToken ct)
+    {
+        var client = new ConHostClient(sessionId);
 
         try
         {
-            foreach (var pipePath in Directory.GetFiles(pipeDir))
+            // Short timeout for discovery - don't wait forever
+            if (!await client.ConnectAsync(1500, ct).ConfigureAwait(false))
             {
-                var pipeName = Path.GetFileName(pipePath);
-                if (pipeName.StartsWith("mm-con-"))
+                await client.DisposeAsync().ConfigureAwait(false);
+                return new DiscoveryResult.NoProcess();
+            }
+
+            var info = await client.GetInfoAsync(ct).ConfigureAwait(false);
+            if (info is null)
+            {
+                await client.DisposeAsync().ConfigureAwait(false);
+                return new DiscoveryResult.Unresponsive(0);
+            }
+
+            // Check version compatibility
+            if (!IsVersionCompatible(info.ConHostVersion))
+            {
+                await client.DisposeAsync().ConfigureAwait(false);
+                return new DiscoveryResult.Incompatible(info.Pid, info.ConHostVersion);
+            }
+
+            // Success - register the client
+            SubscribeToClient(client);
+            client.StartReadLoop();
+            _clients[sessionId] = client;
+            _sessionCache[sessionId] = info;
+            Console.WriteLine($"[ConHostSessionManager] Reconnected to session {sessionId} (PID: {info.Pid})");
+
+            return new DiscoveryResult.Connected(info.Pid);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ConHostSessionManager] Failed to connect to {sessionId}: {ex.Message}");
+            DebugLogger.LogException($"ConHostSessionManager.TryConnect({sessionId})", ex);
+            await client.DisposeAsync().ConfigureAwait(false);
+            return new DiscoveryResult.Unresponsive(0);
+        }
+    }
+
+    private bool IsVersionCompatible(string? conHostVersion)
+    {
+        if (string.IsNullOrEmpty(conHostVersion)) return false;
+        if (conHostVersion == _expectedConHostVersion) return true;
+        if (_minCompatibleVersion is null) return false;
+
+        return UpdateService.CompareVersions(conHostVersion, _minCompatibleVersion) >= 0;
+    }
+
+    private static Dictionary<int, string> GetRunningConHostProcesses()
+    {
+        var result = new Dictionary<int, string>();
+
+        try
+        {
+            foreach (var proc in Process.GetProcessesByName("mmttyhost"))
+            {
+                try
                 {
-                    existingPipes.Add(pipeName);
+                    result[proc.Id] = proc.ProcessName;
+                }
+                catch { }
+                finally
+                {
+                    proc.Dispose();
                 }
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[ConHostSessionManager] Pipe enumeration failed: {ex.Message}");
-            DebugLogger.LogException("ConHostSessionManager.DiscoverExisting.PipeEnum", ex);
-            return;
+            Console.WriteLine($"[ConHostSessionManager] Process enumeration failed: {ex.Message}");
         }
 
-        Console.WriteLine($"[ConHostSessionManager] Found {existingPipes.Count} existing session pipes");
+        return result;
+    }
 
-        foreach (var pipeName in existingPipes)
+    private static List<string> GetExistingEndpoints()
+    {
+        var endpoints = new List<string>();
+
+        try
         {
-            if (ct.IsCancellationRequested) break;
-
-            var sessionId = pipeName.Replace("mm-con-", "");
-            if (_clients.ContainsKey(sessionId)) continue;
-
-            try
+#if WINDOWS
+            var pipeDir = @"\\.\pipe\";
+            foreach (var pipePath in Directory.GetFiles(pipeDir))
             {
-                var client = new ConHostClient(sessionId);
-                if (await client.ConnectAsync(2000, ct).ConfigureAwait(false))
+                var pipeName = Path.GetFileName(pipePath);
+                if (pipeName.StartsWith("mm-con-"))
                 {
-                    var info = await client.GetInfoAsync(ct).ConfigureAwait(false);
-                    if (info is not null)
+                    endpoints.Add(pipeName.Replace("mm-con-", ""));
+                }
+            }
+#else
+            const string socketDir = "/tmp";
+            if (Directory.Exists(socketDir))
+            {
+                foreach (var socketPath in Directory.GetFiles(socketDir, "mm-con-*.sock"))
+                {
+                    var fileName = Path.GetFileNameWithoutExtension(socketPath);
+                    if (fileName.StartsWith("mm-con-"))
                     {
-                        SubscribeToClient(client);
-                        client.StartReadLoop();
-                        _clients[sessionId] = client;
-                        _sessionCache[sessionId] = info;
-                        Console.WriteLine($"[ConHostSessionManager] Reconnected to session {sessionId}");
-                    }
-                    else
-                    {
-                        await client.DisposeAsync().ConfigureAwait(false);
+                        endpoints.Add(fileName.Replace("mm-con-", ""));
                     }
                 }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[ConHostSessionManager] Failed to reconnect to {sessionId}: {ex.Message}");
-                DebugLogger.LogException($"ConHostSessionManager.DiscoverExisting.Reconnect({sessionId})", ex);
-            }
+#endif
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ConHostSessionManager] Endpoint enumeration failed: {ex.Message}");
         }
 
-        Console.WriteLine($"[ConHostSessionManager] Discovered {_clients.Count} active sessions");
+        return endpoints;
+    }
+
+    private static void CleanupEndpoint(string sessionId)
+    {
+        try
+        {
+#if WINDOWS
+            // Named pipes are automatically cleaned up when the process exits
+#else
+            var socketPath = $"/tmp/mm-con-{sessionId}.sock";
+            if (File.Exists(socketPath))
+            {
+                File.Delete(socketPath);
+                Console.WriteLine($"[ConHostSessionManager] Removed stale socket: {socketPath}");
+            }
+#endif
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ConHostSessionManager] Failed to cleanup endpoint {sessionId}: {ex.Message}");
+        }
+    }
+
+    private abstract record DiscoveryResult
+    {
+        public sealed record Connected(int Pid) : DiscoveryResult;
+        public sealed record Incompatible(int Pid, string? Version) : DiscoveryResult;
+        public sealed record Unresponsive(int Pid) : DiscoveryResult;
+        public sealed record NoProcess() : DiscoveryResult;
     }
 
     public async Task<SessionInfo?> CreateSessionAsync(
@@ -94,19 +267,12 @@ public sealed class ConHostSessionManager : IAsyncDisposable
     {
         var sessionId = Guid.NewGuid().ToString("N")[..8];
 
-#if !WINDOWS
-        // TODO: Unix spawner
-        Console.WriteLine("[ConHostSessionManager] Unix spawner not implemented");
-        return null;
-#else
-#pragma warning disable CA1416 // Platform compatibility - already guarded by #if !WINDOWS early return
         if (!ConHostSpawner.SpawnConHost(sessionId, shellType, workingDirectory, cols, rows, DebugLogger.Enabled, out var processId))
         {
             return null;
         }
-#pragma warning restore CA1416
 
-        // Wait for pipe to become available
+        // Wait for IPC endpoint to become available
         await Task.Delay(500, ct).ConfigureAwait(false);
 
         // Connect to the new session
@@ -150,7 +316,6 @@ public sealed class ConHostSessionManager : IAsyncDisposable
         NotifyStateChange();
 
         return info;
-#endif
     }
 
     public SessionInfo? GetSession(string sessionId)

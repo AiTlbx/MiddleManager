@@ -1,4 +1,4 @@
-using Ai.Tlbx.MiddleManager.Shells;
+using Ai.Tlbx.MiddleManager.Common.Shells;
 
 namespace Ai.Tlbx.MiddleManager.Settings
 {

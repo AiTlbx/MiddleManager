@@ -1,15 +1,15 @@
+using System.Diagnostics;
 #if WINDOWS
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+#endif
 
 namespace Ai.Tlbx.MiddleManager.Services;
 
 /// <summary>
-/// Spawns mm-con-host processes. When running as SYSTEM (service mode),
-/// uses CreateProcessAsUser to spawn in user session for correct ConPTY behavior.
+/// Spawns mmttyhost processes. Cross-platform with special handling for Windows service mode.
 /// </summary>
-[SupportedOSPlatform("windows")]
-public sealed class ConHostSpawner
+public static class ConHostSpawner
 {
     private static readonly string ConHostPath = GetConHostPath();
 
@@ -22,7 +22,7 @@ public sealed class ConHostSpawner
 
         try
         {
-            var versionInfo = System.Diagnostics.FileVersionInfo.GetVersionInfo(ConHostPath);
+            var versionInfo = FileVersionInfo.GetVersionInfo(ConHostPath);
             return versionInfo.ProductVersion ?? versionInfo.FileVersion;
         }
         catch
@@ -44,21 +44,19 @@ public sealed class ConHostSpawner
 
         if (!File.Exists(ConHostPath))
         {
-            Console.WriteLine($"[ConHostSpawner] mm-con-host not found at: {ConHostPath}");
+            Console.WriteLine($"[ConHostSpawner] mmttyhost not found at: {ConHostPath}");
             return false;
         }
 
         var args = BuildArgs(sessionId, shellType, workingDirectory, cols, rows, debug);
-        var commandLine = $"\"{ConHostPath}\" {args}";
 
-        if (IsRunningAsSystem())
-        {
-            return SpawnAsUser(commandLine, out processId);
-        }
-        else
-        {
-            return SpawnDirect(commandLine, out processId);
-        }
+#pragma warning disable CA1416 // Validate platform compatibility (compile-time guard via WINDOWS constant)
+#if WINDOWS
+        return SpawnWindows(args, out processId);
+#else
+        return SpawnUnix(args, out processId);
+#endif
+#pragma warning restore CA1416
     }
 
     private static string BuildArgs(string sessionId, string? shellType, string? workingDirectory, int cols, int rows, bool debug)
@@ -79,6 +77,61 @@ public sealed class ConHostSpawner
         return args;
     }
 
+#if !WINDOWS
+    private static bool SpawnUnix(string args, out int processId)
+    {
+        processId = 0;
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = ConHostPath,
+                Arguments = args,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardInput = false,
+                RedirectStandardOutput = false,
+                RedirectStandardError = false
+            };
+
+            var process = Process.Start(psi);
+            if (process is null)
+            {
+                Console.WriteLine("[ConHostSpawner] Process.Start returned null");
+                return false;
+            }
+
+            processId = process.Id;
+            Console.WriteLine($"[ConHostSpawner] Spawned mmttyhost (PID: {processId})");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ConHostSpawner] Failed to spawn: {ex.Message}");
+            return false;
+        }
+    }
+#endif
+
+#if WINDOWS
+    [SupportedOSPlatform("windows")]
+    private static bool SpawnWindows(string args, out int processId)
+    {
+        processId = 0;
+        var commandLine = $"\"{ConHostPath}\" {args}";
+
+        if (IsRunningAsSystem())
+        {
+            return SpawnAsUser(commandLine, out processId);
+        }
+        else
+        {
+            return SpawnDirect(commandLine, out processId);
+        }
+    }
+
+    [SupportedOSPlatform("windows")]
     private static bool SpawnDirect(string commandLine, out int processId)
     {
         processId = 0;
@@ -108,10 +161,11 @@ public sealed class ConHostSpawner
         CloseHandle(pi.hThread);
         CloseHandle(pi.hProcess);
 
-        Console.WriteLine($"[ConHostSpawner] Spawned mm-con-host (PID: {processId})");
+        Console.WriteLine($"[ConHostSpawner] Spawned mmttyhost (PID: {processId})");
         return true;
     }
 
+    [SupportedOSPlatform("windows")]
     private static bool SpawnAsUser(string commandLine, out int processId)
     {
         processId = 0;
@@ -170,7 +224,7 @@ public sealed class ConHostSpawner
                     CloseHandle(pi.hThread);
                     CloseHandle(pi.hProcess);
 
-                    Console.WriteLine($"[ConHostSpawner] Spawned mm-con-host as user (PID: {processId}, Session: {sessionId})");
+                    Console.WriteLine($"[ConHostSpawner] Spawned mmttyhost as user (PID: {processId}, Session: {sessionId})");
                     return true;
                 }
                 finally
@@ -189,6 +243,7 @@ public sealed class ConHostSpawner
         }
     }
 
+    [SupportedOSPlatform("windows")]
     private static bool IsRunningAsSystem()
     {
         try
@@ -201,6 +256,7 @@ public sealed class ConHostSpawner
             return false;
         }
     }
+#endif
 
     private static string GetConHostPath()
     {
@@ -216,16 +272,23 @@ public sealed class ConHostSpawner
             return string.Empty;
         }
 
+        var exeName = OperatingSystem.IsWindows() ? "mmttyhost.exe" : "mmttyhost";
+
         // Check same directory first (production/published builds)
-        var sameDirPath = Path.Combine(dir, "mm-con-host.exe");
+        var sameDirPath = Path.Combine(dir, exeName);
         if (File.Exists(sameDirPath))
         {
             return sameDirPath;
         }
 
-        // Development fallback: check sibling ConHost project's output
+        // Development fallback: check sibling TtyHost project's output
         var repoRoot = Path.GetFullPath(Path.Combine(dir, "..", "..", "..", ".."));
-        var devPath = Path.Combine(repoRoot, "Ai.Tlbx.MiddleManager.ConHost", "bin", "Debug", "net10.0", "win-x64", "mm-con-host.exe");
+#if WINDOWS
+        var devPath = Path.Combine(repoRoot, "Ai.Tlbx.MiddleManager.TtyHost", "bin", "Debug", "net10.0", "win-x64", exeName);
+#else
+        var rid = OperatingSystem.IsMacOS() ? "osx-arm64" : "linux-x64";
+        var devPath = Path.Combine(repoRoot, "Ai.Tlbx.MiddleManager.TtyHost", "bin", "Debug", "net10.0", rid, exeName);
+#endif
         if (File.Exists(devPath))
         {
             return devPath;
@@ -234,6 +297,7 @@ public sealed class ConHostSpawner
         return sameDirPath;
     }
 
+#if WINDOWS
     #region P/Invoke
 
     private const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
@@ -316,5 +380,5 @@ public sealed class ConHostSpawner
     }
 
     #endregion
-}
 #endif
+}

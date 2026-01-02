@@ -115,11 +115,11 @@ export function updateConHostWarning(health: HealthResponse): void {
 
   if (health.conHostVersion && healthAny.conHostCompatible === false) {
     banner.innerHTML =
-      '<strong>Version mismatch:</strong> mm-con-host is ' +
+      '<strong>Version mismatch:</strong> mmttyhost is ' +
       health.conHostVersion +
       ', expected ' +
       healthAny.conHostExpected +
-      '. Terminals may not work correctly. Please update mm-con-host.exe or restart the service.';
+      '. Terminals may not work correctly. Please update mmttyhost.exe or restart the service.';
     banner.style.display = 'block';
   } else {
     banner.style.display = 'none';
@@ -153,7 +153,7 @@ export function fetchSystemStatus(): void {
         const versionClass = health.conHostCompatible ? '' : 'status-error';
         conHostHtml =
           '<div class="status-detail-row">' +
-          '<span class="detail-label">mm-con-host</span>' +
+          '<span class="detail-label">mmttyhost</span>' +
           '<span class="detail-value ' +
           versionClass +
           '">' +

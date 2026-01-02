@@ -1,6 +1,6 @@
-using System.Text;
+using Ai.Tlbx.MiddleManager.Common.Protocol;
 using Ai.Tlbx.MiddleManager.Models;
-using Ai.Tlbx.MiddleManager.Shells;
+using Ai.Tlbx.MiddleManager.Common.Shells;
 
 namespace Ai.Tlbx.MiddleManager.Services;
 
@@ -8,16 +8,11 @@ public static class SessionApiEndpoints
 {
     public static void MapSessionEndpoints(
         WebApplication app,
-        ConHostSessionManager? conHostManager,
-        SessionManager? directManager)
+        ConHostSessionManager sessionManager)
     {
         app.MapGet("/api/sessions", () =>
         {
-            if (conHostManager is not null)
-            {
-                return Results.Json(conHostManager.GetSessionList(), AppJsonContext.Default.SessionListDto);
-            }
-            return Results.Json(directManager!.GetSessionList(), AppJsonContext.Default.SessionListDto);
+            return Results.Json(sessionManager.GetSessionList(), AppJsonContext.Default.SessionListDto);
         });
 
         app.MapPost("/api/sessions", async (CreateSessionRequest? request) =>
@@ -31,125 +26,57 @@ public static class SessionApiEndpoints
                 shellType = parsed;
             }
 
-            if (conHostManager is not null)
-            {
-                var sessionInfo = await conHostManager.CreateSessionAsync(
-                    shellType?.ToString(), cols, rows, request?.WorkingDirectory);
+            var sessionInfo = await sessionManager.CreateSessionAsync(
+                shellType?.ToString(), cols, rows, request?.WorkingDirectory);
 
-                if (sessionInfo is null)
-                {
-                    return Results.Problem("Failed to create session");
-                }
-
-                return Results.Json(MapToDto(sessionInfo), AppJsonContext.Default.SessionInfoDto);
-            }
-            else
+            if (sessionInfo is null)
             {
-                var session = directManager!.CreateSession(cols, rows, shellType);
-                return Results.Json(new SessionInfoDto
-                {
-                    Id = session.Id,
-                    Pid = session.Pid,
-                    CreatedAt = session.CreatedAt,
-                    IsRunning = session.IsRunning,
-                    ExitCode = session.ExitCode,
-                    CurrentWorkingDirectory = session.CurrentWorkingDirectory,
-                    Cols = session.Cols,
-                    Rows = session.Rows,
-                    ShellType = session.ShellType.ToString(),
-                    Name = session.Name
-                }, AppJsonContext.Default.SessionInfoDto);
+                return Results.Problem("Failed to create session");
             }
+
+            return Results.Json(MapToDto(sessionInfo), AppJsonContext.Default.SessionInfoDto);
         });
 
         app.MapDelete("/api/sessions/{id}", async (string id) =>
         {
-            if (conHostManager is not null)
-            {
-                await conHostManager.CloseSessionAsync(id);
-            }
-            else
-            {
-                directManager!.CloseSession(id);
-            }
+            await sessionManager.CloseSessionAsync(id);
             return Results.Ok();
         });
 
         app.MapPost("/api/sessions/{id}/resize", async (string id, ResizeRequest request) =>
         {
-            if (conHostManager is not null)
+            var session = sessionManager.GetSession(id);
+            if (session is null)
             {
-                var session = conHostManager.GetSession(id);
-                if (session is null)
-                {
-                    return Results.NotFound();
-                }
-                await conHostManager.ResizeSessionAsync(id, request.Cols, request.Rows);
-                return Results.Json(new ResizeResponse
-                {
-                    Accepted = true,
-                    Cols = request.Cols,
-                    Rows = request.Rows
-                }, AppJsonContext.Default.ResizeResponse);
+                return Results.NotFound();
             }
-            else
+            await sessionManager.ResizeSessionAsync(id, request.Cols, request.Rows);
+            return Results.Json(new ResizeResponse
             {
-                var session = directManager!.GetSession(id);
-                if (session is null)
-                {
-                    return Results.NotFound();
-                }
-                var accepted = session.Resize(request.Cols, request.Rows);
-                return Results.Json(new ResizeResponse
-                {
-                    Accepted = accepted,
-                    Cols = session.Cols,
-                    Rows = session.Rows
-                }, AppJsonContext.Default.ResizeResponse);
-            }
+                Accepted = true,
+                Cols = request.Cols,
+                Rows = request.Rows
+            }, AppJsonContext.Default.ResizeResponse);
         });
 
         app.MapGet("/api/sessions/{id}/buffer", async (string id) =>
         {
-            if (conHostManager is not null)
+            var session = sessionManager.GetSession(id);
+            if (session is null)
             {
-                var session = conHostManager.GetSession(id);
-                if (session is null)
-                {
-                    return Results.NotFound();
-                }
-                var buffer = await conHostManager.GetBufferAsync(id);
-                return Results.Bytes(buffer ?? []);
+                return Results.NotFound();
             }
-            else
-            {
-                var session = directManager!.GetSession(id);
-                if (session is null)
-                {
-                    return Results.NotFound();
-                }
-                return Results.Text(session.GetBuffer());
-            }
+            var buffer = await sessionManager.GetBufferAsync(id);
+            return Results.Bytes(buffer ?? []);
         });
 
         app.MapPut("/api/sessions/{id}/name", async (string id, RenameSessionRequest request) =>
         {
-            if (conHostManager is not null)
+            if (!await sessionManager.SetSessionNameAsync(id, request.Name))
             {
-                if (!await conHostManager.SetSessionNameAsync(id, request.Name))
-                {
-                    return Results.NotFound();
-                }
-                return Results.Ok();
+                return Results.NotFound();
             }
-            else
-            {
-                if (!directManager!.RenameSession(id, request.Name))
-                {
-                    return Results.NotFound();
-                }
-                return Results.Ok();
-            }
+            return Results.Ok();
         });
     }
 

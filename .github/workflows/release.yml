@@ -8,8 +8,7 @@ on:
 env:
   DOTNET_VERSION: '10.0.x'
   WEB_PROJECT: Ai.Tlbx.MiddleManager/Ai.Tlbx.MiddleManager.csproj
-  HOST_PROJECT: Ai.Tlbx.MiddleManager.Host/Ai.Tlbx.MiddleManager.Host.csproj
-  CONHOST_PROJECT: Ai.Tlbx.MiddleManager.ConHost/Ai.Tlbx.MiddleManager.ConHost.csproj
+  TTYHOST_PROJECT: Ai.Tlbx.MiddleManager.TtyHost/Ai.Tlbx.MiddleManager.TtyHost.csproj
 
 jobs:
   build:
@@ -18,12 +17,16 @@ jobs:
         include:
           - os: macos-14
             rid: osx-arm64
+            ext: ''
           - os: macos-14
             rid: osx-x64
+            ext: ''
           - os: windows-latest
             rid: win-x64
+            ext: '.exe'
           - os: ubuntu-latest
             rid: linux-x64
+            ext: ''
 
     runs-on: ${{ matrix.os }}
 
@@ -47,32 +50,18 @@ jobs:
       - name: Publish Web Server (mm)
         run: dotnet publish ${{ env.WEB_PROJECT }} -c Release -r ${{ matrix.rid }} /p:IsPublishing=true
 
-      - name: Publish PTY Host (mm-host)
-        run: dotnet publish ${{ env.HOST_PROJECT }} -c Release -r ${{ matrix.rid }} /p:IsPublishing=true
-
-      - name: Publish ConHost (mm-con-host) - Windows only
-        if: matrix.rid == 'win-x64'
-        run: dotnet publish ${{ env.CONHOST_PROJECT }} -c Release -r ${{ matrix.rid }} /p:IsPublishing=true
+      - name: Publish TtyHost (mmttyhost)
+        run: dotnet publish ${{ env.TTYHOST_PROJECT }} -c Release -r ${{ matrix.rid }} /p:IsPublishing=true
 
       - name: Create staging directory
         shell: bash
         run: mkdir -p staging
 
-      - name: Stage binaries (Windows)
-        if: matrix.rid == 'win-x64'
+      - name: Stage binaries
         shell: bash
         run: |
-          cp Ai.Tlbx.MiddleManager/bin/Release/net10.0/${{ matrix.rid }}/publish/mm.exe staging/
-          cp Ai.Tlbx.MiddleManager.Host/bin/Release/net10.0/${{ matrix.rid }}/publish/mm-host.exe staging/
-          cp Ai.Tlbx.MiddleManager.ConHost/bin/Release/net10.0/${{ matrix.rid }}/publish/mm-con-host.exe staging/
-          cp version.json staging/
-
-      - name: Stage binaries (Unix)
-        if: matrix.rid != 'win-x64'
-        shell: bash
-        run: |
-          cp Ai.Tlbx.MiddleManager/bin/Release/net10.0/${{ matrix.rid }}/publish/mm staging/
-          cp Ai.Tlbx.MiddleManager.Host/bin/Release/net10.0/${{ matrix.rid }}/publish/mm-host staging/
+          cp Ai.Tlbx.MiddleManager/bin/Release/net10.0/${{ matrix.rid }}/publish/mm${{ matrix.ext }} staging/
+          cp Ai.Tlbx.MiddleManager.TtyHost/bin/Release/net10.0/${{ matrix.rid }}/publish/mmttyhost${{ matrix.ext }} staging/
           cp version.json staging/
 
       - name: Upload artifacts
@@ -101,13 +90,13 @@ jobs:
       - name: Package artifacts
         run: |
           cd artifacts
-          # Windows (includes mm-con-host for new architecture)
-          cd win-x64 && zip ../mm-win-x64.zip mm.exe mm-host.exe mm-con-host.exe version.json && cd ..
+          # Windows
+          cd win-x64 && zip ../mm-win-x64.zip mm.exe mmttyhost.exe version.json && cd ..
           # macOS
-          cd osx-arm64 && tar -czvf ../mm-osx-arm64.tar.gz mm mm-host version.json && cd ..
-          cd osx-x64 && tar -czvf ../mm-osx-x64.tar.gz mm mm-host version.json && cd ..
+          cd osx-arm64 && tar -czvf ../mm-osx-arm64.tar.gz mm mmttyhost version.json && cd ..
+          cd osx-x64 && tar -czvf ../mm-osx-x64.tar.gz mm mmttyhost version.json && cd ..
           # Linux
-          cd linux-x64 && tar -czvf ../mm-linux-x64.tar.gz mm mm-host version.json && cd ..
+          cd linux-x64 && tar -czvf ../mm-linux-x64.tar.gz mm mmttyhost version.json && cd ..
 
       - name: Generate changelog
         id: changelog
