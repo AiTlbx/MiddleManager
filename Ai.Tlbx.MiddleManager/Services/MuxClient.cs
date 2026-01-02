@@ -5,7 +5,8 @@ namespace Ai.Tlbx.MiddleManager.Services;
 
 public sealed class MuxClient : IAsyncDisposable
 {
-    private const int ResyncThreshold = 200;
+    private const int FrameCountThreshold = 100;
+    private const int TimeThresholdMs = 5000; // 5 seconds behind = resync
 
     private readonly SemaphoreSlim _sendLock = new(1, 1);
     private readonly Channel<byte[]> _outputQueue;
@@ -14,6 +15,7 @@ public sealed class MuxClient : IAsyncDisposable
     private readonly Task _outputProcessor;
     private volatile bool _needsResync;
     private volatile bool _isResyncing;
+    private long _queueStartTicks; // When queue became non-empty
 
     public string Id { get; }
     public WebSocket WebSocket { get; }
@@ -47,15 +49,30 @@ public sealed class MuxClient : IAsyncDisposable
             return;
         }
 
-        // Check if queue is backing up - trigger resync
-        var count = _outputQueue.Reader.Count;
-        if (count >= ResyncThreshold && !_needsResync)
+        if (_needsResync)
         {
-            _needsResync = true;
-            DebugLogger.Log($"[MuxClient] {Id}: Queue backed up ({count} frames), will resync");
+            // Already flagged for resync, just queue
+            _outputQueue.Writer.TryWrite(frame);
+            return;
         }
 
-        // Always queue - we'll discard stale frames during resync
+        var count = _outputQueue.Reader.Count;
+        var now = Environment.TickCount64;
+
+        // Track when queue started having items
+        if (count == 0)
+        {
+            Interlocked.Exchange(ref _queueStartTicks, now);
+        }
+
+        // Check thresholds: frame count OR time behind
+        var queueAge = now - Interlocked.Read(ref _queueStartTicks);
+        if (count >= FrameCountThreshold || (count > 0 && queueAge > TimeThresholdMs))
+        {
+            _needsResync = true;
+            DebugLogger.Log($"[MuxClient] {Id}: Queue backed up ({count} frames, {queueAge}ms old), will resync");
+        }
+
         _outputQueue.Writer.TryWrite(frame);
     }
 
@@ -96,6 +113,12 @@ public sealed class MuxClient : IAsyncDisposable
             await foreach (var frame in _outputQueue.Reader.ReadAllAsync(ct))
             {
                 await SendDirectAsync(frame).ConfigureAwait(false);
+
+                // Reset timer when queue is drained
+                if (_outputQueue.Reader.Count == 0)
+                {
+                    Interlocked.Exchange(ref _queueStartTicks, 0);
+                }
             }
         }
         catch (OperationCanceledException)
