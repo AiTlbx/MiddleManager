@@ -40,20 +40,33 @@ public sealed class ConHostMuxConnectionManager
 
             // Use dimensions from the output event (embedded at capture time)
             var frame = MuxProtocol.CreateOutputFrame(sessionId, cols, rows, data);
+
+            // Send to all clients in PARALLEL - one slow client must not block others
+            var sendTasks = new List<Task>();
             foreach (var client in _clients.Values)
             {
-                try
+                if (client.WebSocket.State == WebSocketState.Open)
                 {
-                    if (client.WebSocket.State == WebSocketState.Open)
-                    {
-                        await client.SendAsync(frame).ConfigureAwait(false);
-                    }
-                }
-                catch
-                {
-                    // Client disconnected - ignore, it will be removed on next receive failure
+                    sendTasks.Add(SendToClientAsync(client, frame));
                 }
             }
+
+            if (sendTasks.Count > 0)
+            {
+                await Task.WhenAll(sendTasks).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static async Task SendToClientAsync(MuxClient client, byte[] frame)
+    {
+        try
+        {
+            await client.SendAsync(frame).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Client disconnected - ignore, it will be removed on next receive failure
         }
     }
 
@@ -86,12 +99,20 @@ public sealed class ConHostMuxConnectionManager
         var rows = sessionInfo?.Rows ?? 24;
 
         var frame = MuxProtocol.CreateOutputFrame(sessionId, cols, rows, data.Span);
+
+        // Send to all clients in PARALLEL
+        var sendTasks = new List<Task>();
         foreach (var client in _clients.Values)
         {
             if (client.WebSocket.State == WebSocketState.Open)
             {
-                await client.SendAsync(frame).ConfigureAwait(false);
+                sendTasks.Add(SendToClientAsync(client, frame));
             }
+        }
+
+        if (sendTasks.Count > 0)
+        {
+            await Task.WhenAll(sendTasks).ConfigureAwait(false);
         }
     }
 
