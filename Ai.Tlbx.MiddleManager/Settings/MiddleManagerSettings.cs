@@ -30,6 +30,7 @@ namespace Ai.Tlbx.MiddleManager.Settings
         public string Theme { get; set; } = "dark";
         public double MinimumContrastRatio { get; set; } = 1;
         public bool SmoothScrolling { get; set; } = false;
+        public bool UseWebGL { get; set; } = true;
 
         // Terminal Behavior
         public int ScrollbackLines { get; set; } = 10000;

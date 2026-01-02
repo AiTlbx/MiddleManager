@@ -59,6 +59,7 @@ export interface Settings {
   theme: ThemeName;
   minimumContrastRatio: number;
   smoothScrolling: boolean;
+  useWebGL: boolean;
   scrollbackLines: number;
   bellStyle: BellStyle;
   copyOnSelect: boolean;

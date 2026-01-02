@@ -153,14 +153,17 @@ export function createTerminalForSession(
     state.opened = true;
 
     // Load WebGL addon for GPU-accelerated rendering (with fallback)
-    try {
-      const webglAddon = new WebglAddon.WebglAddon();
-      webglAddon.onContextLost(() => {
-        webglAddon.dispose();
-      });
-      terminal.loadAddon(webglAddon);
-    } catch {
-      // WebGL not available, using canvas renderer
+    // Disabled temporarily to test canvas renderer for box-drawing gaps
+    if (currentSettings?.useWebGL !== false) {
+      try {
+        const webglAddon = new WebglAddon.WebglAddon();
+        webglAddon.onContextLost(() => {
+          webglAddon.dispose();
+        });
+        terminal.loadAddon(webglAddon);
+      } catch {
+        // WebGL not available, using canvas renderer
+      }
     }
 
     // Load Web-Links addon for clickable URLs

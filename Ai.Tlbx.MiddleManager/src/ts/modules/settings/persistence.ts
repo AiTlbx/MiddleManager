@@ -93,6 +93,7 @@ export function populateSettingsForm(settings: Settings): void {
   setElementChecked('setting-right-click-paste', settings.rightClickPaste !== false);
   setElementValue('setting-clipboard-shortcuts', settings.clipboardShortcuts || 'auto');
   setElementChecked('setting-smooth-scrolling', settings.smoothScrolling === true);
+  setElementChecked('setting-webgl', settings.useWebGL !== false);
   setElementValue('setting-run-as-user', settings.runAsUser || '');
   setElementChecked('setting-debug-logging', settings.debugLogging === true);
 }
@@ -153,6 +154,7 @@ export function saveAllSettings(): void {
     theme: getElementValue('setting-theme', 'dark') as ThemeName,
     minimumContrastRatio: parseFloat(getElementValue('setting-contrast', '1')) || 1,
     smoothScrolling: getElementChecked('setting-smooth-scrolling'),
+    useWebGL: getElementChecked('setting-webgl'),
     scrollbackLines: parseInt(getElementValue('setting-scrollback', '10000'), 10) || 10000,
     bellStyle: getElementValue('setting-bell-style', 'notification') as Settings['bellStyle'],
     copyOnSelect: getElementChecked('setting-copy-on-select'),
