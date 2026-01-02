@@ -25,7 +25,8 @@ import {
   fitSessionToScreen,
   setupResizeObserver,
   setupVisualViewport,
-  registerScalingCallbacks
+  registerScalingCallbacks,
+  bindSearchEvents
 } from './modules/terminal';
 import {
   renderSessionList,
@@ -100,6 +101,7 @@ function init(): void {
 
   bindEvents();
   bindAuthEvents();
+  bindSearchEvents();
   setupResizeObserver();
   setupVisualViewport();
 
@@ -318,9 +320,13 @@ function renameSession(sessionId: string, newName: string | null): void {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: nameToSend })
-  }).catch((e) => {
-    console.error('Error renaming session:', e);
-  });
+  })
+    .then(() => {
+      session.manuallyNamed = true;
+    })
+    .catch((e) => {
+      console.error('Error renaming session:', e);
+    });
 }
 
 function startInlineRename(sessionId: string): void {

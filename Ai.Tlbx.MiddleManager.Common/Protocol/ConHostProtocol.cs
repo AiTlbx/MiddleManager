@@ -184,6 +184,7 @@ public sealed class SessionInfo
     public int? ExitCode { get; set; }
     public string? CurrentWorkingDirectory { get; set; }
     public string? Name { get; set; }
+    public bool ManuallyNamed { get; set; }
     public DateTime CreatedAt { get; set; }
     public string? ConHostVersion { get; set; }
 }

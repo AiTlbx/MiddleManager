@@ -78,6 +78,9 @@ export let muxWsConnected = false;
 // Terminal State
 // =============================================================================
 
+/** Windows build number for ConPTY configuration (null on non-Windows) */
+export let windowsBuildNumber: number | null = null;
+
 /** Per-session terminal state */
 export const sessionTerminals = new Map<string, TerminalState>();
 
@@ -182,6 +185,10 @@ export function setMuxWsConnected(connected: boolean): void {
 
 export function setFontsReadyPromise(promise: Promise<void>): void {
   fontsReadyPromise = promise;
+}
+
+export function setWindowsBuildNumber(build: number | null): void {
+  windowsBuildNumber = build;
 }
 
 // =============================================================================

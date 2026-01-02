@@ -12,7 +12,8 @@ import {
   activeSessionId,
   sessionTerminals,
   sessions,
-  dom
+  dom,
+  setWindowsBuildNumber
 } from '../../state';
 import { fetchSettings } from './persistence';
 
@@ -224,6 +225,9 @@ export function checkSystemHealth(): void {
     .then((response) => response.json() as Promise<HealthResponse>)
     .then((health) => {
       updateConHostWarning(health);
+      if (health.windowsBuildNumber !== undefined) {
+        setWindowsBuildNumber(health.windowsBuildNumber);
+      }
     })
     .catch(() => {});
 }

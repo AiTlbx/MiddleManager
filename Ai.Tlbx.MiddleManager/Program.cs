@@ -286,7 +286,8 @@ public class Program
                 Platform = OperatingSystem.IsWindows() ? "Windows" : OperatingSystem.IsMacOS() ? "macOS" : "Linux",
                 ConHostVersion = conHostVersion,
                 ConHostExpected = conHostExpected,
-                ConHostCompatible = conHostCompatible
+                ConHostCompatible = conHostCompatible,
+                WindowsBuildNumber = OperatingSystem.IsWindows() ? Environment.OSVersion.Version.Build : null
             };
             return Results.Json(health, AppJsonContext.Default.SystemHealth);
         });

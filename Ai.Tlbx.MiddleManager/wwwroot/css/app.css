@@ -1799,3 +1799,78 @@ html, body {
 .warning-banner strong {
     color: var(--accent-red);
 }
+
+/* =============================================================================
+   Terminal Search
+   ============================================================================= */
+
+.terminal-search {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-secondary);
+    padding: 6px 10px;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-color);
+}
+
+.terminal-search.hidden {
+    display: none;
+}
+
+.terminal-search input {
+    width: 180px;
+    padding: 4px 8px;
+    font-size: 13px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    outline: none;
+}
+
+.terminal-search input:focus {
+    border-color: var(--accent-blue);
+}
+
+.terminal-search .search-results {
+    min-width: 45px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 0 4px;
+}
+
+.terminal-search .search-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px 6px;
+    font-size: 12px;
+    border-radius: 4px;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.terminal-search .search-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+    .terminal-search {
+        top: 52px;
+        right: 8px;
+        left: 8px;
+    }
+
+    .terminal-search input {
+        flex: 1;
+        width: auto;
+    }
+}

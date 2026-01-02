@@ -14,17 +14,51 @@ import {
   pendingOutputFrames,
   fontsReadyPromise,
   dom,
-  setFontsReadyPromise
+  setFontsReadyPromise,
+  windowsBuildNumber,
+  sessions
 } from '../../state';
 import { getClipboardStyle } from '../../utils';
 import { applyTerminalScaling } from './scaling';
 
 declare const Terminal: any;
 declare const FitAddon: any;
+declare const WebglAddon: any;
+declare const WebLinksAddon: any;
+declare const SearchAddon: any;
+
+import { initSearchForTerminal, showSearch, isSearchVisible, hideSearch } from './search';
 
 // Forward declarations for functions from other modules
 let sendInput: (sessionId: string, data: string) => void = () => {};
 let showBellNotification: (sessionId: string) => void = () => {};
+
+// Debounce timers for auto-rename from shell title
+const pendingTitleUpdates = new Map<string, number>();
+
+/**
+ * Auto-update session name from shell title (with debounce)
+ */
+function updateSessionNameAuto(sessionId: string, name: string): void {
+  const session = sessions.find(s => s.id === sessionId);
+  if (session?.manuallyNamed) return;
+
+  const existing = pendingTitleUpdates.get(sessionId);
+  if (existing) {
+    window.clearTimeout(existing);
+  }
+
+  const timer = window.setTimeout(() => {
+    pendingTitleUpdates.delete(sessionId);
+    fetch(`/api/sessions/${sessionId}/name?auto=true`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    }).catch(() => {});
+  }, 500);
+
+  pendingTitleUpdates.set(sessionId, timer);
+}
 
 /**
  * Register callbacks from other modules
@@ -46,16 +80,27 @@ export function getTerminalOptions(): object {
   const fontSize = isMobile ? Math.max(baseFontSize - 2, 10) : baseFontSize;
   const themeName = currentSettings?.theme ?? 'dark';
 
-  return {
+  const options: Record<string, unknown> = {
     cursorBlink: currentSettings?.cursorBlink ?? true,
     cursorStyle: currentSettings?.cursorStyle ?? 'bar',
     fontFamily: "'Cascadia Code', 'Cascadia Mono', Consolas, 'Courier New', monospace",
     fontSize: fontSize,
     scrollback: currentSettings?.scrollbackLines ?? 10000,
+    minimumContrastRatio: currentSettings?.minimumContrastRatio ?? 1,
+    smoothScrollDuration: currentSettings?.smoothScrolling ? 150 : 0,
     allowProposedApi: true,
     customGlyphs: true,
     theme: THEMES[themeName] ?? THEMES.dark
   };
+
+  if (windowsBuildNumber !== null) {
+    options.windowsPty = {
+      backend: 'conpty',
+      buildNumber: windowsBuildNumber
+    };
+  }
+
+  return options;
 }
 
 /**
@@ -103,6 +148,34 @@ export function createTerminalForSession(
     if (!sessionTerminals.has(sessionId)) return; // Session was deleted
     terminal.open(container);
     state.opened = true;
+
+    // Load WebGL addon for GPU-accelerated rendering (with fallback)
+    try {
+      const webglAddon = new WebglAddon.WebglAddon();
+      webglAddon.onContextLost(() => {
+        webglAddon.dispose();
+      });
+      terminal.loadAddon(webglAddon);
+    } catch {
+      // WebGL not available, using canvas renderer
+    }
+
+    // Load Web-Links addon for clickable URLs
+    try {
+      const webLinksAddon = new WebLinksAddon.WebLinksAddon(
+        (_event: MouseEvent, uri: string) => {
+          if (uri.startsWith('http://') || uri.startsWith('https://')) {
+            window.open(uri, '_blank', 'noopener,noreferrer');
+          }
+        }
+      );
+      terminal.loadAddon(webLinksAddon);
+    } catch {
+      // Web-Links addon failed to load
+    }
+
+    // Load Search addon for Ctrl+F search
+    initSearchForTerminal(sessionId, terminal);
 
     // Replay any WebSocket frames that arrived before terminal was opened
     replayPendingFrames(sessionId, state);
@@ -199,6 +272,13 @@ export function setupTerminalEvents(
     }
   });
 
+  // Auto-update session name from shell title
+  terminal.onTitleChange((title: string) => {
+    if (title && title.trim()) {
+      updateSessionNameAuto(sessionId, title.trim());
+    }
+  });
+
   // Keyboard shortcuts for copy/paste
   terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
     if (e.type !== 'keydown') return true;
@@ -239,6 +319,19 @@ export function setupTerminalEvents(
         return false;
       }
     }
+
+    // Ctrl+F / Cmd+F: Open search
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      showSearch();
+      return false;
+    }
+
+    // Escape: Close search if open
+    if (e.key === 'Escape' && isSearchVisible()) {
+      hideSearch();
+      return false;
+    }
+
     return true;
   });
 

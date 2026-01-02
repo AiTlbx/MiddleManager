@@ -70,9 +70,9 @@ public static class SessionApiEndpoints
             return Results.Bytes(buffer ?? []);
         });
 
-        app.MapPut("/api/sessions/{id}/name", async (string id, RenameSessionRequest request) =>
+        app.MapPut("/api/sessions/{id}/name", async (string id, RenameSessionRequest request, bool auto = false) =>
         {
-            if (!await sessionManager.SetSessionNameAsync(id, request.Name))
+            if (!await sessionManager.SetSessionNameAsync(id, request.Name, isManual: !auto))
             {
                 return Results.NotFound();
             }
@@ -93,7 +93,8 @@ public static class SessionApiEndpoints
             Cols = sessionInfo.Cols,
             Rows = sessionInfo.Rows,
             ShellType = sessionInfo.ShellType,
-            Name = sessionInfo.Name
+            Name = sessionInfo.Name,
+            ManuallyNamed = sessionInfo.ManuallyNamed
         };
     }
 }

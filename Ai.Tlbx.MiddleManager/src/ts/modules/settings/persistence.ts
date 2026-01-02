@@ -86,11 +86,13 @@ export function populateSettingsForm(settings: Settings): void {
   setElementValue('setting-cursor-style', settings.cursorStyle || 'bar');
   setElementChecked('setting-cursor-blink', settings.cursorBlink !== false);
   setElementValue('setting-theme', settings.theme || 'dark');
+  setElementValue('setting-contrast', String(settings.minimumContrastRatio || 1));
   setElementValue('setting-scrollback', settings.scrollbackLines || 10000);
   setElementValue('setting-bell-style', settings.bellStyle || 'notification');
   setElementChecked('setting-copy-on-select', settings.copyOnSelect === true);
   setElementChecked('setting-right-click-paste', settings.rightClickPaste !== false);
   setElementValue('setting-clipboard-shortcuts', settings.clipboardShortcuts || 'auto');
+  setElementChecked('setting-smooth-scrolling', settings.smoothScrolling === true);
   setElementValue('setting-run-as-user', settings.runAsUser || '');
   setElementChecked('setting-debug-logging', settings.debugLogging === true);
 }
@@ -132,6 +134,8 @@ function applySettingsToTerminals(): void {
     state.terminal.options.cursorStyle = currentSettings.cursorStyle;
     state.terminal.options.fontSize = currentSettings.fontSize;
     state.terminal.options.theme = theme;
+    state.terminal.options.minimumContrastRatio = currentSettings.minimumContrastRatio;
+    state.terminal.options.smoothScrollDuration = currentSettings.smoothScrolling ? 150 : 0;
   });
 }
 
@@ -147,6 +151,8 @@ export function saveAllSettings(): void {
     cursorStyle: getElementValue('setting-cursor-style', 'bar') as Settings['cursorStyle'],
     cursorBlink: getElementChecked('setting-cursor-blink'),
     theme: getElementValue('setting-theme', 'dark') as ThemeName,
+    minimumContrastRatio: parseFloat(getElementValue('setting-contrast', '1')) || 1,
+    smoothScrolling: getElementChecked('setting-smooth-scrolling'),
     scrollbackLines: parseInt(getElementValue('setting-scrollback', '10000'), 10) || 10000,
     bellStyle: getElementValue('setting-bell-style', 'notification') as Settings['bellStyle'],
     copyOnSelect: getElementChecked('setting-copy-on-select'),

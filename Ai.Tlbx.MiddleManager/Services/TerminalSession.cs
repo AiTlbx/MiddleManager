@@ -24,9 +24,18 @@ namespace Ai.Tlbx.MiddleManager.Services
         public int Rows { get; private set; }
         public ShellType ShellType { get; private set; }
         public string? Name { get; private set; }
+        public bool ManuallyNamed { get; private set; }
 
-        public void SetName(string? name)
+        public void SetName(string? name, bool isManual = true)
         {
+            if (isManual)
+            {
+                ManuallyNamed = true;
+            }
+            else if (ManuallyNamed)
+            {
+                return;
+            }
             Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
             OnStateChanged?.Invoke();
         }

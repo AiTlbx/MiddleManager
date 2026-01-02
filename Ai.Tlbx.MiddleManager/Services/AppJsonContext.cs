@@ -73,4 +73,5 @@ public sealed class SystemHealth
     public string? ConHostVersion { get; init; }
     public string? ConHostExpected { get; init; }
     public bool? ConHostCompatible { get; init; }
+    public int? WindowsBuildNumber { get; init; }
 }

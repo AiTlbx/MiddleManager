@@ -19,6 +19,7 @@ export interface Session {
   shellType: string;
   cols: number;
   rows: number;
+  manuallyNamed?: boolean;
 }
 
 /** Terminal state for a session */
@@ -56,6 +57,8 @@ export interface Settings {
   cursorStyle: CursorStyle;
   cursorBlink: boolean;
   theme: ThemeName;
+  minimumContrastRatio: number;
+  smoothScrolling: boolean;
   scrollbackLines: number;
   bellStyle: BellStyle;
   copyOnSelect: boolean;
@@ -105,6 +108,7 @@ export interface HealthResponse {
   conHostVersion?: string;
   webVersion?: string;
   versionMismatch?: boolean;
+  windowsBuildNumber?: number;
 }
 
 /** Network interface info */

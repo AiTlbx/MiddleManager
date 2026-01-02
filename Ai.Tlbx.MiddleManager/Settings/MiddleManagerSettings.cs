@@ -28,6 +28,8 @@ namespace Ai.Tlbx.MiddleManager.Settings
         public string CursorStyle { get; set; } = "bar";
         public bool CursorBlink { get; set; } = true;
         public string Theme { get; set; } = "dark";
+        public double MinimumContrastRatio { get; set; } = 1;
+        public bool SmoothScrolling { get; set; } = false;
 
         // Terminal Behavior
         public int ScrollbackLines { get; set; } = 10000;

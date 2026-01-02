@@ -343,7 +343,8 @@ public sealed class ConHostSessionManager : IAsyncDisposable
                 Cols = s.Cols,
                 Rows = s.Rows,
                 ShellType = s.ShellType,
-                Name = s.Name
+                Name = s.Name,
+                ManuallyNamed = s.ManuallyNamed
             }).OrderBy(s => s.CreatedAt).ToList()
         };
     }
@@ -403,16 +404,28 @@ public sealed class ConHostSessionManager : IAsyncDisposable
         return await client.GetBufferAsync(ct).ConfigureAwait(false);
     }
 
-    public async Task<bool> SetSessionNameAsync(string sessionId, string? name, CancellationToken ct = default)
+    public async Task<bool> SetSessionNameAsync(string sessionId, string? name, bool isManual = true, CancellationToken ct = default)
     {
         if (!_clients.TryGetValue(sessionId, out var client))
         {
             return false;
         }
 
+        if (_sessionCache.TryGetValue(sessionId, out var info))
+        {
+            if (isManual)
+            {
+                info.ManuallyNamed = true;
+            }
+            else if (info.ManuallyNamed)
+            {
+                return true;
+            }
+        }
+
         var success = await client.SetNameAsync(name, ct).ConfigureAwait(false);
 
-        if (success && _sessionCache.TryGetValue(sessionId, out var info))
+        if (success && info is not null)
         {
             info.Name = name;
             OnStateChanged?.Invoke(sessionId);
