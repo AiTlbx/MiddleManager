@@ -35,6 +35,14 @@ public abstract class ShellConfigurationBase : IShellConfiguration
         env["LANG"] = "en_US.UTF-8";
         env["LC_ALL"] = "en_US.UTF-8";
         env["MSYS"] = "enable_pcon";
+
+        // Mimic Windows Terminal to enable features like bracketed paste detection
+        if (OperatingSystem.IsWindows())
+        {
+            env["WT_SESSION"] = Guid.NewGuid().ToString();
+            env["WT_PROFILE_ID"] = Guid.NewGuid().ToString();
+        }
+
         return env;
     }
 
