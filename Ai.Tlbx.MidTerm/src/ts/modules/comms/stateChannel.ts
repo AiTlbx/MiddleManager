@@ -7,9 +7,11 @@
 
 import type { Session, UpdateInfo } from '../../types';
 import { INITIAL_RECONNECT_DELAY, MAX_RECONNECT_DELAY } from '../../constants';
+import { scheduleReconnect } from '../../utils';
 import {
   sessions,
   activeSessionId,
+  stateWs,
   stateReconnectTimer,
   stateReconnectDelay,
   stateWsConnected,
@@ -61,6 +63,13 @@ export function registerStateCallbacks(callbacks: {
  * Automatically reconnects with exponential backoff on disconnect.
  */
 export function connectStateWebSocket(): void {
+  // Close existing WebSocket before creating new one
+  if (stateWs) {
+    stateWs.onclose = null; // Prevent reconnect loop
+    stateWs.close();
+    setStateWs(null);
+  }
+
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(`${protocol}//${location.host}/ws/state`);
   setStateWs(ws);
@@ -77,8 +86,9 @@ export function connectStateWebSocket(): void {
       const sessionList = data.sessions?.sessions ?? [];
       handleStateUpdate(sessionList);
       handleUpdateInfo(data.update);
-    } catch (e) {
-      console.error('Error parsing state:', e);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error('Error parsing state:', message);
     }
   };
 
@@ -157,15 +167,14 @@ export function handleUpdateInfo(update: UpdateInfo | null): void {
  * Schedule state WebSocket reconnection with exponential backoff.
  */
 export function scheduleStateReconnect(): void {
-  if (stateReconnectTimer !== undefined) {
-    clearTimeout(stateReconnectTimer);
-  }
-  const delay = stateReconnectDelay;
-  const timer = window.setTimeout(() => {
-    setStateReconnectDelay(Math.min(stateReconnectDelay * 1.5, MAX_RECONNECT_DELAY));
-    connectStateWebSocket();
-  }, delay);
-  setStateReconnectTimer(timer);
+  scheduleReconnect(
+    stateReconnectDelay,
+    MAX_RECONNECT_DELAY,
+    connectStateWebSocket,
+    setStateReconnectDelay,
+    setStateReconnectTimer,
+    stateReconnectTimer
+  );
 }
 
 /**

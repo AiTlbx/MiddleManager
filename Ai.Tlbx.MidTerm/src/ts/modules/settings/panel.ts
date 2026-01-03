@@ -109,17 +109,12 @@ export function updateConHostWarning(health: HealthResponse): void {
     }
   }
 
-  const healthAny = health as HealthResponse & {
-    conHostCompatible?: boolean;
-    conHostExpected?: string;
-  };
-
-  if (health.conHostVersion && healthAny.conHostCompatible === false) {
+  if (health.conHostVersion && health.conHostCompatible === false) {
     banner.innerHTML =
       '<strong>Version mismatch:</strong> mmttyhost is ' +
       health.conHostVersion +
       ', expected ' +
-      healthAny.conHostExpected +
+      health.conHostExpected +
       '. Terminals may not work correctly. Please update mmttyhost.exe or restart the service.';
     banner.style.display = 'block';
   } else {
@@ -135,15 +130,7 @@ export function fetchSystemStatus(): void {
   if (!container) return;
 
   fetch('/api/health')
-    .then((response) => response.json() as Promise<HealthResponse & {
-      healthy?: boolean;
-      uptimeSeconds?: number;
-      mode?: string;
-      platform?: string;
-      webProcessId?: number;
-      conHostCompatible?: boolean;
-      conHostExpected?: string;
-    }>)
+    .then((response) => response.json() as Promise<HealthResponse>)
     .then((health) => {
       const statusClass = health.healthy ? 'status-healthy' : 'status-error';
       const statusText = health.healthy ? 'Healthy' : 'Unhealthy';
@@ -211,9 +198,10 @@ export function fetchSystemStatus(): void {
 
       updateConHostWarning(health);
     })
-    .catch((err: Error) => {
+    .catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
       container.innerHTML =
-        '<div class="status-error-msg">Failed to load system status: ' + err.message + '</div>';
+        '<div class="status-error-msg">Failed to load system status: ' + message + '</div>';
     });
 }
 

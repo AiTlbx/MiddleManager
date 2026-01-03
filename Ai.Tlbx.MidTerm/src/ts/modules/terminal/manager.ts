@@ -6,7 +6,7 @@
  */
 
 import type { Session, TerminalState } from '../../types';
-import { THEMES } from '../../constants';
+import { THEMES, MOBILE_BREAKPOINT, TERMINAL_FONT_STACK } from '../../constants';
 import {
   sessionTerminals,
   currentSettings,
@@ -18,7 +18,7 @@ import {
   windowsBuildNumber,
   sessions
 } from '../../state';
-import { getClipboardStyle } from '../../utils';
+import { getClipboardStyle, parseOutputFrame } from '../../utils';
 import { applyTerminalScaling, fitSessionToScreen } from './scaling';
 import { setupFileDrop, handleClipboardPaste } from './fileDrop';
 
@@ -28,7 +28,7 @@ declare const WebglAddon: any;
 declare const WebLinksAddon: any;
 declare const SearchAddon: any;
 
-import { initSearchForTerminal, showSearch, isSearchVisible, hideSearch } from './search';
+import { initSearchForTerminal, showSearch, isSearchVisible, hideSearch, cleanupSearchForTerminal } from './search';
 
 // Forward declarations for functions from other modules
 let sendInput: (sessionId: string, data: string) => void = () => {};
@@ -76,7 +76,7 @@ export function registerTerminalCallbacks(callbacks: {
  * Get terminal options based on current settings
  */
 export function getTerminalOptions(): object {
-  const isMobile = window.innerWidth <= 768;
+  const isMobile = window.innerWidth <= MOBILE_BREAKPOINT;
   const baseFontSize = currentSettings?.fontSize ?? 14;
   const fontSize = isMobile ? Math.max(baseFontSize - 2, 10) : baseFontSize;
   const themeName = currentSettings?.theme ?? 'dark';
@@ -85,7 +85,7 @@ export function getTerminalOptions(): object {
   const options: Record<string, unknown> = {
     cursorBlink: currentSettings?.cursorBlink ?? true,
     cursorStyle: currentSettings?.cursorStyle ?? 'bar',
-    fontFamily: `'${fontFamily}', 'Cascadia Mono', Consolas, 'Courier New', monospace`,
+    fontFamily: `'${fontFamily}', ${TERMINAL_FONT_STACK}`,
     fontSize: fontSize,
     letterSpacing: 0,
     lineHeight: 1,
@@ -225,34 +225,28 @@ export function writeOutputFrame(
   state: TerminalState,
   payload: Uint8Array
 ): void {
-  // Parse dimensions from output frame: [cols:2][rows:2][data]
-  const frameCols = payload[0] | (payload[1] << 8);
-  const frameRows = payload[2] | (payload[3] << 8);
-  const terminalData = payload.slice(4);
-
-  // Validate dimensions are within sane bounds (1-500)
-  const validDims = frameCols > 0 && frameCols <= 500 && frameRows > 0 && frameRows <= 500;
+  const frame = parseOutputFrame(payload);
 
   // Ensure terminal matches frame dimensions before writing
-  if (validDims && state.terminal._core && state.terminal._core._renderService) {
+  if (frame.valid && state.terminal._core && state.terminal._core._renderService) {
     const currentCols = state.terminal.cols;
     const currentRows = state.terminal.rows;
 
-    if (currentCols !== frameCols || currentRows !== frameRows) {
+    if (currentCols !== frame.cols || currentRows !== frame.rows) {
       try {
-        state.terminal.resize(frameCols, frameRows);
-        state.serverCols = frameCols;
-        state.serverRows = frameRows;
+        state.terminal.resize(frame.cols, frame.rows);
+        state.serverCols = frame.cols;
+        state.serverRows = frame.rows;
         applyTerminalScaling(sessionId, state);
-      } catch (e) {
-        // Ignore resize errors
+      } catch {
+        // Ignore resize errors - terminal may not be fully initialized
       }
     }
   }
 
   // Write terminal data
-  if (terminalData.length > 0) {
-    state.terminal.write(terminalData);
+  if (frame.data.length > 0) {
+    state.terminal.write(frame.data);
   }
 }
 
@@ -364,10 +358,11 @@ export function setupTerminalEvents(
 
   container.addEventListener('contextmenu', contextMenuHandler);
 
-  // Store handler reference for cleanup
+  // Store handler references for cleanup
   const state = sessionTerminals.get(sessionId);
   if (state) {
     state.contextMenuHandler = contextMenuHandler;
+    state.pasteHandler = pasteHandler;
   }
 }
 
@@ -378,9 +373,22 @@ export function destroyTerminalForSession(sessionId: string): void {
   const state = sessionTerminals.get(sessionId);
   if (!state) return;
 
-  // Remove context menu handler if exists
+  // Clean up event listeners
   if (state.contextMenuHandler) {
     state.container.removeEventListener('contextmenu', state.contextMenuHandler);
+  }
+  if (state.pasteHandler) {
+    state.container.removeEventListener('paste', state.pasteHandler, true);
+  }
+
+  // Clean up search addon state
+  cleanupSearchForTerminal(sessionId);
+
+  // Clean up pending title update timer
+  const titleTimer = pendingTitleUpdates.get(sessionId);
+  if (titleTimer) {
+    clearTimeout(titleTimer);
+    pendingTitleUpdates.delete(sessionId);
   }
 
   state.terminal.dispose();
@@ -450,7 +458,7 @@ export function preloadTerminalFont(): Promise<void> {
   const promise = document.fonts.ready.then(() => {
     // Trigger font load by measuring with the font family
     const testSpan = document.createElement('span');
-    testSpan.style.fontFamily = "'Cascadia Code', 'Cascadia Mono', Consolas, monospace";
+    testSpan.style.fontFamily = TERMINAL_FONT_STACK;
     testSpan.style.position = 'absolute';
     testSpan.style.left = '-9999px';
     testSpan.textContent = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';

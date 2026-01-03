@@ -6,7 +6,7 @@
  */
 
 import type { Settings, ThemeName, TerminalState } from '../../types';
-import { THEMES } from '../../constants';
+import { THEMES, TERMINAL_FONT_STACK } from '../../constants';
 import { currentSettings, setCurrentSettings, dom, sessionTerminals } from '../../state';
 import { setCookie } from '../../utils';
 
@@ -133,7 +133,7 @@ function applySettingsToTerminals(): void {
   if (!currentSettings) return;
 
   const theme = THEMES[currentSettings.theme] || THEMES.dark;
-  const fontFamily = `'${currentSettings.fontFamily || 'Cascadia Code'}', 'Cascadia Mono', Consolas, 'Courier New', monospace`;
+  const fontFamily = `'${currentSettings.fontFamily || 'Cascadia Code'}', ${TERMINAL_FONT_STACK}`;
 
   sessionTerminals.forEach((state: TerminalState) => {
     state.terminal.options.cursorBlink = currentSettings.cursorBlink;

@@ -81,3 +81,37 @@ export const INITIAL_RECONNECT_DELAY = 1000;
 
 /** Maximum reconnect delay in milliseconds */
 export const MAX_RECONNECT_DELAY = 30000;
+
+// =============================================================================
+// Terminal Rendering Constants
+// =============================================================================
+
+/** Terminal font stack for monospace rendering */
+export const TERMINAL_FONT_STACK = "'Cascadia Code', 'Cascadia Mono', Consolas, 'Courier New', monospace";
+
+/** Character width as ratio of font size (empirical for monospace fonts) */
+export const FONT_CHAR_WIDTH_RATIO = 0.6;
+
+/** Line height as ratio of font size */
+export const FONT_LINE_HEIGHT_RATIO = 1.2;
+
+/** Padding around terminal content in pixels */
+export const TERMINAL_PADDING = 8;
+
+/** Minimum terminal columns */
+export const MIN_TERMINAL_COLS = 10;
+
+/** Minimum terminal rows */
+export const MIN_TERMINAL_ROWS = 5;
+
+/** Maximum terminal columns */
+export const MAX_TERMINAL_COLS = 300;
+
+/** Maximum terminal rows */
+export const MAX_TERMINAL_ROWS = 100;
+
+/** Maximum frame dimension for validation */
+export const MAX_FRAME_DIMENSION = 500;
+
+/** Mobile breakpoint in pixels */
+export const MOBILE_BREAKPOINT = 768;

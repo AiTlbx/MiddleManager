@@ -31,6 +31,7 @@ export interface TerminalState {
   serverRows: number;
   opened: boolean;
   contextMenuHandler?: (e: MouseEvent) => void;
+  pasteHandler?: (e: ClipboardEvent) => void;
 }
 
 // =============================================================================
@@ -111,6 +112,13 @@ export interface HealthResponse {
   webVersion?: string;
   versionMismatch?: boolean;
   windowsBuildNumber?: number;
+  healthy?: boolean;
+  uptimeSeconds?: number;
+  mode?: string;
+  platform?: string;
+  webProcessId?: number;
+  conHostCompatible?: boolean;
+  conHostExpected?: string;
 }
 
 /** Network interface info */

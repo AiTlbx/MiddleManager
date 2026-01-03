@@ -15,6 +15,7 @@ import {
   INITIAL_RECONNECT_DELAY,
   MAX_RECONNECT_DELAY
 } from '../../constants';
+import { parseOutputFrame, scheduleReconnect } from '../../utils';
 import {
   muxWs,
   muxReconnectTimer,
@@ -48,6 +49,13 @@ export function registerMuxCallbacks(callbacks: {
  * Uses a binary protocol with 9-byte header.
  */
 export function connectMuxWebSocket(): void {
+  // Close existing WebSocket before creating new one
+  if (muxWs) {
+    muxWs.onclose = null; // Prevent reconnect loop
+    muxWs.close();
+    setMuxWs(null);
+  }
+
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(`${protocol}//${location.host}/ws/mux`);
   ws.binaryType = 'arraybuffer';
@@ -176,15 +184,14 @@ export function decodeSessionId(buffer: Uint8Array, offset: number): string {
  * Schedule mux WebSocket reconnection with exponential backoff.
  */
 export function scheduleMuxReconnect(): void {
-  if (muxReconnectTimer !== undefined) {
-    clearTimeout(muxReconnectTimer);
-  }
-  const delay = muxReconnectDelay;
-  const timer = window.setTimeout(() => {
-    setMuxReconnectDelay(Math.min(muxReconnectDelay * 1.5, MAX_RECONNECT_DELAY));
-    connectMuxWebSocket();
-  }, delay);
-  setMuxReconnectTimer(timer);
+  scheduleReconnect(
+    muxReconnectDelay,
+    MAX_RECONNECT_DELAY,
+    connectMuxWebSocket,
+    setMuxReconnectDelay,
+    setMuxReconnectTimer,
+    muxReconnectTimer
+  );
 }
 
 /**
@@ -205,35 +212,30 @@ export function replayPendingFrames(sessionId: string, state: TerminalState): vo
  * Parses dimensions from frame header and resizes terminal if needed.
  */
 export function writeOutputFrame(sessionId: string, state: TerminalState, payload: Uint8Array): void {
-  // Parse dimensions from output frame: [cols:2][rows:2][data]
-  const frameCols = payload[0] | (payload[1] << 8);
-  const frameRows = payload[2] | (payload[3] << 8);
-  const terminalData = payload.slice(4);
-
-  // Validate dimensions are within sane bounds (1-500)
-  const validDims = frameCols > 0 && frameCols <= 500 && frameRows > 0 && frameRows <= 500;
+  const frame = parseOutputFrame(payload);
 
   // Ensure terminal matches frame dimensions before writing
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const termCore = (state.terminal as any)._core;
-  if (validDims && termCore && termCore._renderService) {
+  if (frame.valid && termCore && termCore._renderService) {
     const currentCols = state.terminal.cols;
     const currentRows = state.terminal.rows;
 
-    if (currentCols !== frameCols || currentRows !== frameRows) {
+    if (currentCols !== frame.cols || currentRows !== frame.rows) {
       try {
-        state.terminal.resize(frameCols, frameRows);
-        state.serverCols = frameCols;
-        state.serverRows = frameRows;
+        state.terminal.resize(frame.cols, frame.rows);
+        state.serverCols = frame.cols;
+        state.serverRows = frame.rows;
         applyTerminalScaling(sessionId, state);
-      } catch (e) {
-        console.warn('Terminal resize deferred:', (e as Error).message);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        console.warn('Terminal resize deferred:', message);
       }
     }
   }
 
   // Write terminal data
-  if (terminalData.length > 0) {
-    state.terminal.write(terminalData);
+  if (frame.data.length > 0) {
+    state.terminal.write(frame.data);
   }
 }

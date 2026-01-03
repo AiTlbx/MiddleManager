@@ -6,3 +6,5 @@
 
 export * from './dom';
 export * from './cookies';
+export * from './protocol';
+export * from './reconnect';

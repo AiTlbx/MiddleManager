@@ -78,6 +78,15 @@ import {
   newlyCreatedSessions,
   pendingSessions
 } from './state';
+import {
+  FONT_CHAR_WIDTH_RATIO,
+  FONT_LINE_HEIGHT_RATIO,
+  TERMINAL_PADDING,
+  MIN_TERMINAL_COLS,
+  MIN_TERMINAL_ROWS,
+  MAX_TERMINAL_COLS,
+  MAX_TERMINAL_ROWS
+} from './constants';
 import { bindClick, escapeHtml } from './utils';
 
 // Debug export for console access
@@ -199,19 +208,18 @@ function createSession(): void {
 
   if (rect && rect.width > 100 && rect.height > 100) {
     const fontSize = currentSettings?.fontSize ?? 14;
-    const charWidth = fontSize * 0.6;
-    const lineHeight = fontSize * 1.2;
-    const padding = 8;
+    const charWidth = fontSize * FONT_CHAR_WIDTH_RATIO;
+    const lineHeight = fontSize * FONT_LINE_HEIGHT_RATIO;
 
-    const availWidth = rect.width - padding;
-    const availHeight = rect.height - padding;
+    const availWidth = rect.width - TERMINAL_PADDING;
+    const availHeight = rect.height - TERMINAL_PADDING;
 
     const measuredCols = Math.floor(availWidth / charWidth);
     const measuredRows = Math.floor(availHeight / lineHeight);
 
-    if (measuredCols > 10 && measuredRows > 5) {
-      cols = Math.min(measuredCols, 300);
-      rows = Math.min(measuredRows, 100);
+    if (measuredCols > MIN_TERMINAL_COLS && measuredRows > MIN_TERMINAL_ROWS) {
+      cols = Math.min(measuredCols, MAX_TERMINAL_COLS);
+      rows = Math.min(measuredRows, MAX_TERMINAL_ROWS);
     }
   }
 
