@@ -5,8 +5,8 @@ echo #################################################
 echo.
 taskkill /IM MSBuild.exe /F 2>nul
 taskkill /IM VBCSCompiler.exe /F 2>nul
-taskkill /IM mm.exe /F 2>nul
-taskkill /IM mmttyhost.exe /F 2>nul
+taskkill /IM mt.exe /F 2>nul
+taskkill /IM mthost.exe /F 2>nul
 RD /S /Q .vs 2>nul
 RD /S /Q TestResults 2>nul
 del /S /F /AH *.suo 2>nul

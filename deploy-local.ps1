@@ -4,8 +4,8 @@ $repoRoot = "Q:\repos\MiddleManager"
 
 # Bump patch version
 Write-Host "Bumping version..." -ForegroundColor Yellow
-$webCsproj = "$repoRoot\Ai.Tlbx.MiddleManager\Ai.Tlbx.MiddleManager.csproj"
-$conHostCsproj = "$repoRoot\Ai.Tlbx.MiddleManager.ConHost\Ai.Tlbx.MiddleManager.ConHost.csproj"
+$webCsproj = "$repoRoot\Ai.Tlbx.MidTerm\Ai.Tlbx.MidTerm.csproj"
+$conHostCsproj = "$repoRoot\Ai.Tlbx.MidTerm.TtyHost\Ai.Tlbx.MidTerm.TtyHost.csproj"
 
 # Read current version from web csproj
 $webContent = Get-Content $webCsproj -Raw
@@ -32,41 +32,41 @@ if ($webContent -match '<Version>(\d+)\.(\d+)\.(\d+)</Version>') {
 # Build all projects (single-file self-contained)
 Write-Host "Building..." -ForegroundColor Yellow
 
-dotnet publish "$webCsproj" -c Release -r win-x64 --self-contained -p:PublishAot=false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o "$repoRoot\Ai.Tlbx.MiddleManager\bin\Release\net10.0\win-x64\publish" -v q
-if ($LASTEXITCODE -ne 0) { Write-Host "  mm build failed" -ForegroundColor Red; exit 1 }
-Write-Host "  Built mm.exe ($newVersion)" -ForegroundColor Gray
+dotnet publish "$webCsproj" -c Release -r win-x64 --self-contained -p:PublishAot=false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o "$repoRoot\Ai.Tlbx.MidTerm\bin\Release\net10.0\win-x64\publish" -v q
+if ($LASTEXITCODE -ne 0) { Write-Host "  mt build failed" -ForegroundColor Red; exit 1 }
+Write-Host "  Built mt.exe ($newVersion)" -ForegroundColor Gray
 
-dotnet publish "$conHostCsproj" -c Release -r win-x64 --self-contained -p:PublishAot=false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o "$repoRoot\Ai.Tlbx.MiddleManager.ConHost\bin\Release\net10.0\win-x64\publish" -v q
-if ($LASTEXITCODE -ne 0) { Write-Host "  mmttyhost build failed" -ForegroundColor Red; exit 1 }
-Write-Host "  Built mmttyhost.exe ($newVersion)" -ForegroundColor Gray
+dotnet publish "$conHostCsproj" -c Release -r win-x64 --self-contained -p:PublishAot=false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o "$repoRoot\Ai.Tlbx.MidTerm.TtyHost\bin\Release\net10.0\win-x64\publish" -v q
+if ($LASTEXITCODE -ne 0) { Write-Host "  mthost build failed" -ForegroundColor Red; exit 1 }
+Write-Host "  Built mthost.exe ($newVersion)" -ForegroundColor Gray
 
 Write-Host "Stopping service..." -ForegroundColor Yellow
-Stop-Service -Name MiddleManager -Force -NoWait -ErrorAction SilentlyContinue
-Get-Process -Name 'mm','mmttyhost' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Stop-Service -Name MidTerm -Force -NoWait -ErrorAction SilentlyContinue
+Get-Process -Name 'mt','mthost' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Milliseconds 500
 
 Write-Host "Copying new binaries..." -ForegroundColor Yellow
-$srcWeb = "$repoRoot\Ai.Tlbx.MiddleManager\bin\Release\net10.0\win-x64\publish\mm.exe"
-$srcConHost = "$repoRoot\Ai.Tlbx.MiddleManager.ConHost\bin\Release\net10.0\win-x64\publish\mmttyhost.exe"
-$dstWeb = "C:\Program Files\MiddleManager\mm.exe"
-$dstConHost = "C:\Program Files\MiddleManager\mmttyhost.exe"
+$srcWeb = "$repoRoot\Ai.Tlbx.MidTerm\bin\Release\net10.0\win-x64\publish\mt.exe"
+$srcConHost = "$repoRoot\Ai.Tlbx.MidTerm.TtyHost\bin\Release\net10.0\win-x64\publish\mthost.exe"
+$dstWeb = "C:\Program Files\MidTerm\mt.exe"
+$dstConHost = "C:\Program Files\MidTerm\mthost.exe"
 
 Copy-Item $srcWeb $dstWeb -Force
-Write-Host "  Copied mm.exe" -ForegroundColor Gray
+Write-Host "  Copied mt.exe" -ForegroundColor Gray
 Copy-Item $srcConHost $dstConHost -Force
-Write-Host "  Copied mmttyhost.exe" -ForegroundColor Gray
+Write-Host "  Copied mthost.exe" -ForegroundColor Gray
 
 Write-Host "Starting service..." -ForegroundColor Yellow
-Start-Service -Name MiddleManager
+Start-Service -Name MidTerm
 Start-Sleep -Seconds 3
 
 # Check status
 Write-Host ""
 Write-Host "Process Status:" -ForegroundColor Cyan
-$mmProc = Get-Process -Name "mm" -ErrorAction SilentlyContinue
+$mtProc = Get-Process -Name "mt" -ErrorAction SilentlyContinue
 
-if ($mmProc) { Write-Host "  mm         : Running (PID $($mmProc.Id))" -ForegroundColor Green }
-else { Write-Host "  mm         : Not running" -ForegroundColor Red }
+if ($mtProc) { Write-Host "  mt         : Running (PID $($mtProc.Id))" -ForegroundColor Green }
+else { Write-Host "  mt         : Not running" -ForegroundColor Red }
 
 # Check health
 Write-Host ""

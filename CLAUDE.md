@@ -4,38 +4,38 @@ Guidance for Claude Code when working with this repository.
 
 ## What This Is
 
-MiddleManager is a web-based terminal multiplexer. Native AOT compiled, runs on macOS/Windows/Linux. Serves terminal sessions via browser at `http://localhost:2000`.
+MidTerm is a web-based terminal multiplexer. Native AOT compiled, runs on macOS/Windows/Linux. Serves terminal sessions via browser at `http://localhost:2000`.
 
 **Binaries:**
-- `mm` / `mm.exe` — Web server (UI, REST API, WebSockets)
-- `mmttyhost` / `mmttyhost.exe` — TTY host (spawned per terminal, all platforms)
+- `mt` / `mt.exe` — Web server (UI, REST API, WebSockets)
+- `mthost` / `mthost.exe` — TTY host (spawned per terminal, all platforms)
 
 **Default port:** 2000
 
 **Settings locations:**
-- Service mode: `%ProgramData%\MiddleManager\settings.json` (Win) or `/usr/local/etc/middlemanager/settings.json` (Unix)
-- User mode: `~/.middlemanager/settings.json`
+- Service mode: `%ProgramData%\MidTerm\settings.json` (Win) or `/usr/local/etc/MidTerm/settings.json` (Unix)
+- User mode: `~/.MidTerm/settings.json`
 
 ## Build Commands
 
 ```bash
 # Build web server
-dotnet build Ai.Tlbx.MiddleManager/Ai.Tlbx.MiddleManager.csproj
+dotnet build Ai.Tlbx.MidTerm/Ai.Tlbx.MidTerm.csproj
 
 # Test
-dotnet test Ai.Tlbx.MiddleManager.Tests/Ai.Tlbx.MiddleManager.Tests.csproj
+dotnet test Ai.Tlbx.MidTerm.Tests/Ai.Tlbx.MidTerm.Tests.csproj
 
 # AOT publish (platform-specific)
-Ai.Tlbx.MiddleManager/build-aot.cmd        # Windows
-./Ai.Tlbx.MiddleManager/build-aot-linux.sh # Linux
-./Ai.Tlbx.MiddleManager/build-aot-macos.sh # macOS
+Ai.Tlbx.MidTerm/build-aot.cmd        # Windows
+./Ai.Tlbx.MidTerm/build-aot-linux.sh # Linux
+./Ai.Tlbx.MidTerm/build-aot-macos.sh # macOS
 ```
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  mm.exe (Web Server + Session Manager)                      │
+│  mt.exe (Web Server + Session Manager)                      │
 │  ├─ Kestrel HTTP server (REST API, static files)            │
 │  ├─ WebSocket handlers (/ws/mux, /ws/state)                 │
 │  ├─ SessionManager (terminal lifecycle)                     │
@@ -43,7 +43,7 @@ Ai.Tlbx.MiddleManager/build-aot.cmd        # Windows
 │  └─ UpdateService (GitHub release check)                    │
 └─────────────────────────────────────────────────────────────┘
            │
-           │ Spawns mmttyhost per terminal (all platforms)
+           │ Spawns mthost per terminal (all platforms)
            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  Terminal Sessions                                          │
@@ -54,7 +54,7 @@ Ai.Tlbx.MiddleManager/build-aot.cmd        # Windows
 ## Project Structure
 
 ```
-Ai.Tlbx.MiddleManager/              Web Server (mm.exe)
+Ai.Tlbx.MidTerm/              Web Server (mt.exe)
 ├── Program.cs                      Entry point, API endpoints, auth middleware
 ├── Services/
 │   ├── AuthService.cs              Password hashing (PBKDF2), session tokens
@@ -63,7 +63,7 @@ Ai.Tlbx.MiddleManager/              Web Server (mm.exe)
 │   ├── SettingsService.cs          Settings persistence
 │   └── AppJsonContext.cs           AOT-safe JSON serialization
 ├── Settings/
-│   └── MiddleManagerSettings.cs    Settings model (auth, defaults, appearance)
+│   └── MidTermSettings.cs    Settings model (auth, defaults, appearance)
 ├── src/ts/                         TypeScript source (compiled by esbuild)
 │   ├── main.ts                     Entry point, initialization
 │   ├── types.ts                    Shared interfaces and types
@@ -84,7 +84,7 @@ Ai.Tlbx.MiddleManager/              Web Server (mm.exe)
     ├── js/terminal.min.js          Compiled TypeScript (generated)
     └── css/app.css                 Styles
 
-Ai.Tlbx.MiddleManager.TtyHost/      TTY Host (all platforms)
+Ai.Tlbx.MidTerm.TtyHost/      TTY Host (all platforms)
 ├── Program.cs                      Spawned per terminal, hosts PTY session
 └── Pty/
     └── IPtyConnection.cs           Cross-platform PTY abstraction
@@ -187,9 +187,9 @@ export function createTerminal(sessionId: string, session: Session): TerminalSta
 
 | Platform | PTY | Shells | Default |
 |----------|-----|--------|---------|
-| Windows | ConPTY (via mmttyhost) | Pwsh, PowerShell, Cmd | Pwsh |
-| macOS | forkpty (via mmttyhost) | Zsh, Bash | Zsh |
-| Linux | forkpty (via mmttyhost) | Bash, Zsh | Bash |
+| Windows | ConPTY (via mthost) | Pwsh, PowerShell, Cmd | Pwsh |
+| macOS | forkpty (via mthost) | Zsh, Bash | Zsh |
+| Linux | forkpty (via mthost) | Bash, Zsh | Bash |
 
 ## Release Process
 

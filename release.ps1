@@ -10,7 +10,7 @@
     What was done in this release (used in commit message)
 
 .PARAMETER PtyBreaking
-    Include this switch when mmttyhost changes are included. Without this switch,
+    Include this switch when mthost changes are included. Without this switch,
     only the web version is bumped, allowing terminals to survive the update.
 
 .EXAMPLE
@@ -37,9 +37,9 @@ $ErrorActionPreference = "Stop"
 
 # Files to update
 $versionJsonPath = "$PSScriptRoot\version.json"
-$webCsprojPath = "$PSScriptRoot\Ai.Tlbx.MiddleManager\Ai.Tlbx.MiddleManager.csproj"
-$ttyHostCsprojPath = "$PSScriptRoot\Ai.Tlbx.MiddleManager.TtyHost\Ai.Tlbx.MiddleManager.TtyHost.csproj"
-$ttyHostProgramPath = "$PSScriptRoot\Ai.Tlbx.MiddleManager.TtyHost\Program.cs"
+$webCsprojPath = "$PSScriptRoot\Ai.Tlbx.MidTerm\Ai.Tlbx.MidTerm.csproj"
+$ttyHostCsprojPath = "$PSScriptRoot\Ai.Tlbx.MidTerm.TtyHost\Ai.Tlbx.MidTerm.TtyHost.csproj"
+$ttyHostProgramPath = "$PSScriptRoot\Ai.Tlbx.MidTerm.TtyHost\Program.cs"
 
 # Read current version from version.json
 $versionJson = Get-Content $versionJsonPath | ConvertFrom-Json
@@ -63,9 +63,9 @@ Write-Host "New version: $newVersion" -ForegroundColor Green
 
 # Determine release type
 if ($PtyBreaking) {
-    Write-Host "Release type: FULL (mm + mmttyhost)" -ForegroundColor Yellow
+    Write-Host "Release type: FULL (mt + mthost)" -ForegroundColor Yellow
 } else {
-    Write-Host "Release type: Web-only (mm only, sessions preserved)" -ForegroundColor Green
+    Write-Host "Release type: Web-only (mt only, sessions preserved)" -ForegroundColor Green
 }
 
 # Update version.json
@@ -80,7 +80,7 @@ Write-Host "  Updated: version.json (web=$newVersion, pty=$($versionJson.pty))" 
 $content = Get-Content $webCsprojPath -Raw
 $content = $content -replace "<Version>\d+\.\d+\.\d+</Version>", "<Version>$newVersion</Version>"
 Set-Content $webCsprojPath $content -NoNewline
-Write-Host "  Updated: Ai.Tlbx.MiddleManager.csproj" -ForegroundColor Gray
+Write-Host "  Updated: Ai.Tlbx.MidTerm.csproj" -ForegroundColor Gray
 
 # Update TtyHost files only for PTY-breaking changes
 if ($PtyBreaking) {
@@ -89,13 +89,13 @@ if ($PtyBreaking) {
     $content = $content -replace "<Version>\d+\.\d+\.\d+</Version>", "<Version>$newVersion</Version>"
     $content = $content -replace "<FileVersion>\d+\.\d+\.\d+\.\d+</FileVersion>", "<FileVersion>$newVersion.0</FileVersion>"
     Set-Content $ttyHostCsprojPath $content -NoNewline
-    Write-Host "  Updated: Ai.Tlbx.MiddleManager.TtyHost.csproj" -ForegroundColor Gray
+    Write-Host "  Updated: Ai.Tlbx.MidTerm.TtyHost.csproj" -ForegroundColor Gray
 
     # Update TtyHost Program.cs
     $content = Get-Content $ttyHostProgramPath -Raw
     $content = $content -replace 'public const string Version = "\d+\.\d+\.\d+"', "public const string Version = `"$newVersion`""
     Set-Content $ttyHostProgramPath $content -NoNewline
-    Write-Host "  Updated: Ai.Tlbx.MiddleManager.TtyHost\Program.cs" -ForegroundColor Gray
+    Write-Host "  Updated: Ai.Tlbx.MidTerm.TtyHost\Program.cs" -ForegroundColor Gray
 } else {
     Write-Host "  Skipped: TtyHost files (web-only release)" -ForegroundColor DarkGray
 }
@@ -121,4 +121,4 @@ if ($LASTEXITCODE -ne 0) { throw "git push tag failed" }
 
 Write-Host ""
 Write-Host "Released v$newVersion" -ForegroundColor Green
-Write-Host "Monitor build: https://github.com/AiTlbx/MiddleManager/actions" -ForegroundColor Cyan
+Write-Host "Monitor build: https://github.com/AiTlbx/MidTerm/actions" -ForegroundColor Cyan

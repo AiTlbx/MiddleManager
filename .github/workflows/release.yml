@@ -7,8 +7,8 @@ on:
 
 env:
   DOTNET_VERSION: '10.0.x'
-  WEB_PROJECT: Ai.Tlbx.MiddleManager/Ai.Tlbx.MiddleManager.csproj
-  TTYHOST_PROJECT: Ai.Tlbx.MiddleManager.TtyHost/Ai.Tlbx.MiddleManager.TtyHost.csproj
+  WEB_PROJECT: Ai.Tlbx.MidTerm/Ai.Tlbx.MidTerm.csproj
+  TTYHOST_PROJECT: Ai.Tlbx.MidTerm.TtyHost/Ai.Tlbx.MidTerm.TtyHost.csproj
 
 jobs:
   build:
@@ -47,10 +47,10 @@ jobs:
       - name: Install esbuild
         run: npm install -g esbuild
 
-      - name: Publish Web Server (mm)
+      - name: Publish Web Server (mt)
         run: dotnet publish ${{ env.WEB_PROJECT }} -c Release -r ${{ matrix.rid }} /p:IsPublishing=true
 
-      - name: Publish TtyHost (mmttyhost)
+      - name: Publish TtyHost (mthost)
         run: dotnet publish ${{ env.TTYHOST_PROJECT }} -c Release -r ${{ matrix.rid }} /p:IsPublishing=true
 
       - name: Create staging directory
@@ -60,8 +60,8 @@ jobs:
       - name: Stage binaries
         shell: bash
         run: |
-          cp Ai.Tlbx.MiddleManager/bin/Release/net10.0/${{ matrix.rid }}/publish/mm${{ matrix.ext }} staging/
-          cp Ai.Tlbx.MiddleManager.TtyHost/bin/Release/net10.0/${{ matrix.rid }}/publish/mmttyhost${{ matrix.ext }} staging/
+          cp Ai.Tlbx.MidTerm/bin/Release/net10.0/${{ matrix.rid }}/publish/mt${{ matrix.ext }} staging/
+          cp Ai.Tlbx.MidTerm.TtyHost/bin/Release/net10.0/${{ matrix.rid }}/publish/mthost${{ matrix.ext }} staging/
           cp version.json staging/
 
       - name: Upload artifacts
@@ -91,12 +91,12 @@ jobs:
         run: |
           cd artifacts
           # Windows
-          cd win-x64 && zip ../mm-win-x64.zip mm.exe mmttyhost.exe version.json && cd ..
+          cd win-x64 && zip ../mt-win-x64.zip mt.exe mthost.exe version.json && cd ..
           # macOS
-          cd osx-arm64 && tar -czvf ../mm-osx-arm64.tar.gz mm mmttyhost version.json && cd ..
-          cd osx-x64 && tar -czvf ../mm-osx-x64.tar.gz mm mmttyhost version.json && cd ..
+          cd osx-arm64 && tar -czvf ../mt-osx-arm64.tar.gz mt mthost version.json && cd ..
+          cd osx-x64 && tar -czvf ../mt-osx-x64.tar.gz mt mthost version.json && cd ..
           # Linux
-          cd linux-x64 && tar -czvf ../mm-linux-x64.tar.gz mm mmttyhost version.json && cd ..
+          cd linux-x64 && tar -czvf ../mt-linux-x64.tar.gz mt mthost version.json && cd ..
 
       - name: Generate changelog
         id: changelog
@@ -118,7 +118,7 @@ jobs:
             ## What's Changed
             ${{ steps.changelog.outputs.changelog }}
           files: |
-            artifacts/mm-osx-arm64.tar.gz
-            artifacts/mm-osx-x64.tar.gz
-            artifacts/mm-win-x64.zip
-            artifacts/mm-linux-x64.tar.gz
+            artifacts/mt-osx-arm64.tar.gz
+            artifacts/mt-osx-x64.tar.gz
+            artifacts/mt-win-x64.zip
+            artifacts/mt-linux-x64.tar.gz

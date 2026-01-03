@@ -1,4 +1,4 @@
-# MiddleManager Marketing Assets
+# MidTerm Marketing Assets
 
 AI-generated images and videos for social media marketing using Google Vertex AI.
 

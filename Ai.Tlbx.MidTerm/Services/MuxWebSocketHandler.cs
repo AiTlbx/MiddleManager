@@ -1,0 +1,162 @@
+using System.Net.WebSockets;
+using System.Text;
+
+namespace Ai.Tlbx.MidTerm.Services;
+
+public sealed class MuxWebSocketHandler
+{
+    private readonly ConHostSessionManager _sessionManager;
+    private readonly ConHostMuxConnectionManager _muxManager;
+
+    public MuxWebSocketHandler(
+        ConHostSessionManager sessionManager,
+        ConHostMuxConnectionManager muxManager)
+    {
+        _sessionManager = sessionManager;
+        _muxManager = muxManager;
+    }
+
+    public async Task HandleAsync(HttpContext context)
+    {
+        using var ws = await context.WebSockets.AcceptWebSocketAsync();
+        var clientId = Guid.NewGuid().ToString("N");
+
+        var client = _muxManager.AddClient(clientId, ws);
+
+        try
+        {
+            await SendInitFrameAsync(client, clientId);
+            await SendInitialBuffersAsync(client);
+            await ProcessMessagesAsync(ws, clientId, client);
+        }
+        finally
+        {
+            await _muxManager.RemoveClientAsync(clientId);
+            await CloseWebSocketAsync(ws);
+        }
+    }
+
+    private async Task SendInitFrameAsync(MuxClient client, string clientId)
+    {
+        var initFrame = new byte[MuxProtocol.HeaderSize + 32];
+        initFrame[0] = 0xFF;
+        Encoding.ASCII.GetBytes(clientId.AsSpan(0, 8), initFrame.AsSpan(1, 8));
+        Encoding.UTF8.GetBytes(clientId, initFrame.AsSpan(MuxProtocol.HeaderSize));
+        await client.TrySendAsync(initFrame);
+    }
+
+    private async Task SendInitialBuffersAsync(MuxClient client)
+    {
+        var sessions = _sessionManager.GetAllSessions();
+        foreach (var sessionInfo in sessions)
+        {
+            try
+            {
+                var buffer = await _sessionManager.GetBufferAsync(sessionInfo.Id);
+                if (buffer is not null && buffer.Length > 0)
+                {
+                    var frame = MuxProtocol.CreateOutputFrame(sessionInfo.Id, sessionInfo.Cols, sessionInfo.Rows, buffer);
+                    await client.TrySendAsync(frame);
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log($"[MuxHandler] Failed to get buffer for {sessionInfo.Id}: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task ProcessMessagesAsync(WebSocket ws, string clientId, MuxClient client)
+    {
+        var receiveBuffer = new byte[MuxProtocol.MaxFrameSize];
+
+        while (ws.State == WebSocketState.Open)
+        {
+            WebSocketReceiveResult result;
+            try
+            {
+                result = await ws.ReceiveAsync(receiveBuffer, CancellationToken.None);
+            }
+            catch (WebSocketException)
+            {
+                break;
+            }
+
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                break;
+            }
+
+            if (result.MessageType == WebSocketMessageType.Binary && result.Count >= MuxProtocol.HeaderSize)
+            {
+                await ProcessFrameAsync(new ReadOnlyMemory<byte>(receiveBuffer, 0, result.Count));
+            }
+
+            // After processing input, check if resync needed (frames were dropped)
+            if (client.CheckAndResetDroppedFrames())
+            {
+                await PerformResyncAsync(client);
+            }
+        }
+    }
+
+    private async Task PerformResyncAsync(MuxClient client)
+    {
+        try
+        {
+            DebugLogger.Log($"[MuxHandler] {client.Id}: Performing resync");
+
+            // Send clear screen command
+            var clearFrame = MuxProtocol.CreateClearScreenFrame();
+            await client.TrySendAsync(clearFrame);
+
+            // Send fresh buffers
+            await SendInitialBuffersAsync(client);
+
+            DebugLogger.Log($"[MuxHandler] {client.Id}: Resync complete");
+        }
+        catch (Exception ex)
+        {
+            DebugLogger.Log($"[MuxHandler] {client.Id}: Resync failed: {ex.Message}");
+            // Don't rethrow - keep the connection alive
+        }
+    }
+
+    private async Task ProcessFrameAsync(ReadOnlyMemory<byte> data)
+    {
+        if (!MuxProtocol.TryParseFrame(data.Span, out var type, out var sessionId, out var payload))
+        {
+            return;
+        }
+
+        switch (type)
+        {
+            case MuxProtocol.TypeTerminalInput:
+                if (payload.Length < 20)
+                {
+                    DebugLogger.Log($"[WS-INPUT] {sessionId}: {BitConverter.ToString(payload.ToArray())}");
+                }
+                await _muxManager.HandleInputAsync(sessionId, new ReadOnlyMemory<byte>(payload.ToArray()));
+                break;
+
+            case MuxProtocol.TypeResize:
+                var (cols, rows) = MuxProtocol.ParseResizePayload(payload);
+                await _muxManager.HandleResizeAsync(sessionId, cols, rows);
+                break;
+        }
+    }
+
+    private static async Task CloseWebSocketAsync(WebSocket ws)
+    {
+        if (ws.State == WebSocketState.Open)
+        {
+            try
+            {
+                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+            }
+            catch
+            {
+            }
+        }
+    }
+}

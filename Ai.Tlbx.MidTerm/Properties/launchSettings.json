@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "Ai.Tlbx.MidTerm.Aot": {
+      "commandName": "Project",
+      "commandLineArgs": "--spawned",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:55353;http://localhost:55354"
+    }
+  }
+}

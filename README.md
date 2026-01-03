@@ -1,8 +1,8 @@
 <img src="docs/icon.png" width="80" align="left" style="margin-right: 16px">
 
-# MiddleManager
+# MidTerm
 
-[![GitHub Release](https://img.shields.io/github/v/release/AiTlbx/MiddleManager)](https://github.com/AiTlbx/MiddleManager/releases/latest)
+[![GitHub Release](https://img.shields.io/github/v/release/AiTlbx/MidTerm)](https://github.com/AiTlbx/MidTerm/releases/latest)
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)
 [![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)](#installation)
 [![Windows](https://img.shields.io/badge/Windows-0078D6?logo=windows&logoColor=white)](#installation)
@@ -10,7 +10,7 @@
 
 **Your terminal, anywhere.** Run AI coding agents and TUI apps on your machine, access them from any browser.
 
-![MiddleManager Screenshot](docs/screenshot.png)
+![MidTerm Screenshot](docs/screenshot.png)
 
 ## The Problem
 
@@ -22,7 +22,7 @@ You kick off Claude Code on a complex refactor. It's going to take a while. Now 
 
 ## The Solution
 
-MiddleManager serves your terminal through a browser. Start a task on your main rig, continue watching from your laptop, phone, or tablet. Your machine does the work. You stay connected.
+MidTerm serves your terminal through a browser. Start a task on your main rig, continue watching from your laptop, phone, or tablet. Your machine does the work. You stay connected.
 
 ```
 Your PC                          Anywhere
@@ -56,12 +56,12 @@ Your PC                          Anywhere
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AiTlbx/MiddleManager/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/AiTlbx/MidTerm/main/install.sh | bash
 ```
 
 **Windows (PowerShell as Admin):**
 ```powershell
-irm https://raw.githubusercontent.com/AiTlbx/MiddleManager/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/AiTlbx/MidTerm/main/install.ps1 | iex
 ```
 
 The installer will:
@@ -77,17 +77,17 @@ The installer will:
 
 | Platform | Download |
 |----------|----------|
-| macOS ARM64 | [mm-osx-arm64.tar.gz](https://github.com/AiTlbx/MiddleManager/releases/latest) |
-| macOS x64 | [mm-osx-x64.tar.gz](https://github.com/AiTlbx/MiddleManager/releases/latest) |
-| Windows x64 | [mm-win-x64.zip](https://github.com/AiTlbx/MiddleManager/releases/latest) |
-| Linux x64 | [mm-linux-x64.tar.gz](https://github.com/AiTlbx/MiddleManager/releases/latest) |
+| macOS ARM64 | [mm-osx-arm64.tar.gz](https://github.com/AiTlbx/MidTerm/releases/latest) |
+| macOS x64 | [mm-osx-x64.tar.gz](https://github.com/AiTlbx/MidTerm/releases/latest) |
+| Windows x64 | [mm-win-x64.zip](https://github.com/AiTlbx/MidTerm/releases/latest) |
+| Linux x64 | [mm-linux-x64.tar.gz](https://github.com/AiTlbx/MidTerm/releases/latest) |
 
 ## Quick Start
 
 ```bash
-# Start MiddleManager
-./mm                    # macOS/Linux
-mm.exe                  # Windows
+# Start MidTerm
+./mt                    # macOS/Linux
+mt.exe                  # Windows
 
 # Open in browser
 http://localhost:2000
@@ -98,7 +98,7 @@ claude
 
 ## Security
 
-MiddleManager exposes terminal access over the network. Security is mandatory:
+MidTerm exposes terminal access over the network. Security is mandatory:
 
 - **Password required** — Set during installation, cannot be skipped
 - **PBKDF2 hashing** — 100,000 iterations with SHA256
@@ -139,8 +139,8 @@ mm [options]
 ## Configuration
 
 Settings stored in:
-- **Service mode:** `%ProgramData%\MiddleManager\settings.json` (Windows) or `/usr/local/etc/middlemanager/settings.json` (Unix)
-- **User mode:** `~/.middlemanager/settings.json`
+- **Service mode:** `%ProgramData%\MidTerm\settings.json` (Windows) or `/usr/local/etc/MidTerm/settings.json` (Unix)
+- **User mode:** `~/.MidTerm/settings.json`
 
 ```json
 {
@@ -162,14 +162,14 @@ Settings stored in:
   - Linux: Download from [releases](https://github.com/evanw/esbuild/releases)
 
 ```bash
-git clone https://github.com/AiTlbx/MiddleManager.git
-cd MiddleManager
+git clone https://github.com/AiTlbx/MidTerm.git
+cd MidTerm
 
 # Build
-dotnet build Ai.Tlbx.MiddleManager/Ai.Tlbx.MiddleManager.csproj
+dotnet build Ai.Tlbx.MidTerm/Ai.Tlbx.MidTerm.csproj
 
 # AOT binary (platform-specific)
-cd Ai.Tlbx.MiddleManager
+cd Ai.Tlbx.MidTerm
 ./build-aot-macos.sh     # macOS
 ./build-aot.cmd          # Windows
 ./build-aot-linux.sh     # Linux

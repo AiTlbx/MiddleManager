@@ -1,16 +1,16 @@
 #!/bin/bash
-# MiddleManager macOS/Linux Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/AiTlbx/MiddleManager/main/install.sh | bash
+# MidTerm macOS/Linux Installer
+# Usage: curl -fsSL https://raw.githubusercontent.com/AiTlbx/MidTerm/main/install.sh | bash
 
 set -e
 
 REPO_OWNER="AiTlbx"
-REPO_NAME="MiddleManager"
-SERVICE_NAME="middlemanager"
-LAUNCHD_LABEL="com.aitlbx.middlemanager"
+REPO_NAME="MidTerm"
+SERVICE_NAME="MidTerm"
+LAUNCHD_LABEL="com.aitlbx.MidTerm"
 # Legacy service names for migration
-OLD_HOST_SERVICE_NAME="middlemanager-host"
-OLD_LAUNCHD_HOST_LABEL="com.aitlbx.middlemanager-host"
+OLD_HOST_SERVICE_NAME="MidTerm-host"
+OLD_LAUNCHD_HOST_LABEL="com.aitlbx.MidTerm-host"
 
 # Colors
 RED='\033[0;31m'
@@ -28,7 +28,7 @@ PASSWORD_HASH="${PASSWORD_HASH:-}"
 
 print_header() {
     echo ""
-    echo -e "${CYAN}  MiddleManager Installer${NC}"
+    echo -e "${CYAN}  MidTerm Installer${NC}"
     echo -e "${CYAN}  ========================${NC}"
     echo ""
 }
@@ -69,7 +69,7 @@ detect_platform() {
         ARCH="x64"
     fi
 
-    ASSET_NAME="mm-${PLATFORM}-${ARCH}.tar.gz"
+    ASSET_NAME="mt-${PLATFORM}-${ARCH}.tar.gz"
     echo -e "${GRAY}Detected: $OS $ARCH${NC}"
 }
 
@@ -89,7 +89,7 @@ get_latest_release() {
 }
 
 prompt_service_mode() {
-    echo -e "  ${CYAN}How would you like to install MiddleManager?${NC}"
+    echo -e "  ${CYAN}How would you like to install MidTerm?${NC}"
     echo ""
     echo -e "  ${CYAN}[1] System service${NC} (recommended for always-on access)"
     echo -e "      ${GRAY}- Runs in background, starts on boot${NC}"
@@ -117,7 +117,7 @@ prompt_service_mode() {
 }
 
 get_existing_password_hash() {
-    local settings_path="/usr/local/etc/middlemanager/settings.json"
+    local settings_path="/usr/local/etc/MidTerm/settings.json"
     if [ -f "$settings_path" ]; then
         local hash=$(grep -o '"passwordHash"[[:space:]]*:[[:space:]]*"[^"]*"' "$settings_path" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/')
         if [ -n "$hash" ] && [ ${#hash} -gt 10 ]; then
@@ -131,7 +131,7 @@ get_existing_password_hash() {
 prompt_password() {
     echo ""
     echo -e "  ${YELLOW}Security Notice:${NC}"
-    echo -e "  ${GRAY}MiddleManager exposes terminal access over the network.${NC}"
+    echo -e "  ${GRAY}MidTerm exposes terminal access over the network.${NC}"
     echo -e "  ${GRAY}A password is required to prevent unauthorized access.${NC}"
     echo ""
 
@@ -157,7 +157,7 @@ prompt_password() {
         fi
 
         # Try to hash the password using mm --hash-password
-        local mm_path="/usr/local/bin/mm"
+        local mm_path="/usr/local/bin/mt"
         if [ -f "$mm_path" ]; then
             local hash=$("$mm_path" --hash-password "$password" 2>/dev/null || true)
             if [[ "$hash" == '$PBKDF2$'* ]]; then
@@ -177,7 +177,7 @@ prompt_password() {
 }
 
 write_service_settings() {
-    local config_dir="/usr/local/etc/middlemanager"
+    local config_dir="/usr/local/etc/MidTerm"
     local settings_path="$config_dir/settings.json"
     local old_settings_path="$config_dir/settings.json.old"
 
@@ -221,22 +221,22 @@ install_binary() {
     local temp_dir=$(mktemp -d)
 
     echo -e "${GRAY}Downloading...${NC}"
-    curl -fsSL "$ASSET_URL" -o "$temp_dir/mm.tar.gz"
+    curl -fsSL "$ASSET_URL" -o "$temp_dir/mt.tar.gz"
 
     echo -e "${GRAY}Extracting...${NC}"
-    tar -xzf "$temp_dir/mm.tar.gz" -C "$temp_dir"
+    tar -xzf "$temp_dir/mt.tar.gz" -C "$temp_dir"
 
     # Create install directory
     mkdir -p "$install_dir"
 
     # Copy web binary
-    cp "$temp_dir/mm" "$install_dir/"
-    chmod +x "$install_dir/mm"
+    cp "$temp_dir/mt" "$install_dir/"
+    chmod +x "$install_dir/mt"
 
     # Copy con-host binary (terminal subprocess)
-    if [ -f "$temp_dir/mmttyhost" ]; then
-        cp "$temp_dir/mmttyhost" "$install_dir/"
-        chmod +x "$install_dir/mmttyhost"
+    if [ -f "$temp_dir/mtttyhost" ]; then
+        cp "$temp_dir/mtttyhost" "$install_dir/"
+        chmod +x "$install_dir/mtttyhost"
     fi
 
     # Copy version manifest
@@ -247,13 +247,13 @@ install_binary() {
     # Cleanup
     rm -rf "$temp_dir"
 
-    # Remove legacy mm-host if present (from pre-v4)
-    rm -f "$install_dir/mm-host"
+    # Remove legacy mt-host if present (from pre-v4)
+    rm -f "$install_dir/mt-host"
 }
 
 install_as_service() {
     local install_dir="/usr/local/bin"
-    local lib_dir="/usr/local/lib/middlemanager"
+    local lib_dir="/usr/local/lib/MidTerm"
 
     # Check for root
     if [ "$EUID" -ne 0 ]; then
@@ -289,7 +289,7 @@ install_as_service() {
     echo ""
     echo -e "${GREEN}Installation complete!${NC}"
     echo ""
-    echo -e "  ${GRAY}Location: $install_dir/mm${NC}"
+    echo -e "  ${GRAY}Location: $install_dir/mt${NC}"
     echo -e "  ${CYAN}URL:      http://localhost:2000${NC}"
     echo ""
 }
@@ -325,16 +325,16 @@ install_launchd() {
     <string>${LAUNCHD_LABEL}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>${install_dir}/mm</string>
+        <string>${install_dir}/mt</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>${log_dir}/middlemanager.log</string>
+    <string>${log_dir}/MidTerm.log</string>
     <key>StandardErrorPath</key>
-    <string>${log_dir}/middlemanager.log</string>
+    <string>${log_dir}/MidTerm.log</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
@@ -371,12 +371,12 @@ install_systemd() {
     # Create systemd service
     cat > "$service_path" << EOF
 [Unit]
-Description=MiddleManager Terminal Server
+Description=MidTerm Terminal Server
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=${install_dir}/mm
+ExecStart=${install_dir}/mt
 Restart=always
 RestartSec=5
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
@@ -407,7 +407,7 @@ install_as_user() {
     fi
 
     # Create uninstall script
-    local lib_dir="$HOME/.local/lib/middlemanager"
+    local lib_dir="$HOME/.local/lib/MidTerm"
     mkdir -p "$lib_dir"
 
     create_uninstall_script "$lib_dir" false
@@ -415,8 +415,8 @@ install_as_user() {
     echo ""
     echo -e "${GREEN}Installation complete!${NC}"
     echo ""
-    echo -e "  ${GRAY}Location: $install_dir/mm${NC}"
-    echo -e "  ${YELLOW}Run 'mm' to start MiddleManager${NC}"
+    echo -e "  ${GRAY}Location: $install_dir/mt${NC}"
+    echo -e "  ${YELLOW}Run 'mm' to start MidTerm${NC}"
     echo ""
 }
 
@@ -429,54 +429,54 @@ create_uninstall_script() {
     if [ "$is_service" = true ]; then
         cat > "$uninstall_script" << 'EOF'
 #!/bin/bash
-# MiddleManager Uninstaller
+# MidTerm Uninstaller
 
 set -e
 
-echo "Uninstalling MiddleManager..."
+echo "Uninstalling MidTerm..."
 
 if [ "$(uname -s)" = "Darwin" ]; then
     # macOS - unload service
-    sudo launchctl unload /Library/LaunchDaemons/com.aitlbx.middlemanager.plist 2>/dev/null || true
-    sudo rm -f /Library/LaunchDaemons/com.aitlbx.middlemanager.plist
+    sudo launchctl unload /Library/LaunchDaemons/com.aitlbx.MidTerm.plist 2>/dev/null || true
+    sudo rm -f /Library/LaunchDaemons/com.aitlbx.MidTerm.plist
     # Cleanup old host service if present (from pre-v4)
-    sudo launchctl unload /Library/LaunchDaemons/com.aitlbx.middlemanager-host.plist 2>/dev/null || true
-    sudo rm -f /Library/LaunchDaemons/com.aitlbx.middlemanager-host.plist
+    sudo launchctl unload /Library/LaunchDaemons/com.aitlbx.MidTerm-host.plist 2>/dev/null || true
+    sudo rm -f /Library/LaunchDaemons/com.aitlbx.MidTerm-host.plist
 else
     # Linux - stop and remove service
-    sudo systemctl stop middlemanager 2>/dev/null || true
-    sudo systemctl disable middlemanager 2>/dev/null || true
-    sudo rm -f /etc/systemd/system/middlemanager.service
+    sudo systemctl stop MidTerm 2>/dev/null || true
+    sudo systemctl disable MidTerm 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/MidTerm.service
     # Cleanup old host service if present (from pre-v4)
-    sudo systemctl stop middlemanager-host 2>/dev/null || true
-    sudo systemctl disable middlemanager-host 2>/dev/null || true
-    sudo rm -f /etc/systemd/system/middlemanager-host.service
+    sudo systemctl stop MidTerm-host 2>/dev/null || true
+    sudo systemctl disable MidTerm-host 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/MidTerm-host.service
     sudo systemctl daemon-reload
 fi
 
-sudo rm -f /usr/local/bin/mm
-sudo rm -f /usr/local/bin/mmttyhost
-sudo rm -f /usr/local/bin/mm-host  # legacy cleanup
-sudo rm -rf /usr/local/lib/middlemanager
-sudo rm -rf /usr/local/etc/middlemanager
+sudo rm -f /usr/local/bin/mt
+sudo rm -f /usr/local/bin/mtttyhost
+sudo rm -f /usr/local/bin/mt-host  # legacy cleanup
+sudo rm -rf /usr/local/lib/MidTerm
+sudo rm -rf /usr/local/etc/MidTerm
 
-echo "MiddleManager uninstalled."
+echo "MidTerm uninstalled."
 EOF
     else
         cat > "$uninstall_script" << EOF
 #!/bin/bash
-# MiddleManager Uninstaller
+# MidTerm Uninstaller
 
 set -e
 
-echo "Uninstalling MiddleManager..."
+echo "Uninstalling MidTerm..."
 
-rm -f "$HOME/.local/bin/mm"
-rm -f "$HOME/.local/bin/mmttyhost"
-rm -f "$HOME/.local/bin/mm-host"  # legacy cleanup
-rm -rf "$HOME/.local/lib/middlemanager"
+rm -f "$HOME/.local/bin/mt"
+rm -f "$HOME/.local/bin/mtttyhost"
+rm -f "$HOME/.local/bin/mt-host"  # legacy cleanup
+rm -rf "$HOME/.local/lib/MidTerm"
 
-echo "MiddleManager uninstalled."
+echo "MidTerm uninstalled."
 EOF
     fi
 

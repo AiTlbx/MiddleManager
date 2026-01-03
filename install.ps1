@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
-# MiddleManager Windows Installer
-# Usage: irm https://raw.githubusercontent.com/AiTlbx/MiddleManager/main/install.ps1 | iex
+# MidTerm Windows Installer
+# Usage: irm https://raw.githubusercontent.com/AiTlbx/MidTerm/main/install.ps1 | iex
 
 param(
     [string]$RunAsUser,
@@ -12,21 +12,21 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
-$ServiceName = "MiddleManager"
-$OldHostServiceName = "MiddleManagerHost"
-$DisplayName = "MiddleManager"
+$ServiceName = "MidTerm"
+$OldHostServiceName = "MidTermHost"
+$DisplayName = "MidTerm"
 $Publisher = "AiTlbx"
 $RepoOwner = "AiTlbx"
-$RepoName = "MiddleManager"
-$WebBinaryName = "mm.exe"
-$TtyHostBinaryName = "mmttyhost.exe"
-$LegacyHostBinaryName = "mm-host.exe"
-$AssetPattern = "mm-win-x64.zip"
+$RepoName = "MidTerm"
+$WebBinaryName = "mt.exe"
+$TtyHostBinaryName = "mthost.exe"
+$LegacyHostBinaryName = "mt-host.exe"
+$AssetPattern = "mt-win-x64.zip"
 
 function Write-Header
 {
     Write-Host ""
-    Write-Host "  MiddleManager Installer" -ForegroundColor Cyan
+    Write-Host "  MidTerm Installer" -ForegroundColor Cyan
     Write-Host "  ========================" -ForegroundColor Cyan
     Write-Host ""
 }
@@ -51,7 +51,7 @@ function Get-CurrentUserInfo
 
 function Get-ExistingPasswordHash
 {
-    $settingsPath = "$env:ProgramData\MiddleManager\settings.json"
+    $settingsPath = "$env:ProgramData\MidTerm\settings.json"
     if (Test-Path $settingsPath)
     {
         try
@@ -75,7 +75,7 @@ function Prompt-Password
 
     Write-Host ""
     Write-Host "  Security Notice:" -ForegroundColor Yellow
-    Write-Host "  MiddleManager exposes terminal access over the network." -ForegroundColor Gray
+    Write-Host "  MidTerm exposes terminal access over the network." -ForegroundColor Gray
     Write-Host "  A password is required to prevent unauthorized access." -ForegroundColor Gray
     Write-Host ""
 
@@ -100,8 +100,8 @@ function Prompt-Password
             continue
         }
 
-        # Hash the password using mm.exe --hash-password
-        $mmPath = Join-Path $InstallDir "mm.exe"
+        # Hash the password using mt.exe --hash-password
+        $mmPath = Join-Path $InstallDir "mt.exe"
         if (Test-Path $mmPath)
         {
             try
@@ -128,7 +128,7 @@ function Get-LatestRelease
 {
     Write-Host "Fetching latest release..." -ForegroundColor Gray
     $apiUrl = "https://api.github.com/repos/$RepoOwner/$RepoName/releases/latest"
-    $release = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "MiddleManager-Installer" }
+    $release = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "MidTerm-Installer" }
     return $release
 }
 
@@ -151,7 +151,7 @@ function Write-ServiceSettings
         [string]$PasswordHash
     )
 
-    $configDir = "$env:ProgramData\MiddleManager"
+    $configDir = "$env:ProgramData\MidTerm"
     $settingsPath = Join-Path $configDir "settings.json"
     $oldSettingsPath = Join-Path $configDir "settings.json.old"
 
@@ -186,7 +186,7 @@ function Write-ServiceSettings
     if ($PasswordHash) { Write-Host "  Password: configured" -ForegroundColor Gray }
 }
 
-function Install-MiddleManager
+function Install-MidTerm
 {
     param(
         [bool]$AsService,
@@ -198,7 +198,7 @@ function Install-MiddleManager
 
     if ($AsService)
     {
-        $installDir = "$env:ProgramFiles\MiddleManager"
+        $installDir = "$env:ProgramFiles\MidTerm"
 
         # Stop and remove old two-service architecture if present
         $existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -209,23 +209,23 @@ function Install-MiddleManager
             Write-Host "Stopping existing service..." -ForegroundColor Gray
             # Don't wait for graceful shutdown - immediately kill processes
             Stop-Service -Name $ServiceName -Force -NoWait -ErrorAction SilentlyContinue
-            Get-Process -Name "mm-host", "mmttyhost", "mm" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Get-Process -Name "mt-host", "mthost", "mt" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
             Start-Sleep -Milliseconds 500
         }
 
-        # Migration: remove old MiddleManagerHost service from v2.1.x
+        # Migration: remove old MidTermHost service from v2.1.x
         if ($oldHostService)
         {
             Write-Host "Migrating from old two-service architecture..." -ForegroundColor Yellow
             Stop-Service -Name $OldHostServiceName -Force -NoWait -ErrorAction SilentlyContinue
-            Get-Process -Name "mm-host" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Get-Process -Name "mt-host" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
             sc.exe delete $OldHostServiceName | Out-Null
             Start-Sleep -Milliseconds 500
         }
     }
     else
     {
-        $installDir = "$env:LOCALAPPDATA\MiddleManager"
+        $installDir = "$env:LOCALAPPDATA\MidTerm"
     }
 
     # Create install directory
@@ -280,7 +280,7 @@ function Install-MiddleManager
         }
     }
 
-    # Remove legacy mm-host.exe if present from previous installs
+    # Remove legacy mt-host.exe if present from previous installs
     $legacyHostPath = Join-Path $installDir $LegacyHostBinaryName
     if (Test-Path $legacyHostPath)
     {
@@ -309,14 +309,14 @@ function Install-MiddleManager
 
         Install-AsService -InstallDir $installDir -Version $Version
 
-        # Wait for mm.exe to spawn
+        # Wait for mt.exe to spawn
         Start-Sleep -Seconds 2
 
         # Show final status
         Write-Host ""
         Write-Host "Process Status:" -ForegroundColor Cyan
         $serviceStatus = (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue).Status
-        $mmProc = Get-Process -Name "mm" -ErrorAction SilentlyContinue
+        $mmProc = Get-Process -Name "mt" -ErrorAction SilentlyContinue
 
         if ($serviceStatus -eq "Running") { Write-Host "  Service    : Running" -ForegroundColor Green }
         else { Write-Host "  Service    : $serviceStatus" -ForegroundColor Red }
@@ -369,14 +369,14 @@ function Install-AsService
     {
         Write-Host "Removing existing service..." -ForegroundColor Gray
         Stop-Service -Name $ServiceName -Force -NoWait -ErrorAction SilentlyContinue
-        Get-Process -Name "mm-host", "mmttyhost", "mm" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        Get-Process -Name "mt-host", "mthost", "mt" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 500
         sc.exe delete $ServiceName | Out-Null
         Start-Sleep -Milliseconds 500
     }
 
-    # Create service - mm.exe spawns mmttyhost per terminal session
-    Write-Host "Creating MiddleManager service..." -ForegroundColor Gray
+    # Create service - mt.exe spawns mmttyhost per terminal session
+    Write-Host "Creating MidTerm service..." -ForegroundColor Gray
     $binPath = "`"$webBinaryPath`""
     sc.exe create $ServiceName binPath= $binPath start= auto DisplayName= "$DisplayName" | Out-Null
     sc.exe description $ServiceName "Web-based terminal multiplexer for AI coding agents and TUI apps" | Out-Null
@@ -414,7 +414,7 @@ function Install-AsUserApp
     Create-UninstallScript -InstallDir $InstallDir -IsService $false
 
     Write-Host ""
-    Write-Host "Run 'mm' to start MiddleManager" -ForegroundColor Yellow
+    Write-Host "Run 'mt' to start MidTerm" -ForegroundColor Yellow
 }
 
 function Register-Uninstall
@@ -429,11 +429,11 @@ function Register-Uninstall
 
     if ($IsService)
     {
-        $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MiddleManager"
+        $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MidTerm"
     }
     else
     {
-        $regPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MiddleManager"
+        $regPath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MidTerm"
     }
 
     $regValues = @{
@@ -470,10 +470,10 @@ function Create-UninstallScript
     if ($IsService)
     {
         $content = @"
-# MiddleManager Uninstaller
+# MidTerm Uninstaller
 `$ErrorActionPreference = "Stop"
 
-Write-Host "Uninstalling MiddleManager..." -ForegroundColor Cyan
+Write-Host "Uninstalling MidTerm..." -ForegroundColor Cyan
 
 # Stop and remove service
 Stop-Service -Name "$ServiceName" -Force -ErrorAction SilentlyContinue
@@ -484,26 +484,26 @@ Stop-Service -Name "$OldHostServiceName" -Force -ErrorAction SilentlyContinue
 sc.exe delete "$OldHostServiceName" 2>`$null | Out-Null
 
 # Remove registry entry
-Remove-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MiddleManager" -Force -ErrorAction SilentlyContinue
+Remove-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MidTerm" -Force -ErrorAction SilentlyContinue
 
 # Remove settings
-Remove-Item -Path "`$env:ProgramData\MiddleManager" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -Path "`$env:ProgramData\MidTerm" -Recurse -Force -ErrorAction SilentlyContinue
 
 # Remove install directory (schedule for next reboot if locked)
 `$installDir = "$InstallDir"
 Start-Sleep -Seconds 2
 Remove-Item -Path `$installDir -Recurse -Force -ErrorAction SilentlyContinue
 
-Write-Host "MiddleManager uninstalled." -ForegroundColor Green
+Write-Host "MidTerm uninstalled." -ForegroundColor Green
 "@
     }
     else
     {
         $content = @"
-# MiddleManager Uninstaller
+# MidTerm Uninstaller
 `$ErrorActionPreference = "Stop"
 
-Write-Host "Uninstalling MiddleManager..." -ForegroundColor Cyan
+Write-Host "Uninstalling MidTerm..." -ForegroundColor Cyan
 
 # Remove from PATH
 `$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
@@ -511,12 +511,12 @@ Write-Host "Uninstalling MiddleManager..." -ForegroundColor Cyan
 [Environment]::SetEnvironmentVariable("Path", `$newPath, "User")
 
 # Remove registry entry
-Remove-Item -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MiddleManager" -Force -ErrorAction SilentlyContinue
+Remove-Item -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\MidTerm" -Force -ErrorAction SilentlyContinue
 
 # Remove install directory
 Remove-Item -Path "$InstallDir" -Recurse -Force -ErrorAction SilentlyContinue
 
-Write-Host "MiddleManager uninstalled." -ForegroundColor Green
+Write-Host "MidTerm uninstalled." -ForegroundColor Green
 "@
     }
 
@@ -533,7 +533,7 @@ if ($ServiceMode)
     $version = $script:release.tag_name -replace "^v", ""
     Write-Host "  Latest version: $version" -ForegroundColor White
     Write-Host ""
-    Install-MiddleManager -AsService $true -Version $version -RunAsUser $RunAsUser -RunAsUserSid $RunAsUserSid -PasswordHash $PasswordHash
+    Install-MidTerm -AsService $true -Version $version -RunAsUser $RunAsUser -RunAsUserSid $RunAsUserSid -PasswordHash $PasswordHash
     exit
 }
 
@@ -550,7 +550,7 @@ Write-Host "  Latest version: $version" -ForegroundColor White
 Write-Host ""
 
 # Prompt for install mode
-Write-Host "  How would you like to install MiddleManager?" -ForegroundColor White
+Write-Host "  How would you like to install MidTerm?" -ForegroundColor White
 Write-Host ""
 Write-Host "  [1] System service (recommended for always-on access)" -ForegroundColor Cyan
 Write-Host "      - Runs in background, starts on boot" -ForegroundColor Gray
@@ -571,7 +571,7 @@ $asService = ($choice -eq "" -or $choice -eq "1")
 
 if ($asService)
 {
-    $installDir = "$env:ProgramFiles\MiddleManager"
+    $installDir = "$env:ProgramFiles\MidTerm"
 
     # Check for existing password (preserve on update)
     $existingHash = Get-ExistingPasswordHash
@@ -615,9 +615,9 @@ if ($asService)
     }
 
     # Already admin, proceed with install
-    Install-MiddleManager -AsService $true -Version $version -RunAsUser $currentUser.Name -RunAsUserSid $currentUser.Sid -PasswordHash $passwordHash
+    Install-MidTerm -AsService $true -Version $version -RunAsUser $currentUser.Name -RunAsUserSid $currentUser.Sid -PasswordHash $passwordHash
 }
 else
 {
-    Install-MiddleManager -AsService $false -Version $version -RunAsUser "" -RunAsUserSid "" -PasswordHash ""
+    Install-MidTerm -AsService $false -Version $version -RunAsUser "" -RunAsUserSid "" -PasswordHash ""
 }
