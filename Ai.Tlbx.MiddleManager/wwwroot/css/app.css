@@ -398,6 +398,9 @@ html, body {
     display: flex;
     align-items: flex-start;
     justify-content: flex-start;
+    -webkit-font-smoothing: none;
+    -moz-osx-font-smoothing: grayscale;
+    font-smooth: never;
 }
 
 .terminal-container.visible {
