@@ -7,6 +7,10 @@
 
 import { activeSessionId } from '../../state';
 
+// Bracketed paste mode escape sequences
+const PASTE_START = '\x1b[200~';
+const PASTE_END = '\x1b[201~';
+
 // Forward declaration for sendInput
 let sendInput: (sessionId: string, data: string) => void = () => {};
 
@@ -61,7 +65,8 @@ async function handleFileDrop(files: FileList): Promise<void> {
   }
 
   if (paths.length > 0) {
-    sendInput(activeSessionId, paths.join(' '));
+    // Wrap in bracketed paste sequences so TUIs recognize it as pasted content
+    sendInput(activeSessionId, PASTE_START + paths.join(' ') + PASTE_END);
   }
 }
 
@@ -81,7 +86,7 @@ async function handleClipboardImage(items: DataTransferItemList): Promise<boolea
 
         const path = await uploadFile(activeSessionId, namedFile);
         if (path) {
-          sendInput(activeSessionId, path);
+          sendInput(activeSessionId, PASTE_START + path + PASTE_END);
           return true;
         }
       }
@@ -126,37 +131,35 @@ export function setupFileDrop(container: HTMLElement): void {
 }
 
 /**
- * Set up clipboard paste handler for image data
- * Returns true if an image was handled, false otherwise
+ * Handle clipboard paste - checks for images first, falls back to text
+ * Used by the keyboard handler in manager.ts
  */
-export function setupClipboardImagePaste(sessionId: string, terminal: any): void {
-  terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
-    // Only handle Ctrl+V / Cmd+V
-    if (e.type !== 'keydown') return true;
-    if (!((e.ctrlKey || e.metaKey) && e.key === 'v')) return true;
-
-    // Check clipboard for images
-    navigator.clipboard.read().then(async (items) => {
-      for (const item of items) {
-        const imageType = item.types.find(t => t.startsWith('image/'));
-        if (imageType) {
-          const blob = await item.getType(imageType);
-          // Always use .jpg extension - TUIs are smart enough to detect actual format
-          const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-          const file = new File([blob], `clipboard_${timestamp}.jpg`, { type: imageType });
-
-          const path = await uploadFile(sessionId, file);
-          if (path) {
-            sendInput(sessionId, path);
-          }
+export async function handleClipboardPaste(sessionId: string): Promise<void> {
+  // Try to read clipboard items (images)
+  try {
+    const items = await navigator.clipboard.read();
+    for (const item of items) {
+      const imageType = item.types.find(t => t.startsWith('image/'));
+      if (imageType) {
+        const blob = await item.getType(imageType);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const file = new File([blob], `clipboard_${timestamp}.jpg`, { type: imageType });
+        const path = await uploadFile(sessionId, file);
+        if (path) {
+          sendInput(sessionId, PASTE_START + path + PASTE_END);
+          return; // Image handled, don't paste text
         }
       }
-    }).catch(() => {
-      // Clipboard read failed or not supported - fall through to normal paste
-    });
+    }
+  } catch {
+    // clipboard.read() not supported or failed, fall through to text paste
+  }
 
-    // Always return true to allow normal text paste to proceed
-    // The image paste happens asynchronously if there was an image
-    return true;
-  });
+  // No image found or image handling failed, paste text
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) sendInput(sessionId, PASTE_START + text + PASTE_END);
+  } catch {
+    // Text paste failed
+  }
 }

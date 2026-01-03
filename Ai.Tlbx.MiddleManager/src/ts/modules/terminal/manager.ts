@@ -20,7 +20,7 @@ import {
 } from '../../state';
 import { getClipboardStyle } from '../../utils';
 import { applyTerminalScaling, fitSessionToScreen } from './scaling';
-import { setupFileDrop, setupClipboardImagePaste } from './fileDrop';
+import { setupFileDrop, handleClipboardPaste } from './fileDrop';
 
 declare const Terminal: any;
 declare const FitAddon: any;
@@ -198,7 +198,6 @@ export function createTerminalForSession(
       fitSessionToScreen(sessionId);
 
       setupTerminalEvents(sessionId, terminal, container);
-      setupClipboardImagePaste(sessionId, terminal);
     });
   });
 
@@ -309,11 +308,9 @@ export function setupTerminalEvents(
         }
         return true;
       }
-      // Ctrl+V: paste
+      // Ctrl+V: paste (images uploaded, text pasted)
       if (e.ctrlKey && !e.shiftKey && e.key === 'v') {
-        navigator.clipboard.readText().then((text: string) => {
-          if (text) sendInput(sessionId, text);
-        }).catch(() => {});
+        handleClipboardPaste(sessionId);
         return false;
       }
     } else {
@@ -325,11 +322,9 @@ export function setupTerminalEvents(
         }
         return false;
       }
-      // Unix: Ctrl+Shift+V to paste
+      // Unix: Ctrl+Shift+V to paste (images uploaded, text pasted)
       if (e.ctrlKey && e.shiftKey && (e.key === 'V' || e.key === 'v')) {
-        navigator.clipboard.readText().then((text: string) => {
-          if (text) sendInput(sessionId, text);
-        }).catch(() => {});
+        handleClipboardPaste(sessionId);
         return false;
       }
     }
@@ -349,13 +344,11 @@ export function setupTerminalEvents(
     return true;
   });
 
-  // Right-click paste
+  // Right-click paste (images uploaded, text pasted)
   const contextMenuHandler = (e: MouseEvent) => {
     if (!currentSettings || currentSettings.rightClickPaste !== false) {
       e.preventDefault();
-      navigator.clipboard.readText().then((text) => {
-        if (text) sendInput(sessionId, text);
-      }).catch(() => {});
+      handleClipboardPaste(sessionId);
     }
   };
 
