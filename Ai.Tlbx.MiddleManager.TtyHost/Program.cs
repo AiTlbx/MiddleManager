@@ -10,7 +10,7 @@ namespace Ai.Tlbx.MiddleManager.TtyHost;
 
 public static class Program
 {
-    public const string Version = "4.5.2";
+    public const string Version = "4.5.3";
 
     private static readonly string LogDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
@@ -696,6 +696,17 @@ internal sealed class TerminalSession
     private void ParseOscSequences(ReadOnlySpan<byte> data)
     {
         var text = Encoding.UTF8.GetString(data);
+
+        // Detect bracketed paste mode enable/disable
+        if (text.Contains("\x1b[?2004h"))
+        {
+            Program.Log("[VT] Bracketed paste mode ENABLED by application");
+        }
+        if (text.Contains("\x1b[?2004l"))
+        {
+            Program.Log("[VT] Bracketed paste mode DISABLED by application");
+        }
+
         var path = ParseOsc7Path(text);
         if (path is not null && CurrentWorkingDirectory != path)
         {
