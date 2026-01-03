@@ -346,10 +346,13 @@ export function setupTerminalEvents(
 
   // Prevent browser paste event - we handle it ourselves via handleClipboardPaste
   // This prevents xterm.js from also handling paste via onData
+  // Use capture phase to intercept before xterm.js
   const pasteHandler = (e: ClipboardEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
   };
-  container.addEventListener('paste', pasteHandler);
+  container.addEventListener('paste', pasteHandler, true);
 
   // Right-click paste (images uploaded, text pasted)
   const contextMenuHandler = (e: MouseEvent) => {
@@ -384,6 +387,16 @@ export function destroyTerminalForSession(sessionId: string): void {
   state.container.remove();
   sessionTerminals.delete(sessionId);
   pendingOutputFrames.delete(sessionId);
+}
+
+/**
+ * Paste text to a terminal using xterm.js paste() method
+ * This respects bracketed paste mode if the application enabled it
+ */
+export function pasteToTerminal(sessionId: string, data: string): void {
+  const state = sessionTerminals.get(sessionId);
+  if (!state) return;
+  state.terminal.paste(data);
 }
 
 /**

@@ -7,20 +7,19 @@
 
 import { activeSessionId } from '../../state';
 
-// Bracketed paste mode escape sequences
-const PASTE_START = '\x1b[200~';
-const PASTE_END = '\x1b[201~';
-
-// Forward declaration for sendInput
+// Forward declarations for callbacks
 let sendInput: (sessionId: string, data: string) => void = () => {};
+let pasteToTerminal: (sessionId: string, data: string) => void = () => {};
 
 /**
- * Register the sendInput callback from mux channel
+ * Register callbacks from mux channel and terminal manager
  */
 export function registerFileDropCallbacks(callbacks: {
   sendInput?: (sessionId: string, data: string) => void;
+  pasteToTerminal?: (sessionId: string, data: string) => void;
 }): void {
   if (callbacks.sendInput) sendInput = callbacks.sendInput;
+  if (callbacks.pasteToTerminal) pasteToTerminal = callbacks.pasteToTerminal;
 }
 
 /**
@@ -65,8 +64,8 @@ async function handleFileDrop(files: FileList): Promise<void> {
   }
 
   if (paths.length > 0) {
-    // Wrap in bracketed paste sequences so TUIs recognize it as pasted content
-    sendInput(activeSessionId, PASTE_START + paths.join(' ') + PASTE_END);
+    // Use terminal.paste() which handles bracketed paste mode automatically
+    pasteToTerminal(activeSessionId, paths.join(' '));
   }
 }
 
@@ -86,7 +85,7 @@ async function handleClipboardImage(items: DataTransferItemList): Promise<boolea
 
         const path = await uploadFile(activeSessionId, namedFile);
         if (path) {
-          sendInput(activeSessionId, PASTE_START + path + PASTE_END);
+          pasteToTerminal(activeSessionId, path);
           return true;
         }
       }
@@ -146,7 +145,7 @@ export async function handleClipboardPaste(sessionId: string): Promise<void> {
         const file = new File([blob], `clipboard_${timestamp}.jpg`, { type: imageType });
         const path = await uploadFile(sessionId, file);
         if (path) {
-          sendInput(sessionId, PASTE_START + path + PASTE_END);
+          pasteToTerminal(sessionId, path);
           return; // Image handled, don't paste text
         }
       }
@@ -158,7 +157,7 @@ export async function handleClipboardPaste(sessionId: string): Promise<void> {
   // No image found or image handling failed, paste text
   try {
     const text = await navigator.clipboard.readText();
-    if (text) sendInput(sessionId, PASTE_START + text + PASTE_END);
+    if (text) pasteToTerminal(sessionId, text);
   } catch {
     // Text paste failed
   }

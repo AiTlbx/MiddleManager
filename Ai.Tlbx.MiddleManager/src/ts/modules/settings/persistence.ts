@@ -146,7 +146,14 @@ function applySettingsToTerminals(): void {
 
     // Trigger re-render after font changes
     if (state.opened) {
-      state.fitAddon.fit();
+      try {
+        const dims = state.fitAddon.proposeDimensions();
+        if (dims?.cols && dims?.rows) {
+          state.fitAddon.fit();
+        }
+      } catch {
+        // FitAddon may fail if terminal render service isn't initialized
+      }
     }
   });
 }

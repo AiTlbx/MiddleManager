@@ -55,8 +55,17 @@ export function fitSessionToScreen(sessionId: string): void {
   }
 
   requestAnimationFrame(() => {
-    state.fitAddon.fit();
-    sendResize(sessionId, state.terminal);
+    try {
+      // Check if dimensions can be proposed before calling fit()
+      // This avoids errors when terminal internals aren't ready
+      const dims = state.fitAddon.proposeDimensions();
+      if (dims?.cols && dims?.rows) {
+        state.fitAddon.fit();
+        sendResize(sessionId, state.terminal);
+      }
+    } catch {
+      // FitAddon may fail if terminal render service isn't initialized
+    }
 
     if (wasHidden) {
       state.container.classList.add('hidden');
