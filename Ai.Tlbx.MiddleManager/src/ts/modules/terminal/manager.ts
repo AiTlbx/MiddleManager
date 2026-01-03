@@ -153,8 +153,8 @@ export function createTerminalForSession(
     terminal.open(container);
     state.opened = true;
 
-    // Patch canvas context to round coordinates for pixel-perfect rendering
-    patchCanvasContext(terminal);
+    // Note: patchCanvasContext was tried but didn't fix box-drawing gaps
+    // patchCanvasContext(terminal);
 
     // Load WebGL addon for GPU-accelerated rendering (with fallback)
     if (currentSettings?.useWebGL !== false) {

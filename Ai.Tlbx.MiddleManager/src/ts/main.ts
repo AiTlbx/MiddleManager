@@ -82,7 +82,27 @@ import { bindClick, escapeHtml } from './utils';
 (window as any).mmDebug = {
   get terminals() { return sessionTerminals; },
   get activeId() { return activeSessionId; },
-  get settings() { return currentSettings; }
+  get settings() { return currentSettings; },
+  setCustomGlyphs(enabled: boolean): void {
+    sessionTerminals.forEach((state) => {
+      state.terminal.options.customGlyphs = enabled;
+    });
+    console.log(`customGlyphs set to ${enabled} for all terminals`);
+  },
+  getTerminalInfo(): void {
+    const state = sessionTerminals.get(activeSessionId || '');
+    if (!state) { console.log('No active terminal'); return; }
+    const t = state.terminal;
+    console.log('Terminal info:', {
+      cols: t.cols,
+      rows: t.rows,
+      customGlyphs: t.options.customGlyphs,
+      fontSize: t.options.fontSize,
+      fontFamily: t.options.fontFamily,
+      devicePixelRatio: window.devicePixelRatio,
+      rendererType: t._core?._renderService?._renderer?.constructor?.name
+    });
+  }
 };
 
 // =============================================================================
