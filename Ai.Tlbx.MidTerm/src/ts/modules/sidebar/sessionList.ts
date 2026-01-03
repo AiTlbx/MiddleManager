@@ -139,7 +139,7 @@ export function renderSessionList(): void {
 
     item.appendChild(info);
     item.appendChild(actions);
-    dom.sessionList.appendChild(item);
+    dom.sessionList!.appendChild(item);
   });
 
   // Count only non-pending sessions

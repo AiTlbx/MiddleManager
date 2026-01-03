@@ -5,8 +5,8 @@
  * This file defines the contract between the server and client.
  */
 
-import type { Terminal } from 'xterm';
-import type { FitAddon } from 'xterm-addon-fit';
+import type { Terminal } from '@xterm/xterm';
+import type { FitAddon } from '@xterm/addon-fit';
 
 // =============================================================================
 // Session Types
@@ -53,6 +53,8 @@ export type ClipboardShortcuts = 'auto' | 'windows' | 'unix';
 /** User settings from server */
 export interface Settings {
   defaultShell: string;
+  defaultCols: number;
+  defaultRows: number;
   defaultWorkingDirectory: string;
   fontSize: number;
   fontFamily: string;
@@ -108,7 +110,7 @@ export interface HealthResponse {
   memoryMB: number;
   uptime: string;
   sessionCount: number;
-  conHostVersion?: string;
+  ttyHostVersion?: string;
   webVersion?: string;
   versionMismatch?: boolean;
   windowsBuildNumber?: number;
@@ -117,8 +119,8 @@ export interface HealthResponse {
   mode?: string;
   platform?: string;
   webProcessId?: number;
-  conHostCompatible?: boolean;
-  conHostExpected?: string;
+  ttyHostCompatible?: boolean;
+  ttyHostExpected?: string;
 }
 
 /** Network interface info */

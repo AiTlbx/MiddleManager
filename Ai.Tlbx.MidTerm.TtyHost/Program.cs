@@ -199,7 +199,7 @@ public static class Program
 
                     if (client.IsConnected)
                     {
-                        var msg = ConHostProtocol.CreateOutputMessage(session.Cols, session.Rows, data.Span);
+                        var msg = TtyHostProtocol.CreateOutputMessage(session.Cols, session.Rows, data.Span);
                         Log($"Writing output: type=0x{msg[0]:X2}, len={BitConverter.ToInt32(msg, 1)}, total={msg.Length}");
                         lock (stream)
                         {
@@ -225,7 +225,7 @@ public static class Program
                 {
                     if (client.IsConnected)
                     {
-                        var msg = ConHostProtocol.CreateStateChange(session.IsRunning, session.ExitCode);
+                        var msg = TtyHostProtocol.CreateStateChange(session.IsRunning, session.ExitCode);
                         lock (stream)
                         {
                             stream.Write(msg);
@@ -253,7 +253,7 @@ public static class Program
                             {
                                 if (client.IsConnected)
                                 {
-                                    var msg = ConHostProtocol.CreateOutputMessage(session.Cols, session.Rows, data);
+                                    var msg = TtyHostProtocol.CreateOutputMessage(session.Cols, session.Rows, data);
                                     Log($"Writing buffered: type=0x{msg[0]:X2}, len={BitConverter.ToInt32(msg, 1)}, total={msg.Length}");
                                     lock (stream)
                                     {
@@ -308,7 +308,7 @@ public static class Program
 
     private static async Task ProcessMessagesAsync(TerminalSession session, Stream stream, CancellationToken ct, Action? onHandshakeComplete = null)
     {
-        var headerBuffer = new byte[ConHostProtocol.HeaderSize];
+        var headerBuffer = new byte[TtyHostProtocol.HeaderSize];
 
         while (!ct.IsCancellationRequested)
         {
@@ -319,16 +319,16 @@ public static class Program
                 break;
             }
 
-            if (bytesRead < ConHostProtocol.HeaderSize)
+            if (bytesRead < TtyHostProtocol.HeaderSize)
             {
                 // Read remaining header bytes
-                var remaining = ConHostProtocol.HeaderSize - bytesRead;
+                var remaining = TtyHostProtocol.HeaderSize - bytesRead;
                 var more = await stream.ReadAsync(headerBuffer.AsMemory(bytesRead, remaining), ct).ConfigureAwait(false);
                 if (more == 0) break;
                 bytesRead += more;
             }
 
-            if (!ConHostProtocol.TryReadHeader(headerBuffer, out var msgType, out var payloadLength))
+            if (!TtyHostProtocol.TryReadHeader(headerBuffer, out var msgType, out var payloadLength))
             {
                 Log("Invalid message header");
                 break;
@@ -358,9 +358,9 @@ public static class Program
             // Process message
             switch (msgType)
             {
-                case ConHostMessageType.GetInfo:
+                case TtyHostMessageType.GetInfo:
                     var info = session.GetInfo();
-                    var infoMsg = ConHostProtocol.CreateInfoResponse(info);
+                    var infoMsg = TtyHostProtocol.CreateInfoResponse(info);
                     Log($"Writing Info response: type=0x{infoMsg[0]:X2}, len={BitConverter.ToInt32(infoMsg, 1)}, total={infoMsg.Length}");
                     lock (stream)
                     {
@@ -371,7 +371,7 @@ public static class Program
                     onHandshakeComplete?.Invoke();
                     break;
 
-                case ConHostMessageType.Input:
+                case TtyHostMessageType.Input:
                     if (payloadLength < 20)
                     {
                         DebugLog($"[IPC-INPUT] {BitConverter.ToString(payload.ToArray())}");
@@ -379,10 +379,10 @@ public static class Program
                     await session.SendInputAsync(payload.ToArray(), ct).ConfigureAwait(false);
                     break;
 
-                case ConHostMessageType.Resize:
-                    var (cols, rows) = ConHostProtocol.ParseResize(payload);
+                case TtyHostMessageType.Resize:
+                    var (cols, rows) = TtyHostProtocol.ParseResize(payload);
                     session.Resize(cols, rows);
-                    var resizeAck = ConHostProtocol.CreateResizeAck();
+                    var resizeAck = TtyHostProtocol.CreateResizeAck();
                     lock (stream)
                     {
                         stream.Write(resizeAck);
@@ -390,9 +390,9 @@ public static class Program
                     }
                     break;
 
-                case ConHostMessageType.GetBuffer:
+                case TtyHostMessageType.GetBuffer:
                     var buffer = session.GetBuffer();
-                    var bufferMsg = ConHostProtocol.CreateBufferResponse(buffer);
+                    var bufferMsg = TtyHostProtocol.CreateBufferResponse(buffer);
                     lock (stream)
                     {
                         stream.Write(bufferMsg);
@@ -400,10 +400,10 @@ public static class Program
                     }
                     break;
 
-                case ConHostMessageType.SetName:
-                    var name = ConHostProtocol.ParseSetName(payload);
+                case TtyHostMessageType.SetName:
+                    var name = TtyHostProtocol.ParseSetName(payload);
                     session.SetName(string.IsNullOrEmpty(name) ? null : name);
-                    var nameAck = ConHostProtocol.CreateSetNameAck();
+                    var nameAck = TtyHostProtocol.CreateSetNameAck();
                     lock (stream)
                     {
                         stream.Write(nameAck);
@@ -411,9 +411,9 @@ public static class Program
                     }
                     break;
 
-                case ConHostMessageType.Close:
+                case TtyHostMessageType.Close:
                     Log("Received close request, shutting down");
-                    var closeAck = ConHostProtocol.CreateCloseAck();
+                    var closeAck = TtyHostProtocol.CreateCloseAck();
                     lock (stream)
                     {
                         stream.Write(closeAck);
@@ -671,7 +671,7 @@ internal sealed class TerminalSession
             CurrentWorkingDirectory = CurrentWorkingDirectory,
             Name = Name,
             CreatedAt = CreatedAt,
-            ConHostVersion = Program.Version
+            TtyHostVersion = Program.Version
         };
     }
 

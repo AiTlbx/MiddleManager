@@ -94,14 +94,14 @@ export function formatUptime(seconds: number): string {
 }
 
 /**
- * Update the con-host version mismatch warning banner
+ * Update the ttyhost version mismatch warning banner
  */
-export function updateConHostWarning(health: HealthResponse): void {
-  let banner = document.getElementById('conhost-warning');
+export function updateTtyHostWarning(health: HealthResponse): void {
+  let banner = document.getElementById('ttyhost-warning');
 
   if (!banner) {
     banner = document.createElement('div');
-    banner.id = 'conhost-warning';
+    banner.id = 'ttyhost-warning';
     banner.className = 'warning-banner';
     const header = document.querySelector('.app-header');
     if (header && header.parentNode) {
@@ -109,12 +109,12 @@ export function updateConHostWarning(health: HealthResponse): void {
     }
   }
 
-  if (health.conHostVersion && health.conHostCompatible === false) {
+  if (health.ttyHostVersion && health.ttyHostCompatible === false) {
     banner.innerHTML =
       '<strong>Version mismatch:</strong> mmttyhost is ' +
-      health.conHostVersion +
+      health.ttyHostVersion +
       ', expected ' +
-      health.conHostExpected +
+      health.ttyHostExpected +
       '. Terminals may not work correctly. Please update mmttyhost.exe or restart the service.';
     banner.style.display = 'block';
   } else {
@@ -136,17 +136,17 @@ export function fetchSystemStatus(): void {
       const statusText = health.healthy ? 'Healthy' : 'Unhealthy';
       const uptimeStr = formatUptime(health.uptimeSeconds || 0);
 
-      let conHostHtml = '';
-      if (health.conHostVersion !== null && health.conHostVersion !== undefined) {
-        const versionClass = health.conHostCompatible ? '' : 'status-error';
-        conHostHtml =
+      let ttyHostHtml = '';
+      if (health.ttyHostVersion !== null && health.ttyHostVersion !== undefined) {
+        const versionClass = health.ttyHostCompatible ? '' : 'status-error';
+        ttyHostHtml =
           '<div class="status-detail-row">' +
           '<span class="detail-label">mmttyhost</span>' +
           '<span class="detail-value ' +
           versionClass +
           '">' +
-          health.conHostVersion +
-          (health.conHostCompatible ? '' : ' expected ' + health.conHostExpected) +
+          health.ttyHostVersion +
+          (health.ttyHostCompatible ? '' : ' expected ' + health.ttyHostExpected) +
           '</span>' +
           '</div>';
       }
@@ -193,10 +193,10 @@ export function fetchSystemStatus(): void {
         (health.webProcessId || '') +
         '</span>' +
         '</div>' +
-        conHostHtml +
+        ttyHostHtml +
         '</div>';
 
-      updateConHostWarning(health);
+      updateTtyHostWarning(health);
     })
     .catch((err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
@@ -212,7 +212,7 @@ export function checkSystemHealth(): void {
   fetch('/api/health')
     .then((response) => response.json() as Promise<HealthResponse>)
     .then((health) => {
-      updateConHostWarning(health);
+      updateTtyHostWarning(health);
       if (health.windowsBuildNumber !== undefined) {
         setWindowsBuildNumber(health.windowsBuildNumber);
       }

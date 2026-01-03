@@ -6,11 +6,11 @@ namespace Ai.Tlbx.MidTerm.Services;
 
 public sealed class StateWebSocketHandler
 {
-    private readonly ConHostSessionManager _sessionManager;
+    private readonly TtyHostSessionManager _sessionManager;
     private readonly UpdateService _updateService;
 
     public StateWebSocketHandler(
-        ConHostSessionManager sessionManager,
+        TtyHostSessionManager sessionManager,
         UpdateService updateService)
     {
         _sessionManager = sessionManager;

@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Version>5.0.8</Version>
+    <Version>5.1.0</Version>
     <InvariantGlobalization>true</InvariantGlobalization>
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
     <EnableDefaultContentItems>false</EnableDefaultContentItems>
@@ -42,8 +42,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Static wwwroot files (terminal.min.js is committed, .map is gitignored) -->
-    <EmbeddedResource Include="wwwroot\**\*" Exclude="wwwroot\js\terminal.min.js.map" LinkBase="wwwroot" />
+    <!-- Static wwwroot files (includes .map for production debugging) -->
+    <EmbeddedResource Include="wwwroot\**\*" LinkBase="wwwroot" />
     <UpToDateCheckInput Include="wwwroot\**\*" />
   </ItemGroup>
 
@@ -82,16 +82,22 @@
     <TypeScriptOutFile>wwwroot\js\terminal.min.js</TypeScriptOutFile>
   </PropertyGroup>
 
-  <!-- Debug build: with source map (always runs - esbuild is fast, ensures freshness) -->
-  <Target Name="CompileTypeScriptDebug" BeforeTargets="Build;Publish"
-          Condition="'$(Configuration)' == 'Debug' And Exists('$(TypeScriptSourceDir)\main.ts')">
-    <Exec Command="esbuild $(TypeScriptSourceDir)/main.ts --bundle --minify --sourcemap=external --outfile=$(TypeScriptOutFile) --target=es2020" />
+  <!-- TypeScript type checking (fails build on TS errors) -->
+  <Target Name="TypeCheckTypeScript" BeforeTargets="CompileTypeScriptDebug;CompileTypeScriptRelease"
+          Condition="Exists('$(TypeScriptSourceDir)\main.ts')">
+    <Exec Command="npx tsc --noEmit" WorkingDirectory="$(ProjectDir)" />
   </Target>
 
-  <!-- Release build: no source map, smallest size (always runs - esbuild is fast, ensures freshness) -->
+  <!-- Debug build: with source map -->
+  <Target Name="CompileTypeScriptDebug" BeforeTargets="Build;Publish"
+          Condition="'$(Configuration)' == 'Debug' And Exists('$(TypeScriptSourceDir)\main.ts')">
+    <Exec Command="npx esbuild $(TypeScriptSourceDir)/main.ts --bundle --minify --sourcemap=external --outfile=$(TypeScriptOutFile) --target=es2020" />
+  </Target>
+
+  <!-- Release build: WITH source map for production debugging -->
   <Target Name="CompileTypeScriptRelease" BeforeTargets="Build;Publish"
           Condition="'$(Configuration)' != 'Debug' And Exists('$(TypeScriptSourceDir)\main.ts')">
-    <Exec Command="esbuild $(TypeScriptSourceDir)/main.ts --bundle --minify --outfile=$(TypeScriptOutFile) --target=es2020" />
+    <Exec Command="npx esbuild $(TypeScriptSourceDir)/main.ts --bundle --minify --sourcemap=external --outfile=$(TypeScriptOutFile) --target=es2020" />
   </Target>
 
   <Target Name="CleanTypeScript" AfterTargets="Clean">

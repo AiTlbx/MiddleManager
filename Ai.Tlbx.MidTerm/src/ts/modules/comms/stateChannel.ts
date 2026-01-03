@@ -5,7 +5,7 @@
  * Handles automatic reconnection with exponential backoff.
  */
 
-import type { Session, UpdateInfo } from '../../types';
+import type { Session, UpdateInfo, TerminalState } from '../../types';
 import { INITIAL_RECONNECT_DELAY, MAX_RECONNECT_DELAY } from '../../constants';
 import { scheduleReconnect } from '../../utils';
 import {
@@ -30,7 +30,7 @@ import {
 // Forward declarations for functions from other modules
 // These will be imported when those modules are created
 let destroyTerminalForSession: (sessionId: string) => void = () => {};
-let applyTerminalScaling: (sessionId: string, state: unknown) => void = () => {};
+let applyTerminalScaling: (sessionId: string, state: TerminalState) => void = () => {};
 let renderSessionList: () => void = () => {};
 let updateEmptyState: () => void = () => {};
 let selectSession: (sessionId: string) => void = () => {};
@@ -42,7 +42,7 @@ let renderUpdatePanel: () => void = () => {};
  */
 export function registerStateCallbacks(callbacks: {
   destroyTerminalForSession?: (sessionId: string) => void;
-  applyTerminalScaling?: (sessionId: string, state: unknown) => void;
+  applyTerminalScaling?: (sessionId: string, state: TerminalState) => void;
   renderSessionList?: () => void;
   updateEmptyState?: () => void;
   selectSession?: (sessionId: string) => void;

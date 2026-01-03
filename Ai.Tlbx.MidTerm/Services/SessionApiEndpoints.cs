@@ -8,7 +8,7 @@ public static class SessionApiEndpoints
 {
     public static void MapSessionEndpoints(
         WebApplication app,
-        ConHostSessionManager sessionManager)
+        TtyHostSessionManager sessionManager)
     {
         app.MapGet("/api/sessions", () =>
         {

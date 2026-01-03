@@ -55,8 +55,8 @@ public class Program
         ConfigureStaticFiles(app);
 
         // Session manager - always uses ConHost (spawned subprocess per terminal)
-        var sessionManager = new ConHostSessionManager();
-        var muxManager = new ConHostMuxConnectionManager(sessionManager);
+        var sessionManager = new TtyHostSessionManager();
+        var muxManager = new TtyHostMuxConnectionManager(sessionManager);
         await sessionManager.DiscoverExistingSessionsAsync();
 
         // Configure remaining endpoints
@@ -255,7 +255,7 @@ public class Program
 
     private static void MapSystemEndpoints(
         WebApplication app,
-        ConHostSessionManager sessionManager,
+        TtyHostSessionManager sessionManager,
         UpdateService updateService,
         SettingsService settingsService,
         string version)
@@ -268,7 +268,7 @@ public class Program
         {
             var sessionCount = sessionManager.GetAllSessions().Count;
 
-            string? conHostVersion = ConHostSpawner.GetConHostVersion();
+            string? conHostVersion = TtyHostSpawner.GetTtyHostVersion();
             var manifest = updateService.InstalledManifest;
             var conHostExpected = manifest.Pty;
             var conHostCompatible = conHostVersion == conHostExpected ||
@@ -284,9 +284,9 @@ public class Program
                 WebProcessId = Environment.ProcessId,
                 UptimeSeconds = (long)(DateTime.UtcNow - System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalSeconds,
                 Platform = OperatingSystem.IsWindows() ? "Windows" : OperatingSystem.IsMacOS() ? "macOS" : "Linux",
-                ConHostVersion = conHostVersion,
-                ConHostExpected = conHostExpected,
-                ConHostCompatible = conHostCompatible,
+                TtyHostVersion = conHostVersion,
+                TtyHostExpected = conHostExpected,
+                TtyHostCompatible = conHostCompatible,
                 WindowsBuildNumber = OperatingSystem.IsWindows() ? Environment.OSVersion.Version.Build : null
             };
             return Results.Json(health, AppJsonContext.Default.SystemHealth);
@@ -402,8 +402,8 @@ public class Program
 
     private static void MapWebSocketMiddleware(
         WebApplication app,
-        ConHostSessionManager sessionManager,
-        ConHostMuxConnectionManager muxManager,
+        TtyHostSessionManager sessionManager,
+        TtyHostMuxConnectionManager muxManager,
         UpdateService updateService)
     {
         var muxHandler = new MuxWebSocketHandler(sessionManager, muxManager);

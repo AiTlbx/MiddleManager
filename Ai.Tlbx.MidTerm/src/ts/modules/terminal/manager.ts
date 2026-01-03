@@ -228,7 +228,9 @@ export function writeOutputFrame(
   const frame = parseOutputFrame(payload);
 
   // Ensure terminal matches frame dimensions before writing
-  if (frame.valid && state.terminal._core && state.terminal._core._renderService) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const core = (state.terminal as any)._core;
+  if (frame.valid && core && core._renderService) {
     const currentCols = state.terminal.cols;
     const currentRows = state.terminal.rows;
 

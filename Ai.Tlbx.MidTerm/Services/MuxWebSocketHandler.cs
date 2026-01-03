@@ -5,12 +5,12 @@ namespace Ai.Tlbx.MidTerm.Services;
 
 public sealed class MuxWebSocketHandler
 {
-    private readonly ConHostSessionManager _sessionManager;
-    private readonly ConHostMuxConnectionManager _muxManager;
+    private readonly TtyHostSessionManager _sessionManager;
+    private readonly TtyHostMuxConnectionManager _muxManager;
 
     public MuxWebSocketHandler(
-        ConHostSessionManager sessionManager,
-        ConHostMuxConnectionManager muxManager)
+        TtyHostSessionManager sessionManager,
+        TtyHostMuxConnectionManager muxManager)
     {
         _sessionManager = sessionManager;
         _muxManager = muxManager;

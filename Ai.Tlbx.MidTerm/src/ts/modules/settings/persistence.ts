@@ -131,18 +131,19 @@ export async function fetchSettings(): Promise<void> {
  */
 function applySettingsToTerminals(): void {
   if (!currentSettings) return;
+  const settings = currentSettings;
 
-  const theme = THEMES[currentSettings.theme] || THEMES.dark;
-  const fontFamily = `'${currentSettings.fontFamily || 'Cascadia Code'}', ${TERMINAL_FONT_STACK}`;
+  const theme = THEMES[settings.theme] || THEMES.dark;
+  const fontFamily = `'${settings.fontFamily || 'Cascadia Code'}', ${TERMINAL_FONT_STACK}`;
 
   sessionTerminals.forEach((state: TerminalState) => {
-    state.terminal.options.cursorBlink = currentSettings.cursorBlink;
-    state.terminal.options.cursorStyle = currentSettings.cursorStyle;
+    state.terminal.options.cursorBlink = settings.cursorBlink;
+    state.terminal.options.cursorStyle = settings.cursorStyle;
     state.terminal.options.fontFamily = fontFamily;
-    state.terminal.options.fontSize = currentSettings.fontSize;
+    state.terminal.options.fontSize = settings.fontSize;
     state.terminal.options.theme = theme;
-    state.terminal.options.minimumContrastRatio = currentSettings.minimumContrastRatio;
-    state.terminal.options.smoothScrollDuration = currentSettings.smoothScrolling ? 150 : 0;
+    state.terminal.options.minimumContrastRatio = settings.minimumContrastRatio;
+    state.terminal.options.smoothScrollDuration = settings.smoothScrolling ? 150 : 0;
 
     // Trigger re-render after font changes
     if (state.opened) {
@@ -165,6 +166,8 @@ export function saveAllSettings(): void {
   const runAsUserValue = getElementValue('setting-run-as-user', '');
   const settings: Settings = {
     defaultShell: getElementValue('setting-default-shell', 'Pwsh'),
+    defaultCols: currentSettings?.defaultCols ?? 120,
+    defaultRows: currentSettings?.defaultRows ?? 30,
     defaultWorkingDirectory: getElementValue('setting-working-dir', ''),
     fontSize: parseInt(getElementValue('setting-font-size', '14'), 10) || 14,
     fontFamily: getElementValue('setting-font-family', 'Cascadia Code'),

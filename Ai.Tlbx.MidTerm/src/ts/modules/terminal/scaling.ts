@@ -76,7 +76,8 @@ export function fitSessionToScreen(sessionId: string): void {
   }
 
   // Get cell dimensions from xterm's render service
-  const renderService = state.terminal._core?._renderService;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderService = (state.terminal as any)._core?._renderService;
   const cellWidth = renderService?.dimensions?.css?.cell?.width;
   const cellHeight = renderService?.dimensions?.css?.cell?.height;
 

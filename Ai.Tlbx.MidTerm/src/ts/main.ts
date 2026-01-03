@@ -368,7 +368,7 @@ function startInlineRename(sessionId: string): void {
 
   function finishRename(): void {
     renameSession(sessionId, input.value);
-    input.replaceWith(titleSpan);
+    input.replaceWith(titleSpan as Node);
   }
 
   input.addEventListener('blur', finishRename);

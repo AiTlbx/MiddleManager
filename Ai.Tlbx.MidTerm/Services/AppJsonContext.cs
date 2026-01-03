@@ -28,6 +28,10 @@ namespace Ai.Tlbx.MidTerm.Services;
 [JsonSerializable(typeof(ChangePasswordRequest))]
 [JsonSerializable(typeof(AuthResponse))]
 [JsonSerializable(typeof(AuthStatusResponse))]
+[JsonSerializable(typeof(CursorStyleSetting))]
+[JsonSerializable(typeof(ThemeSetting))]
+[JsonSerializable(typeof(BellStyleSetting))]
+[JsonSerializable(typeof(ClipboardShortcutsSetting))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, UseStringEnumConverter = true)]
 public partial class AppJsonContext : JsonSerializerContext
 {
@@ -71,8 +75,8 @@ public sealed class SystemHealth
     public int WebProcessId { get; init; }
     public long UptimeSeconds { get; init; }
     public string Platform { get; init; } = "";
-    public string? ConHostVersion { get; init; }
-    public string? ConHostExpected { get; init; }
-    public bool? ConHostCompatible { get; init; }
+    public string? TtyHostVersion { get; init; }
+    public string? TtyHostExpected { get; init; }
+    public bool? TtyHostCompatible { get; init; }
     public int? WindowsBuildNumber { get; init; }
 }
