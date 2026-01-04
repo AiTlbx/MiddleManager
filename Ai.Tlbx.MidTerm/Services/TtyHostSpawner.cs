@@ -13,6 +13,12 @@ public static class TtyHostSpawner
 {
     private static readonly string TtyHostPath = GetTtyHostPath();
 
+    /// <summary>
+    /// Gets the expected full path to mthost for this mt installation.
+    /// Used to filter discovered processes to only those from this installation.
+    /// </summary>
+    public static string ExpectedTtyHostPath => TtyHostPath;
+
     public static string? GetTtyHostVersion()
     {
         if (!File.Exists(TtyHostPath))

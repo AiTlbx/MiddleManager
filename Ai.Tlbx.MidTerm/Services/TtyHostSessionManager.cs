@@ -169,19 +169,45 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
     private static Dictionary<int, string> GetRunningTtyHostProcesses()
     {
         var result = new Dictionary<int, string>();
+        var expectedPath = TtyHostSpawner.ExpectedTtyHostPath;
 
         try
         {
-            foreach (var proc in Process.GetProcessesByName("mmttyhost"))
+            // Search for both old name (mmttyhost) and new name (mthost)
+            var processNames = new[] { "mthost", "mmttyhost" };
+
+            foreach (var processName in processNames)
             {
-                try
+                foreach (var proc in Process.GetProcessesByName(processName))
                 {
-                    result[proc.Id] = proc.ProcessName;
-                }
-                catch { }
-                finally
-                {
-                    proc.Dispose();
+                    try
+                    {
+                        // Only include processes from this mt's installation path
+                        var processPath = proc.MainModule?.FileName;
+                        if (string.IsNullOrEmpty(processPath))
+                        {
+                            Console.WriteLine($"[TtyHostSessionManager] Skipping PID {proc.Id}: could not get process path");
+                            continue;
+                        }
+
+                        if (!string.Equals(processPath, expectedPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            Console.WriteLine($"[TtyHostSessionManager] Skipping PID {proc.Id}: path mismatch");
+                            Console.WriteLine($"  Expected: {expectedPath}");
+                            Console.WriteLine($"  Actual:   {processPath}");
+                            continue;
+                        }
+
+                        result[proc.Id] = processPath;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[TtyHostSessionManager] Skipping PID {proc.Id}: {ex.Message}");
+                    }
+                    finally
+                    {
+                        proc.Dispose();
+                    }
                 }
             }
         }
