@@ -169,20 +169,18 @@ prompt_password() {
             continue
         fi
 
-        # Try to hash the password using mm --hash-password
-        local mm_path="/usr/local/bin/mt"
-        if [ -f "$mm_path" ]; then
-            local hash=$("$mm_path" --hash-password "$password" 2>/dev/null || true)
+        # Hash using the installed binary (must be called after install_binary)
+        local mt_path="${MT_BINARY_PATH:-/usr/local/bin/mt}"
+        if [ -f "$mt_path" ]; then
+            local hash=$("$mt_path" --hash-password "$password" 2>/dev/null || true)
             if [[ "$hash" == '$PBKDF2$'* ]]; then
                 PASSWORD_HASH="$hash"
                 return 0
             fi
         fi
 
-        # Fallback: mark for first-run setup
-        echo -e "  ${YELLOW}Warning: Could not hash password, will be set on first access.${NC}"
-        PASSWORD_HASH="__PENDING__:$password"
-        return 0
+        echo -e "  ${RED}Error: Could not hash password. Binary not found at $mt_path${NC}"
+        exit 1
     done
 
     echo -e "  ${RED}Too many failed attempts. Exiting.${NC}"
@@ -361,7 +359,6 @@ install_as_service() {
         exec sudo INSTALLING_USER="$INSTALLING_USER" \
                   INSTALLING_UID="$INSTALLING_UID" \
                   INSTALLING_GID="$INSTALLING_GID" \
-                  PASSWORD_HASH="$PASSWORD_HASH" \
                   PORT="$PORT" \
                   BIND_ADDRESS="$BIND_ADDRESS" \
                   "$SCRIPT_PATH" --service
@@ -371,6 +368,15 @@ install_as_service() {
 
     # Create lib directory for support files
     mkdir -p "$lib_dir"
+
+    # Now that binary is installed, handle password
+    existing_hash=$(get_existing_password_hash || true)
+    if [ -n "$existing_hash" ]; then
+        echo -e "  ${GREEN}Existing password found - preserving...${NC}"
+        PASSWORD_HASH="$existing_hash"
+    else
+        MT_BINARY_PATH="$install_dir/mt" prompt_password
+    fi
 
     # Write settings with runAsUser info
     if [ -n "$INSTALLING_USER" ] && [ -n "$INSTALLING_UID" ]; then
@@ -501,6 +507,15 @@ install_as_user() {
 
     install_binary "$install_dir"
 
+    # Now that binary is installed, handle password
+    existing_hash=$(get_existing_user_password_hash || true)
+    if [ -n "$existing_hash" ]; then
+        echo -e "  ${GREEN}Existing password found - preserving...${NC}"
+        PASSWORD_HASH="$existing_hash"
+    else
+        MT_BINARY_PATH="$install_dir/mt" prompt_password
+    fi
+
     # Write user settings with password
     write_user_settings
 
@@ -615,32 +630,9 @@ get_latest_release
 prompt_service_mode
 
 if [ "$SERVICE_MODE" = true ]; then
-    # Check for existing password (preserve on update)
-    existing_hash=$(get_existing_password_hash || true)
-    if [ -n "$existing_hash" ]; then
-        echo ""
-        echo -e "  ${GREEN}Existing password found - preserving...${NC}"
-        PASSWORD_HASH="$existing_hash"
-    else
-        # New install - prompt for password
-        prompt_password
-    fi
-
-    # Prompt for network configuration
+    # Prompt for network configuration (password handled after binary install)
     prompt_network_config
-
     install_as_service
 else
-    # User install - still require password
-    existing_hash=$(get_existing_user_password_hash || true)
-    if [ -n "$existing_hash" ]; then
-        echo ""
-        echo -e "  ${GREEN}Existing password found - preserving...${NC}"
-        PASSWORD_HASH="$existing_hash"
-    else
-        # New install - prompt for password
-        prompt_password
-    fi
-
     install_as_user
 fi

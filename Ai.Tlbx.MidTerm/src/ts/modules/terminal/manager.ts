@@ -41,6 +41,12 @@ const pendingTitleUpdates = new Map<string, number>();
 // We track this ourselves because xterm.js internal state may not be reliable
 const bracketedPasteState = new Map<string, boolean>();
 
+// Check for debug force-enable via URL param: ?forceBPM=1
+const forceBracketedPaste = new URLSearchParams(window.location.search).get('forceBPM') === '1';
+if (forceBracketedPaste) {
+  console.log('[BPM] Force-enabled via URL parameter');
+}
+
 /**
  * Auto-update session name from shell title (with debounce)
  */
@@ -235,13 +241,24 @@ export function writeOutputFrame(
   // Apps send \x1b[?2004h to enable and \x1b[?2004l to disable
   if (frame.data.length > 0) {
     const text = new TextDecoder().decode(frame.data);
-    if (text.includes('\x1b[?2004h')) {
+
+    // Check for bracketed paste mode sequences (multiple formats)
+    // ESC[?2004h = enable, ESC[?2004l = disable
+    const enableMatch = text.includes('\x1b[?2004h') || text.includes('\u001b[?2004h');
+    const disableMatch = text.includes('\x1b[?2004l') || text.includes('\u001b[?2004l');
+
+    if (enableMatch) {
       bracketedPasteState.set(sessionId, true);
       console.log(`[BPM] Session ${sessionId}: ENABLED`);
     }
-    if (text.includes('\x1b[?2004l')) {
+    if (disableMatch) {
       bracketedPasteState.set(sessionId, false);
       console.log(`[BPM] Session ${sessionId}: DISABLED`);
+    }
+
+    // Debug: log any escape sequence containing "2004" to catch variants
+    if (text.includes('2004') && (text.includes('\x1b') || text.includes('\u001b'))) {
+      console.log(`[BPM-DEBUG] Found 2004 sequence in output:`, JSON.stringify(text.substring(0, 200)));
     }
   }
 
@@ -426,11 +443,11 @@ export function pasteToTerminal(sessionId: string, data: string): void {
   const state = sessionTerminals.get(sessionId);
   if (!state) return;
 
-  const bpmEnabled = bracketedPasteState.get(sessionId) ?? false;
+  const bpmEnabled = forceBracketedPaste || (bracketedPasteState.get(sessionId) ?? false);
 
   // Diagnostic logging
   const xtermBpm = (state.terminal as any).modes?.bracketedPasteMode;
-  console.log(`[PASTE] sessionId=${sessionId}, ourBPM=${bpmEnabled}, xtermBPM=${xtermBpm}, len=${data.length}`);
+  console.log(`[PASTE] sessionId=${sessionId}, ourBPM=${bpmEnabled}, xtermBPM=${xtermBpm}, forced=${forceBracketedPaste}, len=${data.length}`);
 
   if (bpmEnabled) {
     // Manually wrap with bracketed paste sequences and send via input
