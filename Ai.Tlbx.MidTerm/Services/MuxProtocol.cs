@@ -19,6 +19,7 @@ namespace Ai.Tlbx.MidTerm.Services
         public const byte TypeResize = 0x03;
         public const byte TypeSessionState = 0x04;
         public const byte TypeResync = 0x05; // Server -> Client: clear all terminals, buffer refresh follows
+        public const byte TypeBufferRequest = 0x06; // Client -> Server: request buffer refresh for session
 
         public static byte[] CreateOutputFrame(string sessionId, int cols, int rows, ReadOnlySpan<byte> data)
         {

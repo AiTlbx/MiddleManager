@@ -12,6 +12,7 @@ import {
   MUX_TYPE_INPUT,
   MUX_TYPE_RESIZE,
   MUX_TYPE_RESYNC,
+  MUX_TYPE_BUFFER_REQUEST,
   INITIAL_RECONNECT_DELAY,
   MAX_RECONNECT_DELAY
 } from '../../constants';
@@ -156,6 +157,19 @@ export function sendResize(sessionId: string, cols: number, rows: number): void 
     state.serverCols = cols;
     state.serverRows = rows;
   }
+}
+
+/**
+ * Request buffer refresh for a session via WebSocket.
+ * This ensures the buffer arrives in-order with other terminal data.
+ */
+export function requestBufferRefresh(sessionId: string): void {
+  if (!muxWs || muxWs.readyState !== WebSocket.OPEN) return;
+
+  const frame = new Uint8Array(MUX_HEADER_SIZE);
+  frame[0] = MUX_TYPE_BUFFER_REQUEST;
+  encodeSessionId(frame, 1, sessionId);
+  muxWs.send(frame);
 }
 
 /**

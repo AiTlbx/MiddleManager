@@ -12,7 +12,8 @@ import {
   registerStateCallbacks,
   registerMuxCallbacks,
   sendInput,
-  sendResize
+  sendResize,
+  requestBufferRefresh
 } from './modules/comms';
 import {
   createTerminalForSession,
@@ -150,7 +151,8 @@ function registerCallbacks(): void {
 
   registerTerminalCallbacks({
     sendInput,
-    showBellNotification
+    showBellNotification,
+    requestBufferRefresh
   });
 
   registerFileDropCallbacks({

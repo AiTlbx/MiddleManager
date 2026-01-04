@@ -33,6 +33,7 @@ import { initSearchForTerminal, showSearch, isSearchVisible, hideSearch, cleanup
 // Forward declarations for functions from other modules
 let sendInput: (sessionId: string, data: string) => void = () => {};
 let showBellNotification: (sessionId: string) => void = () => {};
+let requestBufferRefresh: (sessionId: string) => void = () => {};
 
 // Debounce timers for auto-rename from shell title
 const pendingTitleUpdates = new Map<string, number>();
@@ -77,9 +78,11 @@ function updateSessionNameAuto(sessionId: string, name: string): void {
 export function registerTerminalCallbacks(callbacks: {
   sendInput?: (sessionId: string, data: string) => void;
   showBellNotification?: (sessionId: string) => void;
+  requestBufferRefresh?: (sessionId: string) => void;
 }): void {
   if (callbacks.sendInput) sendInput = callbacks.sendInput;
   if (callbacks.showBellNotification) showBellNotification = callbacks.showBellNotification;
+  if (callbacks.requestBufferRefresh) requestBufferRefresh = callbacks.requestBufferRefresh;
 }
 
 /**
@@ -494,15 +497,15 @@ export function fetchAndWriteBuffer(sessionId: string, terminal: any): void {
 }
 
 /**
- * Refresh the active terminal buffer by clearing and re-fetching
+ * Refresh the active terminal buffer by clearing and requesting via WebSocket.
+ * Using WebSocket ensures the buffer arrives in-order with live terminal data.
  */
 export function refreshActiveTerminalBuffer(): void {
   if (!activeSessionId) return;
   const state = sessionTerminals.get(activeSessionId);
   if (state && state.opened) {
-    // Clear and re-fetch the entire buffer to ensure consistency
     state.terminal.clear();
-    fetchAndWriteBuffer(activeSessionId, state.terminal);
+    requestBufferRefresh(activeSessionId);
   }
 }
 

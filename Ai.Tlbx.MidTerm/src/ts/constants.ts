@@ -18,6 +18,7 @@ export const MUX_TYPE_OUTPUT = 0x01;  // Server -> Client: Terminal output (incl
 export const MUX_TYPE_INPUT = 0x02;   // Client -> Server: Terminal input
 export const MUX_TYPE_RESIZE = 0x03;  // Client -> Server: Terminal resize
 export const MUX_TYPE_RESYNC = 0x05;  // Server -> Client: Clear terminals, buffer refresh follows
+export const MUX_TYPE_BUFFER_REQUEST = 0x06; // Client -> Server: Request buffer refresh
 
 // =============================================================================
 // Terminal Themes

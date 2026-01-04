@@ -89,7 +89,7 @@ public sealed class MuxWebSocketHandler
 
             if (result.MessageType == WebSocketMessageType.Binary && result.Count >= MuxProtocol.HeaderSize)
             {
-                await ProcessFrameAsync(new ReadOnlyMemory<byte>(receiveBuffer, 0, result.Count));
+                await ProcessFrameAsync(new ReadOnlyMemory<byte>(receiveBuffer, 0, result.Count), client);
             }
 
             // After processing input, check if resync needed (frames were dropped)
@@ -122,7 +122,7 @@ public sealed class MuxWebSocketHandler
         }
     }
 
-    private async Task ProcessFrameAsync(ReadOnlyMemory<byte> data)
+    private async Task ProcessFrameAsync(ReadOnlyMemory<byte> data, MuxClient client)
     {
         if (!MuxProtocol.TryParseFrame(data.Span, out var type, out var sessionId, out var payload))
         {
@@ -143,6 +143,35 @@ public sealed class MuxWebSocketHandler
                 var (cols, rows) = MuxProtocol.ParseResizePayload(payload);
                 await _muxManager.HandleResizeAsync(sessionId, cols, rows);
                 break;
+
+            case MuxProtocol.TypeBufferRequest:
+                await SendBufferForSessionAsync(client, sessionId);
+                break;
+        }
+    }
+
+    private async Task SendBufferForSessionAsync(MuxClient client, string sessionId)
+    {
+        try
+        {
+            var session = _sessionManager.GetSession(sessionId);
+            if (session is null)
+            {
+                DebugLogger.Log($"[MuxHandler] BufferRequest for unknown session: {sessionId}");
+                return;
+            }
+
+            var buffer = await _sessionManager.GetBufferAsync(sessionId);
+            if (buffer is not null && buffer.Length > 0)
+            {
+                var frame = MuxProtocol.CreateOutputFrame(sessionId, session.Cols, session.Rows, buffer);
+                await client.TrySendAsync(frame);
+                DebugLogger.Log($"[MuxHandler] Sent buffer for {sessionId}: {buffer.Length} bytes");
+            }
+        }
+        catch (Exception ex)
+        {
+            DebugLogger.Log($"[MuxHandler] BufferRequest failed for {sessionId}: {ex.Message}");
         }
     }
 
