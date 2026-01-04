@@ -452,9 +452,10 @@ export function pasteToTerminal(sessionId: string, data: string): void {
   if (bpmEnabled) {
     // Manually wrap with bracketed paste sequences and send via input
     // This ensures TUI apps like Claude Code receive the markers
-    const wrapped = '\x1b[200~' + data + '\x1b[201~';
+    // Quote the content to handle paths with spaces
+    const wrapped = '\x1b[200~"' + data + '"\x1b[201~';
     sendInput(sessionId, wrapped);
-    console.log('[PASTE] Sent with BPM markers');
+    console.log('[PASTE] Sent with BPM markers and quotes');
   } else {
     // No bracketed paste mode - use standard paste
     state.terminal.paste(data);
