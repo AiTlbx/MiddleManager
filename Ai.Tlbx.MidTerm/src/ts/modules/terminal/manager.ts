@@ -246,17 +246,9 @@ export function writeOutputFrame(
 
     if (enableMatch) {
       bracketedPasteState.set(sessionId, true);
-      console.log(`[BPM] Session ${sessionId}: ENABLED`);
     }
     if (disableMatch) {
       bracketedPasteState.set(sessionId, false);
-      console.log(`[BPM] Session ${sessionId}: DISABLED`);
-    }
-
-    // Debug: log all CSI ? sequences to see what modes apps request
-    const csiMatch = text.match(/\x1b\[\?(\d+)[hl]/g);
-    if (csiMatch) {
-      console.log(`[CSI-DEBUG] Session ${sessionId}: ${csiMatch.join(', ')}`);
     }
   }
 
@@ -446,16 +438,11 @@ export function pasteToTerminal(sessionId: string, data: string): void {
   const xtermBpm = (state.terminal as any).modes?.bracketedPasteMode ?? false;
   const bpmEnabled = ourBpm || xtermBpm;
 
-  // Diagnostic logging
-  console.log(`[PASTE] sessionId=${sessionId}, ourBPM=${ourBpm}, xtermBPM=${xtermBpm}, using=${bpmEnabled}, len=${data.length}`);
-
   if (bpmEnabled) {
     // Manually wrap with bracketed paste sequences and send via input
-    // This ensures TUI apps like Claude Code receive the markers
     // Quote the content to handle paths with spaces
     const wrapped = '\x1b[200~"' + data + '"\x1b[201~';
     sendInput(sessionId, wrapped);
-    console.log('[PASTE] Sent with BPM markers and quotes');
   } else {
     // No bracketed paste mode - use standard paste
     state.terminal.paste(data);
