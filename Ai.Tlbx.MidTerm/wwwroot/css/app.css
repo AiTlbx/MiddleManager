@@ -583,25 +583,34 @@ html, body {
         display: none !important;
     }
 
+    /* Hide resize grip on mobile */
+    .sidebar-resize-grip {
+        display: none !important;
+    }
+
     /* On mobile, ignore sidebar-collapsed class */
     .terminal-page.sidebar-collapsed .sidebar {
         display: flex;
     }
 
-    /* Hide desktop sidebar by default on mobile */
+    /* Hide sidebar by default on mobile */
     .sidebar {
         position: fixed;
-        left: -280px;
         top: 0;
         bottom: 0;
+        left: 0;
         width: 280px;
         z-index: 1000;
-        transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         padding-top: env(safe-area-inset-top, 0);
+        transform: translateX(-100%);
+        visibility: hidden;
+        transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                    visibility 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .terminal-page.sidebar-open .sidebar {
-        left: 0;
+        transform: translateX(0);
+        visibility: visible;
     }
 
     /* Sidebar overlay for dismissing */
@@ -863,7 +872,6 @@ html, body {
     /* Sidebar narrower on very small screens */
     .sidebar {
         width: 260px;
-        left: -260px;
     }
 }
 
