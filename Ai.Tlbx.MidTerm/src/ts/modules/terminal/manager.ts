@@ -199,6 +199,7 @@ export function createTerminalForSession(
   (fontsReadyPromise ?? Promise.resolve()).then(() => {
     if (!sessionTerminals.has(sessionId)) return; // Session was deleted
     terminal.open(container);
+    state.opened = true;
 
     // Load WebGL addon for GPU-accelerated rendering (with fallback)
     if (currentSettings?.useWebGL !== false) {
@@ -231,10 +232,7 @@ export function createTerminalForSession(
     initSearchForTerminal(sessionId, terminal);
 
     // Replay any WebSocket frames that arrived before terminal was opened
-    // IMPORTANT: Set opened=true AFTER replay to prevent race condition
-    // where new frames could be written before buffered frames
     replayPendingFrames(sessionId, state);
-    state.opened = true;
 
     // Defer resize to next frame - xterm.js needs a frame to fully initialize after open()
     requestAnimationFrame(() => {

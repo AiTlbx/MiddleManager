@@ -97,10 +97,23 @@ export function connectMuxWebSocket(): void {
       return;
     }
 
-    if (type === MUX_TYPE_OUTPUT || type === MUX_TYPE_COMPRESSED_OUTPUT) {
-      // Queue ALL output frames (compressed or not) to maintain order
-      // This is critical for TUI apps that rely on escape sequence ordering
-      queueOutputFrame(sessionId, payload.slice(), type === MUX_TYPE_COMPRESSED_OUTPUT);
+    if (type === MUX_TYPE_OUTPUT) {
+      // Process uncompressed frames synchronously for immediate display
+      const state = sessionTerminals.get(sessionId);
+      if (state && state.opened && payload.length >= 4) {
+        writeOutputFrame(sessionId, state, payload);
+      } else if (payload.length >= 4) {
+        // Terminal not yet opened - buffer frame for replay when terminal opens
+        if (!pendingOutputFrames.has(sessionId)) {
+          pendingOutputFrames.set(sessionId, []);
+        }
+        pendingOutputFrames.get(sessionId)!.push(payload.slice());
+      }
+    }
+
+    if (type === MUX_TYPE_COMPRESSED_OUTPUT) {
+      // Handle compressed frames asynchronously
+      handleCompressedFrame(sessionId, payload.slice());
     }
   };
 
@@ -203,57 +216,79 @@ export function scheduleMuxReconnect(): void {
   );
 }
 
+/**
+ * Write output frame to terminal.
+ * Parses dimensions from frame header and resizes terminal if needed.
+ */
+export function writeOutputFrame(sessionId: string, state: TerminalState, payload: Uint8Array): void {
+  const frame = parseOutputFrame(payload);
+
+  // Ensure terminal matches frame dimensions before writing
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const termCore = (state.terminal as any)._core;
+  if (frame.valid && termCore && termCore._renderService) {
+    const currentCols = state.terminal.cols;
+    const currentRows = state.terminal.rows;
+
+    if (currentCols !== frame.cols || currentRows !== frame.rows) {
+      try {
+        state.terminal.resize(frame.cols, frame.rows);
+        state.serverCols = frame.cols;
+        state.serverRows = frame.rows;
+        applyTerminalScaling(sessionId, state);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        console.warn('Terminal resize deferred:', message);
+      }
+    }
+  }
+
+  // Write terminal data
+  if (frame.data.length > 0) {
+    state.terminal.write(frame.data);
+  }
+}
+
 // =============================================================================
-// Unified Output Frame Queue
+// Compressed Frame Handling
 // =============================================================================
 
-interface OutputFrameItem {
+interface CompressedFrameItem {
   sessionId: string;
   payload: Uint8Array;
-  compressed: boolean;
 }
 
-const outputQueue: OutputFrameItem[] = [];
-let processingOutput = false;
+const compressedQueue: CompressedFrameItem[] = [];
+let processingCompressed = false;
 
 /**
- * Queue an output frame for processing.
- * ALL frames (compressed or not) go through this queue to maintain order.
+ * Queue a compressed frame for async decompression.
+ * Frames are processed sequentially to maintain order.
  */
-function queueOutputFrame(sessionId: string, payload: Uint8Array, compressed: boolean): void {
-  outputQueue.push({ sessionId, payload, compressed });
-  processOutputQueue();
+function handleCompressedFrame(sessionId: string, payload: Uint8Array): void {
+  compressedQueue.push({ sessionId, payload });
+  processCompressedQueue();
 }
 
 /**
- * Process output frames sequentially to maintain order.
+ * Process compressed frames sequentially.
  */
-async function processOutputQueue(): Promise<void> {
-  if (processingOutput) return;
-  processingOutput = true;
+async function processCompressedQueue(): Promise<void> {
+  if (processingCompressed) return;
+  processingCompressed = true;
 
-  while (outputQueue.length > 0) {
-    const item = outputQueue.shift()!;
+  while (compressedQueue.length > 0) {
+    const item = compressedQueue.shift()!;
 
     try {
-      let frame: { cols: number; rows: number; data: Uint8Array; valid: boolean };
-
-      if (item.compressed) {
-        frame = await parseCompressedOutputFrame(item.payload);
-      } else {
-        frame = parseOutputFrame(item.payload);
-      }
-
-      if (!frame.valid) {
-        console.warn('Invalid output frame for session:', item.sessionId);
-        continue;
-      }
+      const frame = await parseCompressedOutputFrame(item.payload);
 
       const state = sessionTerminals.get(item.sessionId);
       if (state && state.opened) {
-        writeFrameToTerminal(item.sessionId, state, frame);
+        // Write decompressed frame to terminal
+        writeDecompressedFrame(item.sessionId, state, frame);
       } else {
-        // Buffer for later replay (same format as uncompressed)
+        // Buffer decompressed data for later replay (same format as uncompressed)
         const uncompressedPayload = new Uint8Array(4 + frame.data.length);
         uncompressedPayload[0] = frame.cols & 0xff;
         uncompressedPayload[1] = (frame.cols >> 8) & 0xff;
@@ -267,17 +302,17 @@ async function processOutputQueue(): Promise<void> {
         pendingOutputFrames.get(item.sessionId)!.push(uncompressedPayload);
       }
     } catch (e) {
-      console.error('Failed to process output frame:', e);
+      console.error('Failed to process compressed frame:', e);
     }
   }
 
-  processingOutput = false;
+  processingCompressed = false;
 }
 
 /**
- * Write already-parsed frame to terminal.
+ * Write already-parsed decompressed frame to terminal.
  */
-function writeFrameToTerminal(
+function writeDecompressedFrame(
   sessionId: string,
   state: TerminalState,
   frame: { cols: number; rows: number; data: Uint8Array; valid: boolean }
