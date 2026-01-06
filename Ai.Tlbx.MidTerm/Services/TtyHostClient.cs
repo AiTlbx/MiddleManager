@@ -271,7 +271,11 @@ public sealed class TtyHostClient : IAsyncDisposable
     {
         for (var attempt = 0; attempt < 2; attempt++)
         {
-            if (!IsConnected) return null;
+            if (!IsConnected)
+            {
+                Log($"GetBuffer: not connected (attempt {attempt + 1})");
+                return null;
+            }
 
             try
             {

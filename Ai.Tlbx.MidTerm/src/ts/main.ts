@@ -18,7 +18,6 @@ import {
 import {
   createTerminalForSession,
   destroyTerminalForSession,
-  refreshActiveTerminalBuffer,
   preloadTerminalFont,
   registerTerminalCallbacks,
   applyTerminalScaling,
@@ -146,8 +145,7 @@ function registerCallbacks(): void {
   });
 
   registerMuxCallbacks({
-    applyTerminalScaling,
-    refreshActiveTerminalBuffer
+    applyTerminalScaling
   });
 
   registerTerminalCallbacks({

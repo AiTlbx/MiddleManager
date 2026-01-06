@@ -36,17 +36,14 @@ import { updateConnectionStatus } from './stateChannel';
 
 // Forward declarations for functions from other modules
 let applyTerminalScaling: (sessionId: string, state: TerminalState) => void = () => {};
-let refreshActiveTerminalBuffer: () => void = () => {};
 
 /**
  * Register callbacks from other modules
  */
 export function registerMuxCallbacks(callbacks: {
   applyTerminalScaling?: (sessionId: string, state: TerminalState) => void;
-  refreshActiveTerminalBuffer?: () => void;
 }): void {
   if (callbacks.applyTerminalScaling) applyTerminalScaling = callbacks.applyTerminalScaling;
-  if (callbacks.refreshActiveTerminalBuffer) refreshActiveTerminalBuffer = callbacks.refreshActiveTerminalBuffer;
 }
 
 // =============================================================================
@@ -216,20 +213,21 @@ export function connectMuxWebSocket(): void {
     setMuxWsConnected(true);
     updateConnectionStatus();
 
-    // On reconnect, clear all terminals and reset state so they refresh when selected
+    // On reconnect, clear all terminals and request buffer refresh for each
     // This handles mt.exe restarts where sessions survive but connection is new
     if (wasReconnect) {
-      sessionTerminals.forEach((state) => {
+      console.log('[Mux] Reconnected after server restart - refreshing all terminals');
+      pendingOutputFrames.clear();
+      outputQueue.length = 0;
+      sessionTerminals.forEach((state, sessionId) => {
         if (state.opened) {
           state.terminal.clear();
         }
-        // Reset serverCols to trigger buffer refresh when terminal is selected
         state.serverCols = 0;
         state.serverRows = 0;
+        // Request buffer refresh for ALL terminals immediately
+        requestBufferRefresh(sessionId);
       });
-      pendingOutputFrames.clear();
-      outputQueue.length = 0;
-      refreshActiveTerminalBuffer();
     }
   };
 
