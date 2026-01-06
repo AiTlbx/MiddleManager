@@ -64,6 +64,16 @@ jobs:
       - name: Publish Web Server (mt)
         run: dotnet publish ${{ env.WEB_PROJECT }} -c Release -r ${{ matrix.rid }} /p:IsPublishing=true
 
+      - name: Verify TypeScript was compiled
+        shell: bash
+        run: |
+          if [ ! -f "Ai.Tlbx.MidTerm/wwwroot/js/terminal.min.js" ]; then
+            echo "::error::terminal.min.js not found! TypeScript compilation failed."
+            echo "Build cannot proceed without frontend JavaScript."
+            exit 1
+          fi
+          echo "✓ terminal.min.js exists ($(wc -c < Ai.Tlbx.MidTerm/wwwroot/js/terminal.min.js) bytes)"
+
       - name: Publish TtyHost (mthost)
         run: dotnet publish ${{ env.TTYHOST_PROJECT }} -c Release -r ${{ matrix.rid }} /p:IsPublishing=true
 
