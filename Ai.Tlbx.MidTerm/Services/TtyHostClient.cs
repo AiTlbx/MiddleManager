@@ -146,7 +146,12 @@ public sealed class TtyHostClient : IAsyncDisposable
     public void StartReadLoop()
     {
         if (_readTask is not null) return;
-        Log($"StartReadLoop: IsConnected={IsConnected}");
+#if WINDOWS
+        var pipeConnected = _pipe?.IsConnected ?? false;
+        Log($"StartReadLoop: IsConnected={IsConnected}, _pipe.IsConnected={pipeConnected}, _stream is null={_stream is null}");
+#else
+        Log($"StartReadLoop: IsConnected={IsConnected}, _stream is null={_stream is null}");
+#endif
         _cts = new CancellationTokenSource();
         _readTask = ReadLoopWithReconnectAsync(_cts.Token);
         _heartbeatTask = HeartbeatLoopAsync(_cts.Token);
@@ -172,6 +177,7 @@ public sealed class TtyHostClient : IAsyncDisposable
                     return TtyHostProtocol.ParseInfo(response);
                 }
 
+                Log($"GetInfo: Sending request (discovery mode), IsConnected={IsConnected}");
                 var requestBytes = TtyHostProtocol.CreateInfoRequest();
                 await WriteWithLockAsync(requestBytes, ct).ConfigureAwait(false);
 
@@ -191,6 +197,7 @@ public sealed class TtyHostClient : IAsyncDisposable
                     if (type == TtyHostMessageType.Info)
                     {
                         if (skip > 0) Log($"GetInfo: Skipped {skip} output messages during discovery");
+                        Log($"GetInfo: Received Info response, IsConnected={IsConnected}");
                         return TtyHostProtocol.ParseInfo(payload.Span);
                     }
 
@@ -400,7 +407,12 @@ public sealed class TtyHostClient : IAsyncDisposable
 
                 if (loopCount == 1)
                 {
-                    Log($"ReadLoop: First iteration, IsConnected=true");
+#if WINDOWS
+                    var pipeState = _pipe?.IsConnected ?? false;
+                    Log($"ReadLoop: First iteration, IsConnected={IsConnected}, _pipe.IsConnected={pipeState}");
+#else
+                    Log($"ReadLoop: First iteration, IsConnected={IsConnected}");
+#endif
                 }
 
                 var stream = _stream;
