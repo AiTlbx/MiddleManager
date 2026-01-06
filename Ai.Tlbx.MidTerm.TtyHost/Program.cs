@@ -1,7 +1,7 @@
 using System.Buffers;
+using System.Runtime.InteropServices;
 using System.Text;
 #if WINDOWS
-using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 using System.IO.Pipes;
 #else
@@ -17,7 +17,7 @@ namespace Ai.Tlbx.MidTerm.TtyHost;
 
 public static class Program
 {
-    public const string Version = "5.5.16";
+    public const string Version = "5.6.0";
 
 #if WINDOWS
     [DllImport("kernel32.dll", SetLastError = true)]
@@ -30,7 +30,7 @@ public static class Program
         IntPtr lpBytesLeftThisMessage);
 #endif
 
-    private const int HeartbeatIntervalMs = 3000;
+    private const int HeartbeatIntervalMs = 5000;
     private const int ReadTimeoutMs = 10000;
 
     private static readonly string LogDir = Path.Combine(
@@ -42,6 +42,7 @@ public static class Program
     private static string? _sessionId;
     private static string? _logPath;
     private static bool _debugEnabled;
+    private static CancellationTokenSource? _shutdownCts;
 
     public static async Task<int> Main(string[] args)
     {
@@ -67,6 +68,12 @@ public static class Program
         _sessionId = config.SessionId;
         _logPath = Path.Combine(LogDir, $"mt-con-{_sessionId}-{StartTimestamp}.log");
         _debugEnabled = config.Debug;
+
+#if !WINDOWS
+        // Register Unix signal handlers for graceful shutdown
+        PosixSignalRegistration.Create(PosixSignal.SIGTERM, OnSignal);
+        PosixSignalRegistration.Create(PosixSignal.SIGINT, OnSignal);
+#endif
 
         Log($"mthost {Version} starting for session {config.SessionId}");
 
@@ -109,6 +116,7 @@ public static class Program
             Log($"Listening on: {endpoint}");
 
             using var cts = new CancellationTokenSource();
+            _shutdownCts = cts;
             Task? ptyReadTask = null;
 
             // Accept client connections (mt.exe)
@@ -225,7 +233,10 @@ public static class Program
                                 pendingOutput.Add(copy);
                                 pendingOutputSize += copy.Length;
                             }
-                            // else: drop - startup output is less critical than OOM
+                            else
+                            {
+                                Log($"Warning: dropping {data.Length} bytes during handshake (buffer full: {pendingOutputSize}/{MaxPendingOutputSize})");
+                            }
                             return;
                         }
                     }
@@ -467,81 +478,90 @@ public static class Program
 
             var payload = payloadBuffer.AsSpan(0, payloadLength);
 
-            // Process message
-            switch (msgType)
+            // Process message - wrap in try-catch for robustness
+            try
             {
-                case TtyHostMessageType.GetInfo:
-                    var info = session.GetInfo();
-                    var infoMsg = TtyHostProtocol.CreateInfoResponse(info);
-                    var infoPreview = infoMsg.Length > TtyHostProtocol.HeaderSize
-                        ? Encoding.UTF8.GetString(infoMsg, TtyHostProtocol.HeaderSize, Math.Min(50, infoMsg.Length - TtyHostProtocol.HeaderSize))
-                        : "";
-                    Log($"Writing Info response: type=0x{infoMsg[0]:X2}, len={BitConverter.ToInt32(infoMsg, 1)}, preview=\"{infoPreview}...\"");
-                    lock (stream)
-                    {
-                        stream.Write(infoMsg);
-                        stream.Flush();
-                    }
-                    // Signal that handshake is complete - safe to start sending output
-                    onHandshakeComplete?.Invoke();
-                    break;
+                switch (msgType)
+                {
+                    case TtyHostMessageType.GetInfo:
+                        var info = session.GetInfo();
+                        var infoMsg = TtyHostProtocol.CreateInfoResponse(info);
+                        var infoPreview = infoMsg.Length > TtyHostProtocol.HeaderSize
+                            ? Encoding.UTF8.GetString(infoMsg, TtyHostProtocol.HeaderSize, Math.Min(50, infoMsg.Length - TtyHostProtocol.HeaderSize))
+                            : "";
+                        Log($"Writing Info response: type=0x{infoMsg[0]:X2}, len={BitConverter.ToInt32(infoMsg, 1)}, preview=\"{infoPreview}...\"");
+                        lock (stream)
+                        {
+                            stream.Write(infoMsg);
+                            stream.Flush();
+                        }
+                        // Signal that handshake is complete - safe to start sending output
+                        onHandshakeComplete?.Invoke();
+                        break;
 
-                case TtyHostMessageType.Input:
-                    if (payloadLength < 20)
-                    {
-                        DebugLog($"[IPC-INPUT] {BitConverter.ToString(payload.ToArray())}");
-                    }
-                    await session.SendInputAsync(payload.ToArray(), ct).ConfigureAwait(false);
-                    break;
+                    case TtyHostMessageType.Input:
+                        if (payloadLength < 20)
+                        {
+                            DebugLog($"[IPC-INPUT] {BitConverter.ToString(payload.ToArray())}");
+                        }
+                        await session.SendInputAsync(payload.ToArray(), ct).ConfigureAwait(false);
+                        break;
 
-                case TtyHostMessageType.Resize:
-                    var (cols, rows) = TtyHostProtocol.ParseResize(payload);
-                    session.Resize(cols, rows);
-                    var resizeAck = TtyHostProtocol.CreateResizeAck();
-                    lock (stream)
-                    {
-                        stream.Write(resizeAck);
-                        stream.Flush();
-                    }
-                    break;
+                    case TtyHostMessageType.Resize:
+                        var (cols, rows) = TtyHostProtocol.ParseResize(payload);
+                        session.Resize(cols, rows);
+                        var resizeAck = TtyHostProtocol.CreateResizeAck();
+                        lock (stream)
+                        {
+                            stream.Write(resizeAck);
+                            stream.Flush();
+                        }
+                        break;
 
-                case TtyHostMessageType.GetBuffer:
-                    var buffer = session.GetBuffer();
-                    var bufferMsg = TtyHostProtocol.CreateBufferResponse(buffer);
-                    lock (stream)
-                    {
-                        stream.Write(bufferMsg);
-                        stream.Flush();
-                    }
-                    break;
+                    case TtyHostMessageType.GetBuffer:
+                        var buffer = session.GetBuffer();
+                        var bufferMsg = TtyHostProtocol.CreateBufferResponse(buffer);
+                        lock (stream)
+                        {
+                            stream.Write(bufferMsg);
+                            stream.Flush();
+                        }
+                        break;
 
-                case TtyHostMessageType.SetName:
-                    var name = TtyHostProtocol.ParseSetName(payload);
-                    session.SetName(string.IsNullOrEmpty(name) ? null : name);
-                    var nameAck = TtyHostProtocol.CreateSetNameAck();
-                    lock (stream)
-                    {
-                        stream.Write(nameAck);
-                        stream.Flush();
-                    }
-                    break;
+                    case TtyHostMessageType.SetName:
+                        var name = TtyHostProtocol.ParseSetName(payload);
+                        session.SetName(string.IsNullOrEmpty(name) ? null : name);
+                        var nameAck = TtyHostProtocol.CreateSetNameAck();
+                        lock (stream)
+                        {
+                            stream.Write(nameAck);
+                            stream.Flush();
+                        }
+                        break;
 
-                case TtyHostMessageType.Close:
-                    Log("Received close request, shutting down");
-                    var closeAck = TtyHostProtocol.CreateCloseAck();
-                    lock (stream)
-                    {
-                        stream.Write(closeAck);
-                        stream.Flush();
-                    }
-                    session.Kill();
-                    // Exit the entire process
-                    Environment.Exit(0);
-                    return;
+                    case TtyHostMessageType.Close:
+                        Log("Received close request, shutting down");
+                        var closeAck = TtyHostProtocol.CreateCloseAck();
+                        lock (stream)
+                        {
+                            stream.Write(closeAck);
+                            stream.Flush();
+                        }
+                        session.Kill();
+                        // Signal graceful shutdown - let finally blocks run
+                        _shutdownCts?.Cancel();
+                        return;
 
-                default:
-                    Log($"Unknown message type: {msgType}");
-                    break;
+                    default:
+                        Log($"Unknown message type: {msgType}");
+                        break;
+                }
+            }
+            catch (Exception ex) when (msgType != TtyHostMessageType.Close)
+            {
+                Log($"Error processing message type {msgType}: {ex.Message}");
+                LogException($"ProcessMessage.{msgType}", ex);
+                // Continue processing next message instead of breaking the loop
             }
         }
     }
@@ -660,6 +680,15 @@ public static class Program
         }
         catch { }
     }
+
+#if !WINDOWS
+    private static void OnSignal(PosixSignalContext context)
+    {
+        Log($"Received signal {context.Signal}, initiating graceful shutdown");
+        context.Cancel = true; // Prevent default termination
+        _shutdownCts?.Cancel(); // Signal graceful shutdown
+    }
+#endif
 
     private sealed record SessionConfig(string SessionId, string? ShellType, string WorkingDirectory, int Cols, int Rows, bool Debug);
 }

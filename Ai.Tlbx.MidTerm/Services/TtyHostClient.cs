@@ -54,7 +54,7 @@ public sealed class TtyHostClient : IAsyncDisposable
     private const int MaxReconnectAttempts = int.MaxValue; // Never give up - terminal has precious unsaved data
     private const int InitialReconnectDelayMs = 100;
     private const int MaxReconnectDelayMs = 30000; // Cap at 30s between attempts
-    private const int HeartbeatIntervalMs = 3000; // Check connection every 3 seconds
+    private const int HeartbeatIntervalMs = 5000; // Check connection every 5 seconds
     private const int ReadTimeoutMs = 10000; // 10 seconds - shorter now that we have heartbeat
 
     public string SessionId => _sessionId;
