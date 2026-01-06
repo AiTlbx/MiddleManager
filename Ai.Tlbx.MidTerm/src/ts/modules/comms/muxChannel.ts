@@ -216,8 +216,19 @@ export function connectMuxWebSocket(): void {
     setMuxWsConnected(true);
     updateConnectionStatus();
 
-    // On reconnect, refresh buffers to catch any missed output
+    // On reconnect, clear all terminals and reset state so they refresh when selected
+    // This handles mt.exe restarts where sessions survive but connection is new
     if (wasReconnect) {
+      sessionTerminals.forEach((state) => {
+        if (state.opened) {
+          state.terminal.clear();
+        }
+        // Reset serverCols to trigger buffer refresh when terminal is selected
+        state.serverCols = 0;
+        state.serverRows = 0;
+      });
+      pendingOutputFrames.clear();
+      outputQueue.length = 0;
       refreshActiveTerminalBuffer();
     }
   };
