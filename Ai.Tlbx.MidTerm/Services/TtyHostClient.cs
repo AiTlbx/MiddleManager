@@ -51,7 +51,7 @@ public sealed class TtyHostClient : IAsyncDisposable
 
     private TaskCompletionSource<(TtyHostMessageType type, byte[] payload)>? _pendingResponse;
 
-    private const int MaxReconnectAttempts = int.MaxValue; // Never give up - terminal has precious unsaved data
+    private const int MaxReconnectAttempts = 10; // Give up after 10 attempts (~2 minutes with exponential backoff)
     private const int InitialReconnectDelayMs = 100;
     private const int MaxReconnectDelayMs = 30000; // Cap at 30s between attempts
     private const int HeartbeatIntervalMs = 5000; // Check connection every 5 seconds

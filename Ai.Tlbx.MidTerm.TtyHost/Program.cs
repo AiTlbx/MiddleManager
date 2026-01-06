@@ -17,7 +17,7 @@ namespace Ai.Tlbx.MidTerm.TtyHost;
 
 public static class Program
 {
-    public const string Version = "5.6.8";
+    public const string Version = "5.6.9";
 
 #if WINDOWS
     [DllImport("kernel32.dll", SetLastError = true)]
@@ -342,9 +342,11 @@ public static class Program
                         session.OnStateChanged += OnStateChange;
                     }
                 }).ConfigureAwait(false);
+                Log("ProcessMessagesAsync returned normally");
             }
             finally
             {
+                Log("Unsubscribing from session events");
                 session.OnOutput -= OnOutput;
                 session.OnStateChanged -= OnStateChange;
             }
@@ -437,15 +439,35 @@ public static class Program
     private static async Task ProcessMessagesAsync(TerminalSession session, Stream stream, CancellationToken ct, Action? onHandshakeComplete = null)
     {
         var headerBuffer = new byte[TtyHostProtocol.HeaderSize];
+        var messageCount = 0;
 
+        Log("ProcessMessages: Starting message loop");
         while (!ct.IsCancellationRequested)
         {
             // Read header
-            var bytesRead = await stream.ReadAsync(headerBuffer, ct).ConfigureAwait(false);
-            if (bytesRead == 0)
+            Log($"ProcessMessages: Waiting for message #{messageCount + 1}...");
+            int bytesRead;
+            try
             {
+                bytesRead = await stream.ReadAsync(headerBuffer, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                Log("ProcessMessages: Cancelled");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Log($"ProcessMessages: Read error: {ex.Message}");
                 break;
             }
+
+            if (bytesRead == 0)
+            {
+                Log("ProcessMessages: Client disconnected (0 bytes)");
+                break;
+            }
+            messageCount++;
 
             if (bytesRead < TtyHostProtocol.HeaderSize)
             {
