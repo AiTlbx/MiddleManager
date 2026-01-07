@@ -51,15 +51,8 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
     {
         Console.WriteLine("[TtyHostSessionManager] Discovering existing sessions...");
 
-        // Step 1: Find all mmttyhost processes and IPC endpoints
-        var runningProcesses = GetRunningTtyHostProcesses();
         var existingEndpoints = GetExistingEndpoints();
-
-        Console.WriteLine($"[TtyHostSessionManager] Found {runningProcesses.Count} mmttyhost processes, {existingEndpoints.Count} IPC endpoints");
-
-        // Step 2: Try to connect to each endpoint
-        var connectedSessions = new HashSet<string>();
-        var orphanedProcessPids = new HashSet<int>(runningProcesses.Keys);
+        Console.WriteLine($"[TtyHostSessionManager] Found {existingEndpoints.Count} IPC endpoints");
 
         foreach (var sessionId in existingEndpoints)
         {
@@ -70,44 +63,25 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
 
             switch (result)
             {
-                case DiscoveryResult.Connected connected:
-                    connectedSessions.Add(sessionId);
-                    // Remove the mthost process from orphan list (HostPid is mthost, Pid is shell)
-                    if (connected.HostPid > 0)
-                    {
-                        orphanedProcessPids.Remove(connected.HostPid);
-                    }
+                case DiscoveryResult.Connected:
+                    // Success - session is usable
                     break;
 
                 case DiscoveryResult.Incompatible incompatible:
-                    Console.WriteLine($"[TtyHostSessionManager] Session {sessionId} incompatible (v{incompatible.Version}), killing");
-                    KillProcess(incompatible.Pid);
-                    orphanedProcessPids.Remove(incompatible.Pid);
+                    Console.WriteLine($"[TtyHostSessionManager] Session {sessionId} incompatible (v{incompatible.Version})");
                     CleanupEndpoint(sessionId);
                     break;
 
-                case DiscoveryResult.Unresponsive unresponsive:
-                    Console.WriteLine($"[TtyHostSessionManager] Session {sessionId} unresponsive, killing");
-                    if (unresponsive.Pid > 0)
-                    {
-                        KillProcess(unresponsive.Pid);
-                        orphanedProcessPids.Remove(unresponsive.Pid);
-                    }
+                case DiscoveryResult.Unresponsive:
+                    Console.WriteLine($"[TtyHostSessionManager] Session {sessionId} unresponsive");
                     CleanupEndpoint(sessionId);
                     break;
 
                 case DiscoveryResult.NoProcess:
-                    Console.WriteLine($"[TtyHostSessionManager] Session {sessionId} has stale endpoint, cleaning up");
+                    Console.WriteLine($"[TtyHostSessionManager] Session {sessionId} has stale endpoint");
                     CleanupEndpoint(sessionId);
                     break;
             }
-        }
-
-        // Step 3: Kill any orphaned mmttyhost processes (no matching endpoint or couldn't connect)
-        foreach (var pid in orphanedProcessPids)
-        {
-            Console.WriteLine($"[TtyHostSessionManager] Killing orphaned mmttyhost (PID: {pid})");
-            KillProcess(pid);
         }
 
         Console.WriteLine($"[TtyHostSessionManager] Discovered {_clients.Count} active sessions");
@@ -130,14 +104,14 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
             if (info is null)
             {
                 await client.DisposeAsync().ConfigureAwait(false);
-                return new DiscoveryResult.Unresponsive(0);
+                return new DiscoveryResult.Unresponsive();
             }
 
             // Check version compatibility
             if (!IsVersionCompatible(info.TtyHostVersion))
             {
                 await client.DisposeAsync().ConfigureAwait(false);
-                return new DiscoveryResult.Incompatible(info.Pid, info.TtyHostVersion);
+                return new DiscoveryResult.Incompatible(info.TtyHostVersion);
             }
 
             // Success - register the client
@@ -145,16 +119,16 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
             client.StartReadLoop();
             _clients[sessionId] = client;
             _sessionCache[sessionId] = info;
-            Console.WriteLine($"[TtyHostSessionManager] Reconnected to session {sessionId} (shell PID: {info.Pid}, host PID: {info.HostPid})");
+            Console.WriteLine($"[TtyHostSessionManager] Reconnected to session {sessionId}");
 
-            return new DiscoveryResult.Connected(info.Pid, info.HostPid);
+            return new DiscoveryResult.Connected();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[TtyHostSessionManager] Failed to connect to {sessionId}: {ex.Message}");
             DebugLogger.LogException($"TtyHostSessionManager.TryConnect({sessionId})", ex);
             await client.DisposeAsync().ConfigureAwait(false);
-            return new DiscoveryResult.Unresponsive(0);
+            return new DiscoveryResult.Unresponsive();
         }
     }
 
@@ -166,60 +140,6 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
 
         return UpdateService.CompareVersions(conHostVersion, _minCompatibleVersion) >= 0;
     }
-
-    private static Dictionary<int, string> GetRunningTtyHostProcesses()
-    {
-        var result = new Dictionary<int, string>();
-        var expectedPath = TtyHostSpawner.ExpectedTtyHostPath;
-
-        try
-        {
-            // Search for both old name (mmttyhost) and new name (mthost)
-            var processNames = new[] { "mthost", "mmttyhost" };
-
-            foreach (var processName in processNames)
-            {
-                foreach (var proc in Process.GetProcessesByName(processName))
-                {
-                    try
-                    {
-                        // Only include processes from this mt's installation path
-                        var processPath = proc.MainModule?.FileName;
-                        if (string.IsNullOrEmpty(processPath))
-                        {
-                            Console.WriteLine($"[TtyHostSessionManager] Skipping PID {proc.Id}: could not get process path");
-                            continue;
-                        }
-
-                        if (!string.Equals(processPath, expectedPath, StringComparison.OrdinalIgnoreCase))
-                        {
-                            Console.WriteLine($"[TtyHostSessionManager] Skipping PID {proc.Id}: path mismatch");
-                            Console.WriteLine($"  Expected: {expectedPath}");
-                            Console.WriteLine($"  Actual:   {processPath}");
-                            continue;
-                        }
-
-                        result[proc.Id] = processPath;
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[TtyHostSessionManager] Skipping PID {proc.Id}: {ex.Message}");
-                    }
-                    finally
-                    {
-                        proc.Dispose();
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[TtyHostSessionManager] Process enumeration failed: {ex.Message}");
-        }
-
-        return result;
-    }
-
     private static List<string> GetExistingEndpoints()
     {
         var endpoints = new List<string>();
@@ -282,9 +202,9 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
 
     private abstract record DiscoveryResult
     {
-        public sealed record Connected(int Pid, int HostPid) : DiscoveryResult;
-        public sealed record Incompatible(int Pid, string? Version) : DiscoveryResult;
-        public sealed record Unresponsive(int Pid) : DiscoveryResult;
+        public sealed record Connected() : DiscoveryResult;
+        public sealed record Incompatible(string? Version) : DiscoveryResult;
+        public sealed record Unresponsive() : DiscoveryResult;
         public sealed record NoProcess() : DiscoveryResult;
     }
 
@@ -576,14 +496,12 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
     {
         try
         {
-            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            using var process = Process.GetProcessById(processId);
             process.Kill();
-            Console.WriteLine($"[TtyHostSessionManager] Killed orphan process {processId}");
         }
-        catch (Exception ex)
+        catch
         {
-            Console.WriteLine($"[TtyHostSessionManager] Failed to kill process {processId}: {ex.Message}");
-            DebugLogger.LogException($"TtyHostSessionManager.KillProcess({processId})", ex);
+            // Process may have already exited
         }
     }
 }
