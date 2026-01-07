@@ -26,6 +26,7 @@ public sealed class TtyHostClient : IAsyncDisposable
         IntPtr lpBytesLeftThisMessage);
 #endif
     private readonly string _sessionId;
+    private readonly int _hostPid;
     private readonly string _endpoint;
     private readonly object _streamLock = new();
     private readonly object _responseLock = new();
@@ -58,6 +59,7 @@ public sealed class TtyHostClient : IAsyncDisposable
     private const int ReadTimeoutMs = 10000; // 10 seconds - shorter now that we have heartbeat
 
     public string SessionId => _sessionId;
+    public int HostPid => _hostPid;
     public bool IsConnected
     {
         get
@@ -75,10 +77,11 @@ public sealed class TtyHostClient : IAsyncDisposable
     public event Action<string>? OnDisconnected;
     public event Action<string>? OnReconnected;
 
-    public TtyHostClient(string sessionId)
+    public TtyHostClient(string sessionId, int hostPid)
     {
         _sessionId = sessionId;
-        _endpoint = IpcEndpoint.GetSessionEndpoint(sessionId);
+        _hostPid = hostPid;
+        _endpoint = IpcEndpoint.GetSessionEndpoint(sessionId, hostPid);
     }
 
     public async Task<bool> ConnectAsync(int timeoutMs = 5000, CancellationToken ct = default)
@@ -114,24 +117,23 @@ public sealed class TtyHostClient : IAsyncDisposable
                 _stream = _networkStream;
 #endif
                 _reconnectAttempts = 0;
-                Log($"Connected to {_endpoint}, IsConnected={IsConnected}");
                 return true;
             }
             catch (TimeoutException)
             {
-                Log($"Connection timeout (attempt {attempt + 1}/3)");
             }
             catch (OperationCanceledException)
             {
                 return false;
             }
-            catch (Exception ex) when (ex is IOException or SocketException)
+            catch (IOException)
             {
-                Log($"Connection failed (attempt {attempt + 1}/3): {ex.Message}");
             }
-            catch (Exception ex)
+            catch (SocketException)
             {
-                Log($"Unexpected connection error: {ex.Message}");
+            }
+            catch
+            {
             }
 
             if (attempt < 2)
@@ -146,12 +148,6 @@ public sealed class TtyHostClient : IAsyncDisposable
     public void StartReadLoop()
     {
         if (_readTask is not null) return;
-#if WINDOWS
-        var pipeConnected = _pipe?.IsConnected ?? false;
-        Log($"StartReadLoop: IsConnected={IsConnected}, _pipe.IsConnected={pipeConnected}, _stream is null={_stream is null}");
-#else
-        Log($"StartReadLoop: IsConnected={IsConnected}, _stream is null={_stream is null}");
-#endif
         _cts = new CancellationTokenSource();
         _readTask = ReadLoopWithReconnectAsync(_cts.Token);
         _heartbeatTask = HeartbeatLoopAsync(_cts.Token);
@@ -177,7 +173,6 @@ public sealed class TtyHostClient : IAsyncDisposable
                     return TtyHostProtocol.ParseInfo(response);
                 }
 
-                Log($"GetInfo: Sending request (discovery mode), IsConnected={IsConnected}");
                 var requestBytes = TtyHostProtocol.CreateInfoRequest();
                 await WriteWithLockAsync(requestBytes, ct).ConfigureAwait(false);
 
@@ -189,31 +184,20 @@ public sealed class TtyHostClient : IAsyncDisposable
                     var directResponse = await ReadMessageAsync(ct).ConfigureAwait(false);
                     if (directResponse is null)
                     {
-                        Log($"GetInfo: ReadMessage returned null after skipping {skip} messages");
                         break;
                     }
 
                     var (type, payload) = directResponse.Value;
                     if (type == TtyHostMessageType.Info)
                     {
-                        if (skip > 0) Log($"GetInfo: Skipped {skip} output messages during discovery");
-                        Log($"GetInfo: Received Info response, IsConnected={IsConnected}");
                         return TtyHostProtocol.ParseInfo(payload.Span);
-                    }
-
-                    // Expected: Output and StateChange messages from busy terminal
-                    if (type != TtyHostMessageType.Output && type != TtyHostMessageType.StateChange)
-                    {
-                        Log($"GetInfo: unexpected message type {type} while waiting for Info");
                     }
                 }
 
-                Log($"GetInfo: gave up after skipping {maxSkip} messages");
                 continue;
             }
-            catch (Exception ex)
+            catch
             {
-                Log($"GetInfo failed (attempt {attempt + 1}): {ex.Message}");
             }
         }
 
@@ -233,9 +217,8 @@ public sealed class TtyHostClient : IAsyncDisposable
             var msg = TtyHostProtocol.CreateInputMessage(data.Span);
             await WriteWithLockAsync(msg, ct).ConfigureAwait(false);
         }
-        catch (Exception ex)
+        catch
         {
-            Log($"SendInput failed: {ex.Message}");
             TriggerReconnect();
         }
     }
@@ -265,9 +248,8 @@ public sealed class TtyHostClient : IAsyncDisposable
                 var response = await SendRequestAsync(msg, TtyHostMessageType.ResizeAck, ct).ConfigureAwait(false);
                 return response is not null;
             }
-            catch (Exception ex)
+            catch
             {
-                Log($"Resize failed (attempt {attempt + 1}): {ex.Message}");
                 TriggerReconnect();
             }
         }
@@ -281,7 +263,6 @@ public sealed class TtyHostClient : IAsyncDisposable
         {
             if (!IsConnected)
             {
-                Log($"GetBuffer: not connected (attempt {attempt + 1})");
                 return null;
             }
 
@@ -291,9 +272,8 @@ public sealed class TtyHostClient : IAsyncDisposable
                 var response = await SendRequestAsync(msg, TtyHostMessageType.Buffer, ct).ConfigureAwait(false);
                 return response;
             }
-            catch (Exception ex)
+            catch
             {
-                Log($"GetBuffer failed (attempt {attempt + 1}): {ex.Message}");
             }
         }
 
@@ -310,9 +290,8 @@ public sealed class TtyHostClient : IAsyncDisposable
             var response = await SendRequestAsync(msg, TtyHostMessageType.SetNameAck, ct).ConfigureAwait(false);
             return response is not null;
         }
-        catch (Exception ex)
+        catch
         {
-            Log($"SetName failed: {ex.Message}");
             return false;
         }
     }
@@ -387,32 +366,15 @@ public sealed class TtyHostClient : IAsyncDisposable
     private async Task ReadLoopWithReconnectAsync(CancellationToken ct)
     {
         var headerBuffer = new byte[TtyHostProtocol.HeaderSize];
-        var loopCount = 0;
 
         while (!ct.IsCancellationRequested && !_disposed)
         {
-            loopCount++;
             try
             {
                 if (!IsConnected)
                 {
-                    if (loopCount == 1)
-                    {
-                        Log($"ReadLoop: DISCONNECTED on first iteration!");
-                    }
-                    DebugLogger.Log($"[READ-LOOP] {_sessionId}: Not connected, waiting...");
                     await Task.Delay(100, ct).ConfigureAwait(false);
                     continue;
-                }
-
-                if (loopCount == 1)
-                {
-#if WINDOWS
-                    var pipeState = _pipe?.IsConnected ?? false;
-                    Log($"ReadLoop: First iteration, IsConnected={IsConnected}, _pipe.IsConnected={pipeState}");
-#else
-                    Log($"ReadLoop: First iteration, IsConnected={IsConnected}");
-#endif
                 }
 
                 var stream = _stream;
@@ -434,25 +396,16 @@ public sealed class TtyHostClient : IAsyncDisposable
                 }
                 catch (OperationCanceledException) when (_readCancellation?.IsCancellationRequested == true && !ct.IsCancellationRequested)
                 {
-                    // Heartbeat cancelled us - reconnect is already triggered, just continue to pick up new stream
-                    Log("Read cancelled by heartbeat - reconnecting");
                     continue;
                 }
                 catch (OperationCanceledException) when (readTimeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
                 {
-                    // Read timed out - terminal may be idle, this is normal
-                    // Heartbeat (PeekNamedPipe/socket poll every 3s) handles stale connection detection
-                    // No need to send probe messages that leave orphan responses
-                    DebugLogger.Log($"[READ-LOOP] {_sessionId}: Read timeout (idle terminal), continuing");
                     continue;
                 }
 
                 _lastDataReceived = DateTime.UtcNow;
-                DebugLogger.Log($"[READ-LOOP] {_sessionId}: Read {bytesRead} bytes");
                 if (bytesRead == 0)
                 {
-                    Log("Read returned 0 bytes - connection closed");
-                    DebugLogger.Log($"[IPC-ERR] {_sessionId}: Read returned 0 bytes - connection closed");
                     HandleDisconnect();
                     continue;
                 }
@@ -472,7 +425,6 @@ public sealed class TtyHostClient : IAsyncDisposable
 
                 if (!TtyHostProtocol.TryReadHeader(headerBuffer, out var msgType, out var payloadLength))
                 {
-                    Log($"Invalid header: {BitConverter.ToString(headerBuffer)}");
                     HandleDisconnect();
                     break;
                 }
@@ -497,23 +449,22 @@ public sealed class TtyHostClient : IAsyncDisposable
                 }
 
                 var payload = payloadBuffer.AsMemory(0, payloadLength);
-                DebugLogger.Log($"[READ-LOOP] {_sessionId}: Processing message type {msgType}, payload {payloadLength} bytes");
                 ProcessMessage(msgType, payload);
             }
             catch (OperationCanceledException)
             {
                 break;
             }
-            catch (Exception ex) when (ex is IOException or SocketException)
+            catch (IOException)
             {
-                Log($"Read error: {ex.Message}");
-                DebugLogger.LogException($"TtyHostClient.ReadLoop({_sessionId})", ex);
                 HandleDisconnect();
             }
-            catch (Exception ex)
+            catch (SocketException)
             {
-                Log($"Unexpected read error: {ex.Message}");
-                DebugLogger.LogException($"TtyHostClient.ReadLoop({_sessionId})", ex);
+                HandleDisconnect();
+            }
+            catch
+            {
                 HandleDisconnect();
             }
         }
@@ -559,7 +510,6 @@ public sealed class TtyHostClient : IAsyncDisposable
                 break;
 
             default:
-                Log($"Unknown message type: {msgType}");
                 break;
         }
     }
@@ -584,8 +534,6 @@ public sealed class TtyHostClient : IAsyncDisposable
                         var handle = pipe.SafePipeHandle;
                         if (!PeekNamedPipe(handle, IntPtr.Zero, 0, IntPtr.Zero, out _, IntPtr.Zero))
                         {
-                            var error = Marshal.GetLastWin32Error();
-                            Log($"PeekNamedPipe failed (error {error}) - pipe is stale");
                             CancelReadAndReconnect();
                         }
                     }
@@ -601,10 +549,8 @@ public sealed class TtyHostClient : IAsyncDisposable
                 {
                     try
                     {
-                        // Poll for error condition
                         if (socket.Poll(0, SelectMode.SelectError))
                         {
-                            Log("Socket poll detected error - connection stale");
                             CancelReadAndReconnect();
                         }
                     }
@@ -623,16 +569,14 @@ public sealed class TtyHostClient : IAsyncDisposable
             {
                 break;
             }
-            catch (Exception ex)
+            catch
             {
-                DebugLogger.Log($"[HEARTBEAT] {_sessionId}: Error: {ex.Message}");
             }
         }
     }
 
     private void CancelReadAndReconnect()
     {
-        // Cancel any pending read immediately so we can reconnect faster
         try { _readCancellation?.Cancel(); } catch { }
         HandleDisconnect();
     }
@@ -640,8 +584,6 @@ public sealed class TtyHostClient : IAsyncDisposable
     private void HandleDisconnect()
     {
         if (_disposed || _intentionalDisconnect) return;
-
-        Log("Connection lost, will attempt reconnect");
         OnDisconnected?.Invoke(_sessionId);
         TriggerReconnect();
     }
@@ -660,7 +602,6 @@ public sealed class TtyHostClient : IAsyncDisposable
         {
             _reconnectAttempts++;
             var delay = Math.Min(InitialReconnectDelayMs * (1 << _reconnectAttempts), MaxReconnectDelayMs);
-            Log($"Reconnect attempt {_reconnectAttempts}/{MaxReconnectAttempts} in {delay}ms");
 
             await Task.Delay(delay).ConfigureAwait(false);
 
@@ -695,22 +636,17 @@ public sealed class TtyHostClient : IAsyncDisposable
                 if (info is not null)
                 {
                     _reconnectAttempts = 0;
-                    Log("Reconnected successfully");
                     OnReconnected?.Invoke(_sessionId);
                     return;
                 }
             }
-            catch (Exception ex)
+            catch
             {
-                Log($"Reconnect failed: {ex.Message}");
-                DebugLogger.LogException($"TtyHostClient.Reconnect({_sessionId}) attempt {_reconnectAttempts}", ex);
             }
         }
 
         if (_reconnectAttempts >= MaxReconnectAttempts)
         {
-            Log("Max reconnect attempts reached, giving up");
-            DebugLogger.LogError($"TtyHostClient.Reconnect({_sessionId})", $"Max reconnect attempts ({MaxReconnectAttempts}) reached, giving up");
             OnStateChanged?.Invoke(_sessionId);
         }
     }
@@ -749,11 +685,6 @@ public sealed class TtyHostClient : IAsyncDisposable
         }
 
         return (msgType, payload);
-    }
-
-    private static void Log(string message)
-    {
-        Console.WriteLine($"[TtyHostClient] {message}");
     }
 
     public async ValueTask DisposeAsync()

@@ -17,7 +17,7 @@ namespace Ai.Tlbx.MidTerm.TtyHost;
 
 public static class Program
 {
-    public const string Version = "5.6.12";
+    public const string Version = "5.6.15";
 
 #if WINDOWS
     [DllImport("kernel32.dll", SetLastError = true)]
@@ -66,7 +66,7 @@ public static class Program
         }
 
         _sessionId = config.SessionId;
-        _logPath = Path.Combine(LogDir, $"mt-con-{_sessionId}-{StartTimestamp}.log");
+        _logPath = Path.Combine(LogDir, $"mthost-{_sessionId}-{StartTimestamp}.log");
         _debugEnabled = config.Debug;
 
 #if !WINDOWS
@@ -112,7 +112,7 @@ public static class Program
 
             var session = new TerminalSession(config.SessionId, pty, shellConfig.ShellType, config.Cols, config.Rows);
 
-            var endpoint = IpcEndpoint.GetSessionEndpoint(config.SessionId);
+            var endpoint = IpcEndpoint.GetSessionEndpoint(config.SessionId, Environment.ProcessId);
             Log($"Listening on: {endpoint}");
 
             using var cts = new CancellationTokenSource();
@@ -646,10 +646,8 @@ public static class Program
             }
         }
 
-        if (string.IsNullOrEmpty(sessionId))
-        {
-            return null;
-        }
+        // Use PID as session ID if not provided - this ensures IPC endpoint name matches the process
+        sessionId ??= Environment.ProcessId.ToString();
 
         workingDir ??= Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
@@ -675,9 +673,9 @@ public static class Program
               -v, --version     Show version
 
             IPC (Windows):
-              Listens on named pipe: mt-con-<session-id>
+              Listens on named pipe: mthost-<session-id>-<pid>
             IPC (macOS/Linux):
-              Listens on Unix socket: /tmp/mt-con-<session-id>.sock
+              Listens on Unix socket: /tmp/mthost-<session-id>-<pid>.sock
             """);
     }
 
@@ -687,7 +685,6 @@ public static class Program
     internal static void Log(string message)
     {
         var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{_sessionId}] {message}";
-        Console.WriteLine(line);
         try
         {
             Directory.CreateDirectory(LogDir);
