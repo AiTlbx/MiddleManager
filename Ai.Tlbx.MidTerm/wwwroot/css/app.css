@@ -1995,6 +1995,29 @@ html, body {
 }
 
 /* =============================================================================
+   Drop Toast Notification
+   ============================================================================= */
+
+.drop-toast {
+    position: fixed;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 13px;
+    z-index: 9999;
+    opacity: 1;
+    transition: opacity 0.3s;
+    background-color: var(--accent-red);
+    color: white;
+}
+
+.drop-toast.hiding {
+    opacity: 0;
+}
+
+/* =============================================================================
    Terminal Search
    ============================================================================= */
 

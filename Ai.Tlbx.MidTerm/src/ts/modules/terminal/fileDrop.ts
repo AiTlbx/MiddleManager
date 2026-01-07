@@ -7,8 +7,77 @@
 
 import { activeSessionId } from '../../state';
 
+// =============================================================================
+// Constants
+// =============================================================================
+
+const TEXT_FILE_SIZE_LIMIT = 40 * 1024; // 40KB
+
+const IMAGE_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp',
+  '.svg', '.ico', '.tiff', '.tif', '.heic', '.heif', '.avif'
+]);
+
+const REJECTED_EXTENSIONS = new Set([
+  // Documents
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+  '.odt', '.ods', '.odp', '.rtf',
+  // Executables/binaries
+  '.exe', '.dll', '.so', '.dylib', '.app', '.msi', '.deb', '.rpm', '.dmg', '.iso',
+  // Archives
+  '.zip', '.tar', '.gz', '.7z', '.rar', '.bz2', '.xz', '.tgz',
+  // Binary data
+  '.bin', '.dat', '.db', '.sqlite', '.sqlite3',
+  // Media (non-image)
+  '.mp3', '.mp4', '.wav', '.avi', '.mov', '.mkv', '.flac', '.ogg', '.webm'
+]);
+
+// =============================================================================
 // Forward declarations for callbacks
+// =============================================================================
+
 let pasteToTerminal: (sessionId: string, data: string, isFilePath?: boolean) => void = () => {};
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+function getFileExtension(filename: string): string {
+  const lastDot = filename.lastIndexOf('.');
+  return lastDot >= 0 ? filename.slice(lastDot).toLowerCase() : '';
+}
+
+function isImageFile(filename: string): boolean {
+  return IMAGE_EXTENSIONS.has(getFileExtension(filename));
+}
+
+function isRejectedFile(filename: string): boolean {
+  return REJECTED_EXTENSIONS.has(getFileExtension(filename));
+}
+
+function showDropToast(message: string): void {
+  const existing = document.querySelector('.drop-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.className = 'drop-toast error';
+  toast.textContent = message;
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.add('hiding');
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+async function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
 
 /**
  * Sanitize pasted content to:
@@ -65,22 +134,51 @@ async function uploadFile(sessionId: string, file: File): Promise<string | null>
 }
 
 /**
- * Handle file drop - upload and insert path
+ * Handle file drop - routes to appropriate handler based on file type:
+ * - Image files: upload and paste path
+ * - Rejected files (pdf, exe, etc.): show error toast
+ * - Text files: read content and paste (with 40KB limit)
  */
 async function handleFileDrop(files: FileList): Promise<void> {
   if (!activeSessionId || files.length === 0) return;
 
-  const paths: string[] = [];
+  const imagePaths: string[] = [];
 
   for (const file of Array.from(files)) {
-    const path = await uploadFile(activeSessionId, file);
-    if (path) {
-      paths.push(path);
+    // Image files: upload and collect path
+    if (isImageFile(file.name)) {
+      const path = await uploadFile(activeSessionId, file);
+      if (path) imagePaths.push(path);
+      continue;
+    }
+
+    // Rejected files: show error toast
+    if (isRejectedFile(file.name)) {
+      const ext = getFileExtension(file.name);
+      showDropToast(`Cannot paste ${ext} files`);
+      continue;
+    }
+
+    // Text files: check size limit
+    if (file.size > TEXT_FILE_SIZE_LIMIT) {
+      showDropToast(`File too large (max 40KB): ${file.name}`);
+      continue;
+    }
+
+    // Read and paste text content
+    try {
+      const content = await readFileAsText(file);
+      const sanitized = sanitizePasteContent(content);
+      pasteToTerminal(activeSessionId, sanitized, false);
+    } catch (err) {
+      console.error(`[FileDrop] Failed to read file: ${file.name}`, err);
+      showDropToast(`Failed to read: ${file.name}`);
     }
   }
 
-  if (paths.length > 0) {
-    const joined = sanitizePasteContent(paths.join(' '));
+  // Paste collected image paths (if any)
+  if (imagePaths.length > 0) {
+    const joined = sanitizePasteContent(imagePaths.join(' '));
     pasteToTerminal(activeSessionId, joined, true);
   }
 }
