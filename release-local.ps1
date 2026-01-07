@@ -74,12 +74,14 @@ $versionJson = Get-Content $versionJsonPath | ConvertFrom-Json
 $baseWebVersion = $versionJson.web
 $basePtyVersion = $versionJson.pty
 
-# Parse base version to check if it already has 4 components
-$baseParts = $baseWebVersion.Split('.')
-if ($baseParts.Count -eq 4) {
+# Parse base versions to strip any existing 4th component
+$webParts = $baseWebVersion.Split('.')
+$ptyParts = $basePtyVersion.Split('.')
+
+if ($webParts.Count -eq 4) {
     # Already has 4th component - increment it
-    $buildNum = [int]$baseParts[3] + 1
-    $baseWebVersion = "$($baseParts[0]).$($baseParts[1]).$($baseParts[2])"
+    $buildNum = [int]$webParts[3] + 1
+    $baseWebVersion = "$($webParts[0]).$($webParts[1]).$($webParts[2])"
 } else {
     # Check output folder for existing local version
     $localVersionFile = "$OutputDir\version.json"
@@ -91,6 +93,11 @@ if ($baseParts.Count -eq 4) {
             $buildNum = [int]$localParts[3] + 1
         }
     }
+}
+
+# Strip 4th component from PTY base version if present
+if ($ptyParts.Count -eq 4) {
+    $basePtyVersion = "$($ptyParts[0]).$($ptyParts[1]).$($ptyParts[2])"
 }
 
 $localWebVersion = "$baseWebVersion.$buildNum"
@@ -150,18 +157,20 @@ if ($LASTEXITCODE -ne 0) { throw "TypeScript build failed" }
 Write-Host "Publishing mt.exe and mthost.exe..." -ForegroundColor Gray
 
 $mtJob = Start-Job -ScriptBlock {
-    param($rid, $path, $ver)
+    param($rid, $path, $ver, $envPath)
+    $env:PATH = $envPath
     Set-Location $path
-    dotnet publish Ai.Tlbx.MidTerm/Ai.Tlbx.MidTerm.csproj -c Release -r $rid /p:IsPublishing=true /p:Version=$ver --verbosity quiet 2>&1
+    dotnet publish Ai.Tlbx.MidTerm/Ai.Tlbx.MidTerm.csproj -c Release -r $rid "-p:IsPublishing=true" "-p:Version=$ver" --verbosity quiet 2>&1
     $LASTEXITCODE
-} -ArgumentList $RID, $PWD, $localWebVersion
+} -ArgumentList $RID, $PWD, $localWebVersion, $env:PATH
 
 $mthostJob = Start-Job -ScriptBlock {
-    param($rid, $path, $ver)
+    param($rid, $path, $ver, $envPath)
+    $env:PATH = $envPath
     Set-Location $path
-    dotnet publish Ai.Tlbx.MidTerm.TtyHost/Ai.Tlbx.MidTerm.TtyHost.csproj -c Release -r $rid /p:IsPublishing=true /p:Version=$ver --verbosity quiet 2>&1
+    dotnet publish Ai.Tlbx.MidTerm.TtyHost/Ai.Tlbx.MidTerm.TtyHost.csproj -c Release -r $rid "-p:IsPublishing=true" "-p:Version=$ver" --verbosity quiet 2>&1
     $LASTEXITCODE
-} -ArgumentList $RID, $PWD, $localPtyVersion
+} -ArgumentList $RID, $PWD, $localPtyVersion, $env:PATH
 
 $mtResult = Receive-Job -Job $mtJob -Wait
 $mthostResult = Receive-Job -Job $mthostJob -Wait
