@@ -224,14 +224,13 @@ export function connectMuxWebSocket(): void {
       console.log(`[Mux] Reconnected - refreshing ${sessionTerminals.size} terminals`);
       pendingOutputFrames.clear();
       outputQueue.length = 0;
-      sessionTerminals.forEach((state, sessionId) => {
+      sessionTerminals.forEach((state) => {
         if (state.opened) {
           state.terminal.clear();
         }
         state.serverCols = 0;
         state.serverRows = 0;
-        // Request buffer refresh for ALL terminals immediately
-        requestBufferRefresh(sessionId);
+        // Server pushes all buffers on connect via SendInitialBuffersAsync
       });
     } else {
       console.log('[Mux] Connected (first connection)');

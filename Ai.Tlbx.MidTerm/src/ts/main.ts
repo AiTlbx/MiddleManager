@@ -273,17 +273,13 @@ function selectSession(sessionId: string): void {
 
   const sessionInfo = sessions.find((s) => s.id === sessionId);
   const state = createTerminalForSession(sessionId, sessionInfo);
-  const isNewTerminal = state.serverCols === 0;
   const isNewlyCreated = newlyCreatedSessions.has(sessionId);
   state.container.classList.remove('hidden');
 
   requestAnimationFrame(() => {
     state.terminal.focus();
 
-    if (isNewTerminal && !isNewlyCreated) {
-      requestBufferRefresh(sessionId);
-    }
-
+    // Server pushes all buffers on WS connect, no need to request again
     if (isNewlyCreated) {
       newlyCreatedSessions.delete(sessionId);
     }
