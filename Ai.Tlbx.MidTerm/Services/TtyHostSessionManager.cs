@@ -68,7 +68,8 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
                     break;
 
                 case DiscoveryResult.Incompatible incompatible:
-                    Console.WriteLine($"[TtyHostSessionManager] Session {sessionId} incompatible (v{incompatible.Version})");
+                    Console.WriteLine($"[TtyHostSessionManager] Session {sessionId} incompatible (v{incompatible.Version}), killing");
+                    KillProcess(incompatible.HostPid);
                     CleanupEndpoint(sessionId);
                     break;
 
@@ -111,7 +112,7 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
             if (!IsVersionCompatible(info.TtyHostVersion))
             {
                 await client.DisposeAsync().ConfigureAwait(false);
-                return new DiscoveryResult.Incompatible(info.TtyHostVersion);
+                return new DiscoveryResult.Incompatible(info.HostPid, info.TtyHostVersion);
             }
 
             // Success - register the client
@@ -203,7 +204,7 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
     private abstract record DiscoveryResult
     {
         public sealed record Connected() : DiscoveryResult;
-        public sealed record Incompatible(string? Version) : DiscoveryResult;
+        public sealed record Incompatible(int HostPid, string? Version) : DiscoveryResult;
         public sealed record Unresponsive() : DiscoveryResult;
         public sealed record NoProcess() : DiscoveryResult;
     }
