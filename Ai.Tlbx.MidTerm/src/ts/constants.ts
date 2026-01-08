@@ -127,3 +127,30 @@ export const MAX_FRAME_DIMENSION = 500;
 
 /** Mobile breakpoint in pixels */
 export const MOBILE_BREAKPOINT = 768;
+
+// =============================================================================
+// Icon Font (midFont) - Unicode characters
+// =============================================================================
+
+export const ICONS = {
+  collapse: '\ue913',      // keyboard_arrow_up
+  expand: '\ue910',        // keyboard_arrow_down
+  settings: '\ue994',      // cog
+  new: '\ue903',           // lightning
+  resize: '\ue989',        // enlarge
+  rename: '\ue922',        // pen-tool
+  close: '\uea0f',         // cross
+  menu: '\ue919',          // menu (hamburger)
+  update: '\ue91b',        // arrow_right
+  searchPrev: '\ue913',    // keyboard_arrow_up
+  searchNext: '\ue910',    // keyboard_arrow_down
+  save: '\ue90f',          // save
+  interrupt: '\ue9b5',     // power
+  terminal: '\uea81',      // terminal
+  warning: '\uea07',       // warning
+} as const;
+
+/** Creates an icon span element */
+export function icon(name: keyof typeof ICONS): string {
+  return `<span class="icon">${ICONS[name]}</span>`;
+}

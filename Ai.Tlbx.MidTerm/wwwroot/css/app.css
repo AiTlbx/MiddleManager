@@ -12,24 +12,8 @@
 }
 
 @font-face {
-    font-family: 'IBM Plex Mono';
-    src: url('../fonts/IBMPlexMono-Regular.woff2') format('woff2');
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-}
-
-@font-face {
     font-family: 'Cascadia Code';
     src: url('../fonts/CascadiaCode-Regular.woff2') format('woff2');
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-}
-
-@font-face {
-    font-family: 'Iosevka';
-    src: url('../fonts/Iosevka-Regular.woff2') format('woff2');
     font-weight: 400;
     font-style: normal;
     font-display: swap;
@@ -41,6 +25,29 @@
     font-weight: 400;
     font-style: normal;
     font-display: swap;
+}
+
+/* Icon Font */
+@font-face {
+    font-family: 'midFont';
+    src: url('../fonts/midFont.woff') format('woff');
+    font-weight: normal;
+    font-style: normal;
+    font-display: block;
+}
+
+.icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1em;
+    height: 1em;
+    font-family: 'midFont' !important;
+    font-style: normal;
+    font-weight: normal;
+    line-height: 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 /* Tokyo Night Theme Variables */

@@ -13,6 +13,7 @@ import {
   pendingSessions,
   dom
 } from '../../state';
+import { icon } from '../../constants';
 
 // =============================================================================
 // Callback Types
@@ -127,7 +128,7 @@ export function renderSessionList(): void {
     if (!isPending) {
       const resizeBtn = document.createElement('button');
       resizeBtn.className = 'session-resize';
-      resizeBtn.innerHTML = '⤢';
+      resizeBtn.innerHTML = icon('resize');
       resizeBtn.title = 'Fit to screen';
       resizeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -138,7 +139,7 @@ export function renderSessionList(): void {
 
       const renameBtn = document.createElement('button');
       renameBtn.className = 'session-rename';
-      renameBtn.innerHTML = '✏️';
+      renameBtn.innerHTML = icon('rename');
       renameBtn.title = 'Rename session';
       renameBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -149,7 +150,7 @@ export function renderSessionList(): void {
 
       const closeBtn = document.createElement('button');
       closeBtn.className = 'session-close';
-      closeBtn.innerHTML = '&times;';
+      closeBtn.innerHTML = icon('close');
       closeBtn.title = 'Close session';
       closeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
