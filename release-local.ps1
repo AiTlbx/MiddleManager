@@ -1,18 +1,74 @@
 #!/usr/bin/env pwsh
-# MidTerm Local Release Script
-# Does everything release.ps1 does EXCEPT tagging (no GitHub Actions trigger)
-# Uses 4th version component (5.8.1.x) for local builds
-#
-# Usage: .\release-local.ps1 -InfluencesTtyHost no
-#        .\release-local.ps1 -InfluencesTtyHost yes
+<#
+.SYNOPSIS
+    Creates a local release by bumping version (4th component), committing, and pushing.
+    Does NOT create a git tag (no GitHub Actions trigger).
+
+.PARAMETER ReleaseNotes
+    MANDATORY: Array of detailed changelog entries for this release.
+    These accumulate across local releases to provide fodder for public releases.
+
+    Each entry should be a complete sentence explaining:
+    - What changed
+    - Why it matters to users
+    - Any important technical details
+
+.PARAMETER InfluencesTtyHost
+    MANDATORY: Does this release affect mthost or the protocol between mt and mthost?
+
+    Answer 'yes' if ANY of these are true:
+      - Changed Ai.Tlbx.MidTerm.TtyHost/ code
+      - Changed Ai.Tlbx.MidTerm.Common/ (shared protocol code)
+      - Changed IPC/protocol between mt and mthost
+
+    Answer 'no' if ONLY these changed:
+      - TypeScript/frontend code
+      - CSS/HTML
+      - REST API endpoints
+      - Web-only C# code
+
+.EXAMPLE
+    .\release-local.ps1 -ReleaseNotes @(
+        "Removed blocking FlushAsync from IPC writes to fix input latency",
+        "Sessions no longer lag when mthost is busy processing output"
+    ) -InfluencesTtyHost no
+
+.EXAMPLE
+    .\release-local.ps1 -ReleaseNotes @(
+        "Fixed PTY handle leak on session close"
+    ) -InfluencesTtyHost yes
+#>
 
 param(
+    [Parameter(Mandatory=$true, HelpMessage="REQUIRED: Array of detailed changelog entries. Each entry should explain what changed and why.")]
+    [ValidateNotNullOrEmpty()]
+    [string[]]$ReleaseNotes,
+
     [Parameter(Mandatory=$true)]
     [ValidateSet("yes", "no")]
     [string]$InfluencesTtyHost
 )
 
 $ErrorActionPreference = "Stop"
+
+# Validate ReleaseNotes has meaningful content
+if ($ReleaseNotes.Count -lt 1 -or ($ReleaseNotes.Count -eq 1 -and $ReleaseNotes[0].Length -lt 20)) {
+    Write-Host ""
+    Write-Host "ERROR: ReleaseNotes must contain meaningful changelog entries." -ForegroundColor Red
+    Write-Host ""
+    Write-Host "These notes accumulate across local releases for public release changelogs." -ForegroundColor Yellow
+    Write-Host "Each entry should be a complete sentence explaining:" -ForegroundColor Yellow
+    Write-Host "  - What changed" -ForegroundColor White
+    Write-Host "  - Why it matters to users" -ForegroundColor White
+    Write-Host ""
+    Write-Host "Example:" -ForegroundColor Green
+    Write-Host '  -ReleaseNotes @(' -ForegroundColor White
+    Write-Host '      "Removed blocking FlushAsync from IPC writes to fix input latency",' -ForegroundColor White
+    Write-Host '      "Sessions no longer lag when mthost is busy processing output"' -ForegroundColor White
+    Write-Host '  )' -ForegroundColor White
+    Write-Host ""
+    exit 1
+}
 
 $OutputDir = "C:\temp\mtlocalrelease"
 $RID = "win-x64"
@@ -225,8 +281,13 @@ Write-Host "Committing and pushing (no tag)..." -ForegroundColor Gray
 git add -A
 if ($LASTEXITCODE -ne 0) { throw "git add failed" }
 
-$commitMsg = "Local release $localWebVersion ($updateType)"
-git commit -m $commitMsg
+# Build commit message: subject line + release notes as bullet points
+$commitMsg = "Local $localWebVersion ($updateType)`n`n"
+foreach ($note in $ReleaseNotes) {
+    $commitMsg += "- $note`n"
+}
+
+$commitMsg | git commit -F -
 if ($LASTEXITCODE -ne 0) {
     Write-Host "  No changes to commit (or commit failed)" -ForegroundColor Yellow
 } else {
