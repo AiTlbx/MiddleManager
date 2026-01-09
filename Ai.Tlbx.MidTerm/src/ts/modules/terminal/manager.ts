@@ -20,7 +20,7 @@ import {
 } from '../../state';
 import { getClipboardStyle, parseOutputFrame } from '../../utils';
 import { applyTerminalScaling, fitSessionToScreen } from './scaling';
-import { setupFileDrop, handleClipboardPaste } from './fileDrop';
+import { setupFileDrop, handleClipboardPaste, sanitizePasteContent } from './fileDrop';
 import { isBracketedPasteEnabled } from '../comms';
 
 declare const Terminal: any;
@@ -318,8 +318,12 @@ export function setupTerminalEvents(
       }
       // Ctrl+V: paste (images uploaded, text pasted)
       if (e.ctrlKey && !e.shiftKey && e.key === 'v') {
-        handleClipboardPaste(sessionId);
-        return false;
+        if (window.isSecureContext) {
+          handleClipboardPaste(sessionId);
+          return false;
+        }
+        // Non-secure context: let browser fire paste event, handled by pasteHandler below
+        return true;
       }
     } else {
       // Unix: Ctrl+Shift+C to copy
@@ -332,8 +336,12 @@ export function setupTerminalEvents(
       }
       // Unix: Ctrl+Shift+V to paste (images uploaded, text pasted)
       if (e.ctrlKey && e.shiftKey && (e.key === 'V' || e.key === 'v')) {
-        handleClipboardPaste(sessionId);
-        return false;
+        if (window.isSecureContext) {
+          handleClipboardPaste(sessionId);
+          return false;
+        }
+        // Non-secure context: let browser fire paste event, handled by pasteHandler below
+        return true;
       }
     }
 
@@ -352,13 +360,23 @@ export function setupTerminalEvents(
     return true;
   });
 
-  // Prevent browser paste event - we handle it ourselves via handleClipboardPaste
-  // This prevents xterm.js from also handling paste via onData
+  // Handle paste events - use native clipboardData on non-secure contexts (HTTP)
+  // On secure contexts (HTTPS/localhost), handleClipboardPaste uses async Clipboard API
   // Use capture phase to intercept before xterm.js
   const pasteHandler = (e: ClipboardEvent) => {
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
+
+    // On non-secure contexts, the async Clipboard API doesn't work
+    // Use native clipboardData from the paste event instead
+    if (!window.isSecureContext && e.clipboardData) {
+      const text = e.clipboardData.getData('text/plain');
+      if (text) {
+        pasteToTerminal(sessionId, sanitizePasteContent(text));
+      }
+    }
+    // On secure contexts, paste is handled by keyboard shortcut via handleClipboardPaste
   };
   container.addEventListener('paste', pasteHandler, true);
 

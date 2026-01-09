@@ -87,7 +87,7 @@ async function readFileAsText(file: File): Promise<string> {
  *
  * BPM markers are re-added by pasteToTerminal() after sanitization.
  */
-function sanitizePasteContent(text: string): string {
+export function sanitizePasteContent(text: string): string {
   return text
     .replace(/\r\n/g, '\n')                     // Normalize CRLF → LF first
     .replace(/\r(?!\n)/g, '\n')                 // Normalize CR → LF (Mac Classic)
@@ -121,14 +121,20 @@ async function uploadFile(sessionId: string, file: File): Promise<string | null>
     });
 
     if (!response.ok) {
-      console.error('File upload failed:', response.status);
+      if (response.status === 401) {
+        showDropToast('Upload failed: not authenticated');
+      } else if (response.status === 404) {
+        showDropToast('Upload failed: session not found');
+      } else {
+        showDropToast(`Upload failed: ${response.status}`);
+      }
       return null;
     }
 
     const result = await response.json();
     return result.path;
   } catch (error) {
-    console.error('File upload error:', error);
+    showDropToast('Upload failed: network error');
     return null;
   }
 }
@@ -219,9 +225,18 @@ export function setupFileDrop(container: HTMLElement): void {
 
 /**
  * Handle clipboard paste - checks for images first, falls back to text
- * Used by the keyboard handler in manager.ts
+ * Used by the keyboard handler in manager.ts (only on secure contexts)
+ * On non-secure contexts (HTTP remote), this function won't work due to
+ * browser Clipboard API restrictions - paste is handled via native events instead.
  */
 export async function handleClipboardPaste(sessionId: string): Promise<void> {
+  // Clipboard API requires secure context (HTTPS or localhost)
+  // On HTTP remote connections, show warning and bail out
+  if (!window.isSecureContext) {
+    showDropToast('Paste requires HTTPS or localhost');
+    return;
+  }
+
   // Try to read clipboard items (images)
   try {
     const items = await navigator.clipboard.read();
