@@ -430,8 +430,10 @@ export function destroyTerminalForSession(sessionId: string): void {
 }
 
 // Chunking constants for large pastes to prevent PTY buffer overflow
-const PASTE_CHUNK_SIZE = 4096; // 4KB chunks
-const PASTE_CHUNK_DELAY = 50;  // 50ms between chunks (PSReadLine needs time)
+// PSReadLine processes input slowly (syntax highlighting, history, etc.)
+// Small chunks + delay give it time to keep up
+const PASTE_CHUNK_SIZE = 512;  // 512 byte chunks
+const PASTE_CHUNK_DELAY = 50;  // 50ms between chunks
 
 /**
  * Send data in chunks with delays to prevent PTY buffer overflow.
