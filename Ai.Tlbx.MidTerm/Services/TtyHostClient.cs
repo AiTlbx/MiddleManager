@@ -361,7 +361,6 @@ public sealed class TtyHostClient : IAsyncDisposable
         }
 
         await stream.WriteAsync(data, ct).ConfigureAwait(false);
-        await stream.FlushAsync(ct).ConfigureAwait(false);
     }
 
     private async Task ReadLoopWithReconnectAsync(CancellationToken ct)
