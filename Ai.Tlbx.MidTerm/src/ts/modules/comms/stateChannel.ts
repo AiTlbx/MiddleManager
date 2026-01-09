@@ -38,7 +38,7 @@ let applyTerminalScaling: (sessionId: string, state: TerminalState) => void = ()
 let createTerminalForSession: (sessionId: string, sessionInfo: Session | undefined) => void = () => {};
 let renderSessionList: () => void = () => {};
 let updateEmptyState: () => void = () => {};
-let selectSession: (sessionId: string) => void = () => {};
+let selectSession: (sessionId: string, options?: { closeSettingsPanel?: boolean }) => void = () => {};
 let updateMobileTitle: () => void = () => {};
 let renderUpdatePanel: () => void = () => {};
 
@@ -51,7 +51,7 @@ export function registerStateCallbacks(callbacks: {
   createTerminalForSession?: (sessionId: string, sessionInfo: Session | undefined) => void;
   renderSessionList?: () => void;
   updateEmptyState?: () => void;
-  selectSession?: (sessionId: string) => void;
+  selectSession?: (sessionId: string, options?: { closeSettingsPanel?: boolean }) => void;
   updateMobileTitle?: () => void;
   renderUpdatePanel?: () => void;
 }): void {
@@ -153,7 +153,7 @@ export function handleStateUpdate(newSessions: Session[]): void {
   // Auto-select first session if none active (but not if settings are open)
   const firstSession = sessions[0];
   if (!activeSessionId && firstSession && !settingsOpen) {
-    selectSession(firstSession.id);
+    selectSession(firstSession.id, { closeSettingsPanel: false });
   }
 
   // Handle active session being deleted (but not if settings are open)
@@ -161,7 +161,7 @@ export function handleStateUpdate(newSessions: Session[]): void {
     setActiveSessionId(null);
     const nextSession = sessions[0];
     if (nextSession && !settingsOpen) {
-      selectSession(nextSession.id);
+      selectSession(nextSession.id, { closeSettingsPanel: false });
     }
   }
 

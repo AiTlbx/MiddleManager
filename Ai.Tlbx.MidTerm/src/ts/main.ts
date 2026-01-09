@@ -295,8 +295,12 @@ function createSession(): void {
     });
 }
 
-function selectSession(sessionId: string): void {
-  closeSettings();
+function selectSession(sessionId: string, options?: { closeSettingsPanel?: boolean }): void {
+  // Only close settings if explicitly requested (e.g., user clicked a session)
+  // Auto-selection from state updates should NOT close settings
+  if (options?.closeSettingsPanel !== false) {
+    closeSettings();
+  }
 
   // Save scroll position for the previously active terminal
   if (activeSessionId && activeSessionId !== sessionId) {
