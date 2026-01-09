@@ -1197,7 +1197,7 @@ html, body {
 .settings-tabs {
     display: flex;
     flex-direction: column;
-    background: var(--bg-sidebar);
+    background: #14151E;
     border-right: 1px solid var(--border-color);
     padding: 16px 0;
     overflow-y: auto;
