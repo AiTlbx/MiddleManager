@@ -12,6 +12,7 @@ import {
   currentSettings,
   activeSessionId,
   pendingOutputFrames,
+  sessionsNeedingResync,
   fontsReadyPromise,
   dom,
   setFontsReadyPromise,
@@ -220,8 +221,17 @@ export function createTerminalForSession(
 
 /**
  * Replay pending output frames that arrived before terminal was opened.
+ * If frames overflowed, request a full buffer refresh instead.
  */
 function replayPendingFrames(sessionId: string, state: TerminalState): void {
+  // Check if this session overflowed and needs a full resync
+  if (sessionsNeedingResync.has(sessionId)) {
+    sessionsNeedingResync.delete(sessionId);
+    pendingOutputFrames.delete(sessionId);
+    requestBufferRefresh(sessionId);
+    return;
+  }
+
   const frames = pendingOutputFrames.get(sessionId);
   if (frames && frames.length > 0) {
     frames.forEach((payload) => {
@@ -427,6 +437,7 @@ export function destroyTerminalForSession(sessionId: string): void {
   state.container.remove();
   sessionTerminals.delete(sessionId);
   pendingOutputFrames.delete(sessionId);
+  sessionsNeedingResync.delete(sessionId);
 }
 
 // Chunking constants for large pastes to prevent PTY buffer overflow

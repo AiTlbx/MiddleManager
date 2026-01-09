@@ -96,6 +96,9 @@ export const pendingSessions = new Set<string>();
 /** Buffer WebSocket output frames for terminals not yet opened */
 export const pendingOutputFrames = new Map<string, Uint8Array[]>();
 
+/** Sessions that overflowed pending frames and need full resync when opened */
+export const sessionsNeedingResync = new Set<string>();
+
 /** Font loading promise */
 export let fontsReadyPromise: Promise<void> | null = null;
 

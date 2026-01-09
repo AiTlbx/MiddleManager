@@ -30,6 +30,7 @@ import {
   muxHasConnected,
   sessionTerminals,
   pendingOutputFrames,
+  sessionsNeedingResync,
   activeSessionId,
   setMuxWs,
   setMuxReconnectTimer,
@@ -64,6 +65,7 @@ interface OutputFrameItem {
 }
 
 const MAX_QUEUE_SIZE = 10000;
+const MAX_PENDING_FRAMES_PER_SESSION = 1000;
 const outputQueue: OutputFrameItem[] = [];
 let processingQueue = false;
 
@@ -135,7 +137,15 @@ async function processOneFrame(item: OutputFrameItem): Promise<void> {
       if (!pendingOutputFrames.has(item.sessionId)) {
         pendingOutputFrames.set(item.sessionId, []);
       }
-      pendingOutputFrames.get(item.sessionId)!.push(bufferedPayload);
+      const frames = pendingOutputFrames.get(item.sessionId)!;
+      if (frames.length >= MAX_PENDING_FRAMES_PER_SESSION) {
+        // Overflow: partial data is useless for TUI apps, mark for full resync
+        log.warn(() => `Pending frames overflow for ${item.sessionId}, scheduling resync`);
+        sessionsNeedingResync.add(item.sessionId);
+        pendingOutputFrames.delete(item.sessionId);
+        return;
+      }
+      frames.push(bufferedPayload);
     }
   } catch (e) {
     log.error(() => `Failed to process frame: ${e}`);
@@ -230,6 +240,7 @@ export function connectMuxWebSocket(): void {
     if (isReconnect) {
       log.info(() => `Reconnected - refreshing ${sessionTerminals.size} terminals`);
       pendingOutputFrames.clear();
+      sessionsNeedingResync.clear();
       outputQueue.length = 0;
       sessionTerminals.forEach((state) => {
         if (state.opened) {
@@ -268,6 +279,7 @@ export function connectMuxWebSocket(): void {
         }
       });
       pendingOutputFrames.clear();
+      sessionsNeedingResync.clear();
       outputQueue.length = 0; // Clear pending queue too
       return;
     }
