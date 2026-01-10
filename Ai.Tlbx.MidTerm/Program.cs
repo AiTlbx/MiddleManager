@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -17,12 +18,78 @@ public class Program
     private const int DefaultPort = 2000;
     private const string DefaultBindAddress = "0.0.0.0";
 
+    private enum DiagLogLevel { Info, Warning, Error }
+
+    private static void WriteEventLog(string message, DiagLogLevel level = DiagLogLevel.Info)
+    {
+#if WINDOWS
+        if (OperatingSystem.IsWindows())
+        {
+            const string source = "MidTerm";
+            const string logName = "Application";
+
+            var eventLogType = level switch
+            {
+                DiagLogLevel.Warning => EventLogEntryType.Warning,
+                DiagLogLevel.Error => EventLogEntryType.Error,
+                _ => EventLogEntryType.Information
+            };
+
+            try
+            {
+                // Ensure source exists (requires admin, but SYSTEM account has this)
+                if (!EventLog.SourceExists(source))
+                {
+                    EventLog.CreateEventSource(source, logName);
+                }
+
+                EventLog.WriteEntry(source, message, eventLogType);
+            }
+            catch
+            {
+                // Event log may not be available in all contexts
+                // Try writing to a file as fallback
+                try
+                {
+                    var logPath = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                        "MidTerm", "startup-debug.log");
+                    Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+                    File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{level}] {message}{Environment.NewLine}");
+                }
+                catch
+                {
+                    // Silently ignore if even file logging fails
+                }
+            }
+        }
+#endif
+    }
+
     public static async Task Main(string[] args)
     {
+        try
+        {
+            WriteEventLog("Main: Starting");
+            await MainCore(args);
+        }
+        catch (Exception ex)
+        {
+            WriteEventLog($"Main: FATAL ERROR - {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}", DiagLogLevel.Error);
+            throw;
+        }
+    }
+
+    private static async Task MainCore(string[] args)
+    {
+        WriteEventLog("MainCore: Checking special commands");
+
         if (HandleSpecialCommands(args))
         {
             return;
         }
+
+        WriteEventLog("MainCore: Acquiring instance guard");
 
         // Ensure only one mt.exe instance runs system-wide
         var instanceGuard = SingleInstanceGuard.TryAcquire(out var existingInfo);
@@ -37,16 +104,25 @@ public class Program
             return;
         }
 
+        WriteEventLog("MainCore: Parsing args and creating builder");
+
         var (port, bindAddress) = ParseCommandLineArgs(args);
         var builder = CreateBuilder(args);
+
+        WriteEventLog("MainCore: Building app");
+
         var app = builder.Build();
         var version = GetVersion();
+
+        WriteEventLog("MainCore: Resolving services");
 
         var settingsService = app.Services.GetRequiredService<SettingsService>();
         var updateService = app.Services.GetRequiredService<UpdateService>();
         var authService = app.Services.GetRequiredService<AuthService>();
         var tempCleanupService = app.Services.GetRequiredService<TempCleanupService>();
         var certInfoService = app.Services.GetRequiredService<CertificateInfoService>();
+
+        WriteEventLog($"MainCore: Certificate loaded = {_loadedCertificate is not null}, IsFallback = {_isFallbackCertificate}");
 
         // Set certificate info (captured during ConfigureKestrel)
         if (_loadedCertificate is not null)
@@ -155,6 +231,8 @@ public class Program
 
         // Discover existing sessions after banner so logs appear cleanly
         await sessionManager.DiscoverExistingSessionsAsync();
+
+        WriteEventLog($"MainCore: Starting server on https://{bindAddress}:{port}");
 
         RunWithPortErrorHandling(app, port, bindAddress);
     }
@@ -485,27 +563,39 @@ public class Program
 
     private static WebApplicationBuilder CreateBuilder(string[] args)
     {
+        WriteEventLog("CreateBuilder: Starting");
+
         var builder = WebApplication.CreateSlimBuilder(args);
 
 #if WINDOWS
+        WriteEventLog("CreateBuilder: Configuring Windows service");
         builder.Host.UseWindowsService();
 #endif
+
+        WriteEventLog("CreateBuilder: Loading settings");
 
         // Load settings early for HTTPS configuration
         var settingsService = new SettingsService();
         var settings = settingsService.Load();
 
+        WriteEventLog($"CreateBuilder: Settings loaded - CertPath={settings.CertificatePath}, KeyProtection={settings.KeyProtection}, IsService={settingsService.IsRunningAsService}");
+
         // .NET 10 requires this for dynamic https:// URLs in app.Run()
         builder.WebHost.UseKestrelHttpsConfiguration();
+
+        WriteEventLog("CreateBuilder: Configuring Kestrel");
 
         builder.WebHost.ConfigureKestrel(options =>
         {
             options.AddServerHeader = false;
 
+            WriteEventLog("ConfigureKestrel: Loading certificate");
+
             // Always HTTPS - no HTTP endpoint
             var cert = LoadOrGenerateCertificate(settings, settingsService);
             if (cert is null)
             {
+                WriteEventLog("ConfigureKestrel: Certificate load failed, using fallback", DiagLogLevel.Warning);
                 // Fallback: generate emergency in-memory certificate so users can access settings
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine("Warning: Using emergency fallback certificate.");
@@ -514,6 +604,8 @@ public class Program
                 cert = CertificateGenerator.GenerateSelfSigned(["localhost"], ["127.0.0.1"], useEcdsa: true);
                 _isFallbackCertificate = true;
             }
+
+            WriteEventLog($"ConfigureKestrel: Certificate loaded - Subject={cert.Subject}, HasPrivateKey={cert.HasPrivateKey}");
 
             _loadedCertificate = cert;
 
@@ -575,19 +667,27 @@ public class Program
         var settingsDir = Path.GetDirectoryName(settingsService.SettingsPath) ?? ".";
         const string keyId = "midterm";
 
+        WriteEventLog($"LoadOrGenerateCertificate: SettingsDir={settingsDir}, CertPath={settings.CertificatePath}, KeyProtection={settings.KeyProtection}");
+
         // Try to load existing certificate
         if (!string.IsNullOrEmpty(settings.CertificatePath) && File.Exists(settings.CertificatePath))
         {
+            WriteEventLog($"LoadOrGenerateCertificate: Certificate file exists at {settings.CertificatePath}");
+
             try
             {
                 // Check if using OS-protected key or legacy PFX
                 if (settings.KeyProtection == KeyProtectionMethod.OsProtected)
                 {
+                    WriteEventLog($"LoadOrGenerateCertificate: Loading with OS-protected key, IsService={settingsService.IsRunningAsService}");
                     var protector = Services.Security.CertificateProtectorFactory.Create(settingsDir, settingsService.IsRunningAsService);
-                    return protector.LoadCertificateWithPrivateKey(settings.CertificatePath, keyId);
+                    var cert = protector.LoadCertificateWithPrivateKey(settings.CertificatePath, keyId);
+                    WriteEventLog($"LoadOrGenerateCertificate: Successfully loaded certificate - HasPrivateKey={cert.HasPrivateKey}");
+                    return cert;
                 }
                 else
                 {
+                    WriteEventLog("LoadOrGenerateCertificate: Loading legacy PFX");
                     // Legacy PFX loading
                     return System.Security.Cryptography.X509Certificates.X509CertificateLoader.LoadPkcs12FromFile(
                         settings.CertificatePath,
@@ -596,6 +696,7 @@ public class Program
             }
             catch (Exception ex)
             {
+                WriteEventLog($"LoadOrGenerateCertificate: FAILED - {ex.GetType().Name}: {ex.Message}", DiagLogLevel.Error);
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine($"Error: Failed to load HTTPS certificate: {ex.Message}");
                 Console.ResetColor();
@@ -996,14 +1097,18 @@ public class Program
 
     private static void RunWithPortErrorHandling(WebApplication app, int port, string bindAddress)
     {
+        WriteEventLog($"RunWithPortErrorHandling: About to call app.Run on https://{bindAddress}:{port}");
+
         try
         {
             // Always HTTPS - no HTTP endpoint
             app.Run($"https://{bindAddress}:{port}");
+            WriteEventLog("RunWithPortErrorHandling: app.Run completed normally");
         }
         catch (IOException ex) when (ex.InnerException is System.Net.Sockets.SocketException socketEx &&
             socketEx.SocketErrorCode == System.Net.Sockets.SocketError.AddressAlreadyInUse)
         {
+            WriteEventLog($"RunWithPortErrorHandling: Port {port} already in use", DiagLogLevel.Error);
             Log.Error(() => $"Port {port} is already in use. Exiting.");
 
             Console.ForegroundColor = ConsoleColor.Red;
@@ -1015,6 +1120,11 @@ public class Program
             Console.WriteLine($"    - Use a different port: mt --port 2001");
             Console.WriteLine();
             Environment.Exit(1);
+        }
+        catch (Exception ex)
+        {
+            WriteEventLog($"RunWithPortErrorHandling: UNEXPECTED ERROR - {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}", DiagLogLevel.Error);
+            throw;
         }
     }
 
