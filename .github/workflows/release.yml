@@ -75,8 +75,13 @@ jobs:
           cp version.json staging/
 
           # Generate SHA256 checksums for reproducible build verification
+          # Use shasum on macOS, sha256sum on Linux/Windows
           cd staging
-          sha256sum mt${{ matrix.ext }} mthost${{ matrix.ext }} > SHA256SUMS.txt
+          if command -v sha256sum &> /dev/null; then
+            sha256sum mt${{ matrix.ext }} mthost${{ matrix.ext }} > SHA256SUMS.txt
+          else
+            shasum -a 256 mt${{ matrix.ext }} mthost${{ matrix.ext }} > SHA256SUMS.txt
+          fi
           echo "SHA256 checksums:"
           cat SHA256SUMS.txt
 
