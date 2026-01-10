@@ -1,17 +1,25 @@
 /**
  * Settings Channel Module
  *
- * Manages the settings WebSocket connection for real-time settings sync.
+ * Manages the settings WebSocket connection for real-time settings and update sync.
  * When settings are changed on any client, all connected clients receive the update.
+ * Also receives update notifications when new versions are detected.
  */
 
-import type { Settings } from '../../types';
+import type { Settings, UpdateInfo } from '../../types';
 import { INITIAL_RECONNECT_DELAY, MAX_RECONNECT_DELAY } from '../../constants';
 import { scheduleReconnect } from '../../utils';
 import { createLogger } from '../logging';
-import { setCurrentSettings } from '../../state';
+import { setCurrentSettings, setUpdateInfo } from '../../state';
 
 const log = createLogger('settings-ws');
+
+/** Message wrapper from server */
+interface SettingsWsMessage {
+  type: 'settings' | 'update';
+  settings?: Settings;
+  update?: UpdateInfo;
+}
 
 let settingsWs: WebSocket | null = null;
 let settingsReconnectTimer: number | undefined;
@@ -19,14 +27,17 @@ let settingsReconnectDelay = INITIAL_RECONNECT_DELAY;
 let settingsWsConnected = false;
 
 let applyReceivedSettings: (settings: Settings) => void = () => {};
+let applyReceivedUpdate: (update: UpdateInfo) => void = () => {};
 
 /**
  * Register callbacks from other modules
  */
 export function registerSettingsCallbacks(callbacks: {
   applyReceivedSettings?: (settings: Settings) => void;
+  applyReceivedUpdate?: (update: UpdateInfo) => void;
 }): void {
   if (callbacks.applyReceivedSettings) applyReceivedSettings = callbacks.applyReceivedSettings;
+  if (callbacks.applyReceivedUpdate) applyReceivedUpdate = callbacks.applyReceivedUpdate;
 }
 
 /**
@@ -52,11 +63,11 @@ export function connectSettingsWebSocket(): void {
 
   ws.onmessage = (event) => {
     try {
-      const settings = JSON.parse(event.data) as Settings;
-      handleSettingsUpdate(settings);
+      const message = JSON.parse(event.data) as SettingsWsMessage;
+      handleMessage(message);
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
-      log.error(() => `Error parsing settings: ${message}`);
+      log.error(() => `Error parsing settings message: ${message}`);
     }
   };
 
@@ -71,9 +82,14 @@ export function connectSettingsWebSocket(): void {
   };
 }
 
-function handleSettingsUpdate(settings: Settings): void {
-  setCurrentSettings(settings);
-  applyReceivedSettings(settings);
+function handleMessage(message: SettingsWsMessage): void {
+  if (message.type === 'settings' && message.settings) {
+    setCurrentSettings(message.settings);
+    applyReceivedSettings(message.settings);
+  } else if (message.type === 'update' && message.update) {
+    setUpdateInfo(message.update);
+    applyReceivedUpdate(message.update);
+  }
 }
 
 function scheduleSettingsReconnect(): void {

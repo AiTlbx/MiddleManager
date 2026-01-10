@@ -12,7 +12,7 @@ public sealed class UpdateService : IDisposable
     private const string RepoName = "MidTerm";
     private const string LocalReleasePath = @"C:\temp\mtlocalrelease";
     private const string DevEnvironmentName = "THELAIR";
-    private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(1);
+    private static readonly TimeSpan CheckInterval = TimeSpan.FromMinutes(30);
 
     private readonly HttpClient _httpClient;
     private readonly ConcurrentDictionary<string, Action<UpdateInfo>> _updateListeners = new();

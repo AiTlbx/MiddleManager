@@ -276,6 +276,7 @@ export function applyLocalUpdate(): void {
 export function handleUpdateInfo(update: UpdateInfo): void {
   setUpdateInfo(update);
   renderUpdatePanel();
+  renderUpdateCards(update);
 }
 
 interface UpdateResult {

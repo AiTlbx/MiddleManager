@@ -1108,7 +1108,7 @@ public class Program
     {
         var muxHandler = new MuxWebSocketHandler(sessionManager, muxManager, settingsService, authService);
         var stateHandler = new StateWebSocketHandler(sessionManager, updateService, settingsService, authService);
-        var settingsHandler = new SettingsWebSocketHandler(settingsService, authService);
+        var settingsHandler = new SettingsWebSocketHandler(settingsService, updateService, authService);
         var logFileWatcher = new LogFileWatcher(logDirectory, TimeSpan.FromMilliseconds(250));
         var logHandler = new LogWebSocketHandler(logFileWatcher, sessionManager, settingsService, authService);
 

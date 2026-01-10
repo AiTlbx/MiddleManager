@@ -71,7 +71,8 @@ import {
   checkForUpdates,
   checkUpdateResult,
   showChangelog,
-  closeChangelog
+  closeChangelog,
+  handleUpdateInfo
 } from './modules/updating';
 import { initDiagnosticsPanel } from './modules/diagnostics';
 import {
@@ -177,7 +178,8 @@ function registerCallbacks(): void {
   });
 
   registerSettingsCallbacks({
-    applyReceivedSettings
+    applyReceivedSettings,
+    applyReceivedUpdate: handleUpdateInfo
   });
 
   registerTerminalCallbacks({
