@@ -44,7 +44,7 @@ jobs:
           VERSION=$(node -p "require('./version.json').web")
           cd Ai.Tlbx.MidTerm
           npx tsc --noEmit
-          npx esbuild src/ts/main.ts --bundle --minify --sourcemap=external \
+          npx esbuild src/ts/main.ts --bundle --minify --sourcemap=linked \
             --outfile=wwwroot/js/terminal.min.js --target=es2020 \
             "--define:BUILD_VERSION=\"$VERSION\""
           echo "✓ terminal.min.js ($(wc -c < wwwroot/js/terminal.min.js | tr -d ' ') bytes)"

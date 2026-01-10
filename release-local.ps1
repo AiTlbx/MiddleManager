@@ -225,7 +225,7 @@ Write-Host ""
 Write-Host "Building TypeScript..." -ForegroundColor Gray
 npm run typecheck
 if ($LASTEXITCODE -ne 0) { throw "TypeScript typecheck failed" }
-npx esbuild Ai.Tlbx.MidTerm/src/ts/main.ts --bundle --minify --sourcemap=external --outfile=Ai.Tlbx.MidTerm/wwwroot/js/terminal.min.js --target=es2020 "--define:BUILD_VERSION=`"$localWebVersion`""
+npx esbuild Ai.Tlbx.MidTerm/src/ts/main.ts --bundle --minify --sourcemap=linked --outfile=Ai.Tlbx.MidTerm/wwwroot/js/terminal.min.js --target=es2020 "--define:BUILD_VERSION=`"$localWebVersion`""
 if ($LASTEXITCODE -ne 0) { throw "TypeScript build failed" }
 
 # ===========================================

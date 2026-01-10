@@ -131,7 +131,7 @@ git checkout v5.x.x
 npm ci
 cd Ai.Tlbx.MidTerm
 npx tsc --noEmit
-npx esbuild src/ts/main.ts --bundle --minify --sourcemap=external \
+npx esbuild src/ts/main.ts --bundle --minify --sourcemap=linked \
   --outfile=wwwroot/js/terminal.min.js --target=es2020
 
 # 3. Build native binary (reproducible mode)
