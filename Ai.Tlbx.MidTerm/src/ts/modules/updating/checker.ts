@@ -36,14 +36,14 @@ export function renderUpdatePanel(): void {
   if (updateInfo.sessionsPreserved) {
     if (headerEl) headerEl.textContent = 'Quick Update';
     if (noteEl) {
-      noteEl.textContent = 'Sessions will stay alive';
+      noteEl.textContent = 'Terminals stay connected';
       noteEl.classList.add('update-note-safe');
       noteEl.classList.remove('update-note-warning');
     }
   } else {
     if (headerEl) headerEl.textContent = 'Update Available';
     if (noteEl) {
-      noteEl.textContent = 'Save your work - sessions will restart';
+      noteEl.textContent = 'Save your work - terminals will close';
       noteEl.classList.add('update-note-warning');
       noteEl.classList.remove('update-note-safe');
     }
@@ -216,8 +216,8 @@ function createUpdateCard(opts: UpdateCardOptions): HTMLElement {
 
   const warningClass = opts.sessionsPreserved ? 'safe' : 'warn';
   const warningText = opts.sessionsPreserved
-    ? 'Sessions will stay alive'
-    : 'Sessions will restart';
+    ? 'Terminals stay connected'
+    : 'Terminals will close';
 
   card.innerHTML = `
     <div class="update-card-header">
