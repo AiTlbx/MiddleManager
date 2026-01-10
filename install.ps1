@@ -53,8 +53,25 @@ function Get-CurrentUserInfo
     }
 }
 
-function Get-ExistingPasswordHash
+function Test-ExistingPassword
 {
+    # Check if password exists in secure storage (secrets.bin)
+    # This file contains DPAPI-encrypted secrets - we can check if password_hash key exists
+    $secretsPath = "$env:ProgramData\MidTerm\secrets.bin"
+    if (Test-Path $secretsPath)
+    {
+        try
+        {
+            $secrets = Get-Content $secretsPath -Raw | ConvertFrom-Json
+            if ($secrets.password_hash -and $secrets.password_hash.Length -gt 10)
+            {
+                return $true
+            }
+        }
+        catch { }
+    }
+
+    # Legacy: check settings.json (old broken path - will be migrated)
     $settingsPath = "$env:ProgramData\MidTerm\settings.json"
     if (Test-Path $settingsPath)
     {
@@ -63,12 +80,12 @@ function Get-ExistingPasswordHash
             $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
             if ($settings.passwordHash -and $settings.passwordHash.Length -gt 10)
             {
-                return $settings.passwordHash
+                return $true
             }
         }
         catch { }
     }
-    return $null
+    return $false
 }
 
 function Prompt-Password
@@ -294,6 +311,7 @@ function Get-AssetUrl
 function Write-ServiceSettings
 {
     param(
+        [string]$InstallDir,
         [string]$Username,
         [string]$UserSid,
         [string]$PasswordHash,
@@ -320,15 +338,11 @@ function Write-ServiceSettings
 
     # Write minimal bootstrap settings - app will migrate user preferences from .old
     # Note: port/bind are passed via service command line args, not settings.json
+    # Note: passwordHash is NOT written here - it must go to secure storage via --write-secret
     $settings = @{
         runAsUser = $Username
         runAsUserSid = $UserSid
         authenticationEnabled = $true
-    }
-
-    if ($PasswordHash)
-    {
-        $settings.passwordHash = $PasswordHash
     }
 
     # HTTPS settings - always HTTPS, use OS-level key protection
@@ -341,11 +355,25 @@ function Write-ServiceSettings
     $json = $settings | ConvertTo-Json -Depth 10
     Set-Content -Path $settingsPath -Value $json -Encoding UTF8
 
+    # Store password hash in secure storage (DPAPI-protected secrets.bin)
+    if ($PasswordHash)
+    {
+        $mtPath = Join-Path $InstallDir "mt.exe"
+        try
+        {
+            $PasswordHash | & $mtPath --write-secret password_hash 2>&1 | Out-Null
+            Write-Host "  Password: stored in secure storage" -ForegroundColor Gray
+        }
+        catch
+        {
+            Write-Host "  Warning: Failed to store password in secure storage: $_" -ForegroundColor Yellow
+        }
+    }
+
     Write-Host "  Terminal user: $Username" -ForegroundColor Gray
     Write-Host "  Port: $Port" -ForegroundColor Gray
     Write-Host "  Binding: $(if ($BindAddress -eq 'localhost') { 'localhost only' } else { 'all interfaces' })" -ForegroundColor Gray
     if ($CertPath) { Write-Host "  HTTPS: enabled (OS-protected key)" -ForegroundColor Green }
-    if ($PasswordHash) { Write-Host "  Password: configured" -ForegroundColor Gray }
 }
 
 function Install-MidTerm
@@ -500,7 +528,7 @@ function Install-MidTerm
         # Write settings with runAsUser info and password
         if ($RunAsUser -and $RunAsUserSid)
         {
-            Write-ServiceSettings -Username $RunAsUser -UserSid $RunAsUserSid -PasswordHash $PasswordHash -Port $Port -BindAddress $BindAddress -CertPath $CertPath
+            Write-ServiceSettings -InstallDir $installDir -Username $RunAsUser -UserSid $RunAsUserSid -PasswordHash $PasswordHash -Port $Port -BindAddress $BindAddress -CertPath $CertPath
         }
 
         Install-AsService -InstallDir $installDir -Version $Version -Port $Port -BindAddress $BindAddress
@@ -544,14 +572,29 @@ function Install-MidTerm
         $userSettingsPath = Join-Path $userSettingsDir "settings.json"
         if (-not (Test-Path $userSettingsDir)) { New-Item -ItemType Directory -Path $userSettingsDir -Force | Out-Null }
 
+        # Note: passwordHash goes to secure storage, not settings.json
         $userSettings = @{ authenticationEnabled = $true }
-        if ($PasswordHash) { $userSettings.passwordHash = $PasswordHash }
         if ($CertPath) {
             $userSettings.certificatePath = $CertPath
             $userSettings.keyProtection = "osProtected"
         }
         $userSettings | ConvertTo-Json | Set-Content -Path $userSettingsPath -Encoding UTF8
         Write-Host "  Settings: $userSettingsPath" -ForegroundColor Gray
+
+        # Store password hash in secure storage (DPAPI-protected secrets.bin)
+        if ($PasswordHash)
+        {
+            $mtPath = Join-Path $installDir "mt.exe"
+            try
+            {
+                $PasswordHash | & $mtPath --write-secret password_hash 2>&1 | Out-Null
+                Write-Host "  Password: stored in secure storage" -ForegroundColor Gray
+            }
+            catch
+            {
+                Write-Host "  Warning: Failed to store password in secure storage: $_" -ForegroundColor Yellow
+            }
+        }
 
         Install-AsUserApp -InstallDir $installDir -Version $Version
     }
@@ -816,13 +859,12 @@ if ($asService)
 {
     $installDir = "$env:ProgramFiles\MidTerm"
 
-    # Check for existing password (preserve on update)
-    $existingHash = Get-ExistingPasswordHash
-    if ($existingHash)
+    # Check for existing password in secure storage (preserve on update)
+    if (Test-ExistingPassword)
     {
         Write-Host ""
-        Write-Host "  Existing password found - preserving..." -ForegroundColor Green
-        $passwordHash = $existingHash
+        Write-Host "  Existing password found in secure storage - preserving..." -ForegroundColor Green
+        $passwordHash = $null  # Don't overwrite - existing secrets.bin will be preserved
     }
     else
     {
@@ -917,28 +959,28 @@ else
 {
     # User install - still require password
     $userSettingsDir = Join-Path $env:USERPROFILE ".MidTerm"
-    $userSettingsPath = Join-Path $userSettingsDir "settings.json"
+    $userSecretsPath = Join-Path $userSettingsDir "secrets.bin"
 
-    # Check for existing password
-    $existingHash = $null
-    if (Test-Path $userSettingsPath)
+    # Check for existing password in secure storage
+    $hasExistingPassword = $false
+    if (Test-Path $userSecretsPath)
     {
         try
         {
-            $settings = Get-Content $userSettingsPath -Raw | ConvertFrom-Json
-            if ($settings.passwordHash -and $settings.passwordHash.Length -gt 10)
+            $secrets = Get-Content $userSecretsPath -Raw | ConvertFrom-Json
+            if ($secrets.password_hash -and $secrets.password_hash.Length -gt 10)
             {
-                $existingHash = $settings.passwordHash
+                $hasExistingPassword = $true
             }
         }
         catch { }
     }
 
-    if ($existingHash)
+    if ($hasExistingPassword)
     {
         Write-Host ""
-        Write-Host "  Existing password found - preserving..." -ForegroundColor Green
-        $passwordHash = $existingHash
+        Write-Host "  Existing password found in secure storage - preserving..." -ForegroundColor Green
+        $passwordHash = $null  # Don't overwrite - existing secrets.bin will be preserved
     }
     else
     {

@@ -972,13 +972,15 @@ public class Program
         catch (IOException ex) when (ex.InnerException is System.Net.Sockets.SocketException socketEx &&
             socketEx.SocketErrorCode == System.Net.Sockets.SocketError.AddressAlreadyInUse)
         {
+            Log.Error(() => $"Port {port} is already in use. Exiting.");
+
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"  Error: Port {port} is already in use by another process.");
             Console.ResetColor();
             Console.WriteLine();
             Console.WriteLine($"  Try one of the following:");
             Console.WriteLine($"    - Close the application using port {port}");
-            Console.WriteLine($"    - Use a different port: mm --port 2001");
+            Console.WriteLine($"    - Use a different port: mt --port 2001");
             Console.WriteLine();
             Environment.Exit(1);
         }
