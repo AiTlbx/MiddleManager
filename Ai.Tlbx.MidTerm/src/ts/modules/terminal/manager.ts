@@ -89,7 +89,7 @@ export function getTerminalOptions(): object {
   const options: Record<string, unknown> = {
     cursorBlink: currentSettings?.cursorBlink ?? true,
     cursorStyle: currentSettings?.cursorStyle ?? 'bar',
-    cursorInactiveStyle: 'none',
+    cursorInactiveStyle: currentSettings?.cursorStyle ?? 'bar',
     fontFamily: `'${fontFamily}', ${TERMINAL_FONT_STACK}`,
     fontSize: fontSize,
     letterSpacing: 0,
