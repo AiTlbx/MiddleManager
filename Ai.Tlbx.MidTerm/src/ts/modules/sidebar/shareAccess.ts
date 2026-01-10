@@ -48,17 +48,55 @@ async function openShareEmail(): Promise<void> {
     const response = await fetch('/api/certificate/share-packet');
     if (!response.ok) {
       log.error(() => 'Failed to fetch share packet');
+      showFallbackMessage('Failed to load connection info');
       return;
     }
 
     const info: SharePacketInfo = await response.json();
     const subject = `MidTerm Terminal Access - ${location.hostname}`;
     const body = generateEmailBody(info);
+    const mailtoUrl = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
-    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    log.info(() => `Opening mailto link (${mailtoUrl.length} chars)`);
+
+    // Try to open email client
+    tryOpenMailto(mailtoUrl);
+
+    // Give the email client a moment to open, then show fallback if still here
+    setTimeout(() => {
+      if (document.hasFocus()) {
+        log.info(() => 'Page still has focus - email client may not have opened');
+        showCopyFallback(subject, body, info.trustPageUrl);
+      }
+    }, 1000);
+
   } catch (e) {
     log.error(() => `Failed to open share email: ${e}`);
+    showFallbackMessage('Failed to generate share info');
   }
+}
+
+function tryOpenMailto(url: string): boolean {
+  // Try window.open first (works better in some browsers)
+  const win = window.open(url, '_self');
+  return win !== null;
+}
+
+function showFallbackMessage(message: string): void {
+  // Simple alert for errors
+  alert(message);
+}
+
+function showCopyFallback(subject: string, body: string, trustPageUrl: string): void {
+  const copyText = `${subject}\n\n${body}`;
+
+  // Try to copy to clipboard
+  navigator.clipboard.writeText(copyText).then(() => {
+    alert('No email client detected.\n\nConnection info has been copied to your clipboard!\n\nYou can also visit the trust page directly:\n' + trustPageUrl);
+  }).catch(() => {
+    // Clipboard failed, show the trust page URL at least
+    alert('No email client detected.\n\nVisit the trust page to share access:\n' + trustPageUrl);
+  });
 }
 
 function generateEmailBody(info: SharePacketInfo): string {
