@@ -1,0 +1,17 @@
+<Project>
+  <!-- Reproducible/Deterministic Build Configuration -->
+  <PropertyGroup>
+    <!-- Deterministic is already true by default in SDK-style projects, but be explicit -->
+    <Deterministic>true</Deterministic>
+
+    <!-- Detect CI environments automatically -->
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <ContinuousIntegrationBuild Condition="'$(TF_BUILD)' == 'true'">true</ContinuousIntegrationBuild>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <!--
+    For auditors: Build with /p:ContinuousIntegrationBuild=true to get reproducible output.
+    Same source + same SDK version + ContinuousIntegrationBuild=true = identical binary hash.
+  -->
+</Project>

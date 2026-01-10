@@ -58,14 +58,14 @@ jobs:
             exit 1
           fi
 
-      # 3. Build binaries
+      # 3. Build binaries (reproducible builds enabled via ContinuousIntegrationBuild)
       - name: Build mt
-        run: dotnet publish Ai.Tlbx.MidTerm/Ai.Tlbx.MidTerm.csproj -c Release -r ${{ matrix.rid }} /p:IsPublishing=true
+        run: dotnet publish Ai.Tlbx.MidTerm/Ai.Tlbx.MidTerm.csproj -c Release -r ${{ matrix.rid }} /p:IsPublishing=true /p:ContinuousIntegrationBuild=true
 
       - name: Build mthost
-        run: dotnet publish Ai.Tlbx.MidTerm.TtyHost/Ai.Tlbx.MidTerm.TtyHost.csproj -c Release -r ${{ matrix.rid }} /p:IsPublishing=true
+        run: dotnet publish Ai.Tlbx.MidTerm.TtyHost/Ai.Tlbx.MidTerm.TtyHost.csproj -c Release -r ${{ matrix.rid }} /p:IsPublishing=true /p:ContinuousIntegrationBuild=true
 
-      # 4. Stage and upload
+      # 4. Stage and generate checksums
       - name: Stage
         shell: bash
         run: |
@@ -73,6 +73,12 @@ jobs:
           cp Ai.Tlbx.MidTerm/bin/Release/net10.0/${{ matrix.rid }}/publish/mt${{ matrix.ext }} staging/
           cp Ai.Tlbx.MidTerm.TtyHost/bin/Release/net10.0/${{ matrix.rid }}/publish/mthost${{ matrix.ext }} staging/
           cp version.json staging/
+
+          # Generate SHA256 checksums for reproducible build verification
+          cd staging
+          sha256sum mt${{ matrix.ext }} mthost${{ matrix.ext }} > SHA256SUMS.txt
+          echo "SHA256 checksums:"
+          cat SHA256SUMS.txt
 
       - uses: actions/upload-artifact@v4
         with:
@@ -97,10 +103,21 @@ jobs:
       - name: Package
         run: |
           cd artifacts
-          cd win-x64 && zip ../mt-win-x64.zip mt.exe mthost.exe version.json && cd ..
-          cd osx-arm64 && tar -czvf ../mt-osx-arm64.tar.gz mt mthost version.json && cd ..
-          cd osx-x64 && tar -czvf ../mt-osx-x64.tar.gz mt mthost version.json && cd ..
-          cd linux-x64 && tar -czvf ../mt-linux-x64.tar.gz mt mthost version.json && cd ..
+          cd win-x64 && zip ../mt-win-x64.zip mt.exe mthost.exe version.json SHA256SUMS.txt && cd ..
+          cd osx-arm64 && tar -czvf ../mt-osx-arm64.tar.gz mt mthost version.json SHA256SUMS.txt && cd ..
+          cd osx-x64 && tar -czvf ../mt-osx-x64.tar.gz mt mthost version.json SHA256SUMS.txt && cd ..
+          cd linux-x64 && tar -czvf ../mt-linux-x64.tar.gz mt mthost version.json SHA256SUMS.txt && cd ..
+
+          # Create combined checksums file for all platforms
+          echo "# SHA256 Checksums for Reproducible Build Verification" > checksums.txt
+          echo "# Build with: dotnet publish -c Release -r <rid> /p:IsPublishing=true /p:ContinuousIntegrationBuild=true" >> checksums.txt
+          echo "" >> checksums.txt
+          for rid in win-x64 osx-arm64 osx-x64 linux-x64; do
+            echo "## $rid" >> checksums.txt
+            cat $rid/SHA256SUMS.txt >> checksums.txt
+            echo "" >> checksums.txt
+          done
+          cat checksums.txt
 
       - name: Get release notes
         id: notes
@@ -121,3 +138,4 @@ jobs:
             artifacts/mt-osx-x64.tar.gz
             artifacts/mt-win-x64.zip
             artifacts/mt-linux-x64.tar.gz
+            artifacts/checksums.txt
