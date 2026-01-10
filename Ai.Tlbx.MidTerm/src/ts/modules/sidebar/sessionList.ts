@@ -29,6 +29,7 @@ export interface SessionListCallbacks {
 }
 
 let callbacks: SessionListCallbacks | null = null;
+let mobileActionBackdrop: HTMLDivElement | null = null;
 
 // =============================================================================
 // Initialization
@@ -39,6 +40,36 @@ let callbacks: SessionListCallbacks | null = null;
  */
 export function setSessionListCallbacks(cbs: SessionListCallbacks): void {
   callbacks = cbs;
+}
+
+// =============================================================================
+// Mobile Action Menu
+// =============================================================================
+
+/**
+ * Close any open mobile action menus
+ */
+export function closeMobileActionMenu(): void {
+  document.querySelectorAll('.session-item.menu-open').forEach((el) => {
+    el.classList.remove('menu-open');
+  });
+  if (mobileActionBackdrop) {
+    mobileActionBackdrop.remove();
+    mobileActionBackdrop = null;
+  }
+}
+
+/**
+ * Show backdrop for mobile action menu
+ */
+function showMobileBackdrop(): void {
+  if (mobileActionBackdrop) return;
+  mobileActionBackdrop = document.createElement('div');
+  mobileActionBackdrop.className = 'session-action-backdrop';
+  mobileActionBackdrop.addEventListener('click', () => {
+    closeMobileActionMenu();
+  });
+  document.body.appendChild(mobileActionBackdrop);
 }
 
 // =============================================================================
@@ -91,6 +122,7 @@ export function renderSessionList(): void {
 
     if (!isPending) {
       item.addEventListener('click', () => {
+        closeMobileActionMenu();
         if (callbacks) {
           callbacks.onSelect(session.id);
           callbacks.onCloseSidebar();
@@ -132,6 +164,7 @@ export function renderSessionList(): void {
       resizeBtn.title = 'Fit to screen';
       resizeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        closeMobileActionMenu();
         if (callbacks) {
           callbacks.onResize(session.id);
         }
@@ -143,6 +176,7 @@ export function renderSessionList(): void {
       renameBtn.title = 'Rename session';
       renameBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        closeMobileActionMenu();
         if (callbacks) {
           callbacks.onRename(session.id);
         }
@@ -154,6 +188,7 @@ export function renderSessionList(): void {
       closeBtn.title = 'Close session';
       closeBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        closeMobileActionMenu();
         if (callbacks) {
           callbacks.onDelete(session.id);
         }
@@ -165,6 +200,25 @@ export function renderSessionList(): void {
     }
 
     item.appendChild(info);
+
+    // Mobile menu button (toggles action bar visibility)
+    if (!isPending) {
+      const menuBtn = document.createElement('button');
+      menuBtn.className = 'session-menu-btn';
+      menuBtn.innerHTML = icon('more');
+      menuBtn.title = 'Actions';
+      menuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = item.classList.contains('menu-open');
+        closeMobileActionMenu();
+        if (!isOpen) {
+          item.classList.add('menu-open');
+          showMobileBackdrop();
+        }
+      });
+      item.appendChild(menuBtn);
+    }
+
     item.appendChild(actions);
     dom.sessionList!.appendChild(item);
   });

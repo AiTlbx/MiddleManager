@@ -346,6 +346,11 @@ html, body {
     color: white;
 }
 
+/* Mobile menu button - hidden on desktop */
+.session-menu-btn {
+    display: none;
+}
+
 .session-name {
     font-size: 13px;
     white-space: nowrap;
@@ -869,17 +874,83 @@ html, body {
         overflow: auto;
     }
 
-    /* On mobile: show only close button, always visible */
+    /* Mobile: Hide session-actions by default, show menu button */
     .session-actions {
-        opacity: 1;
-        pointer-events: auto;
-        background: none;
-        padding-left: 0;
+        position: fixed;
+        right: 0;
+        top: auto;
+        bottom: 0;
+        left: 0;
+        background: var(--bg-sidebar);
+        border-top: 1px solid var(--border-color);
+        padding: 12px 16px;
+        padding-bottom: calc(12px + env(safe-area-inset-bottom, 0));
+        gap: 8px;
+        justify-content: center;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(100%);
+        transition: transform 0.2s ease, opacity 0.2s ease;
+        z-index: 1001;
     }
 
+    .session-item.menu-open .session-actions {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+    }
+
+    /* Show all action buttons on mobile when menu is open */
     .session-actions .session-resize,
-    .session-actions .session-rename {
-        display: none;
+    .session-actions .session-rename,
+    .session-actions .session-close {
+        display: flex;
+        width: 56px;
+        height: 56px;
+        font-size: 20px;
+        border-radius: 8px;
+        background-color: var(--btn-secondary);
+    }
+
+    .session-actions .session-resize:active {
+        background-color: var(--accent-blue);
+        color: white;
+    }
+
+    .session-actions .session-rename:active {
+        background-color: var(--btn-secondary-hover);
+    }
+
+    .session-actions .session-close:active {
+        background-color: var(--accent-red);
+        color: white;
+    }
+
+    /* Mobile menu button */
+    .session-menu-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 18px;
+        border-radius: 6px;
+        flex-shrink: 0;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .session-menu-btn:active {
+        background-color: var(--btn-secondary);
+        color: var(--text-primary);
+    }
+
+    .session-item.menu-open .session-menu-btn {
+        background-color: var(--accent-blue);
+        color: white;
     }
 
     /* Larger session items for touch */
@@ -894,6 +965,18 @@ html, body {
 
     .session-subtitle {
         font-size: 12px;
+    }
+
+    /* Mobile action bar backdrop (created via JS) */
+    .session-action-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        -webkit-tap-highlight-color: transparent;
     }
 
     /* Settings adjustments for mobile - convert to horizontal tabs */

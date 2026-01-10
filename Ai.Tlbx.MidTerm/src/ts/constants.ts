@@ -154,6 +154,7 @@ export const ICONS = {
   tabBehavior: '\ue993',   // equalizer2
   tabSecurity: '\ue908',   // key
   tabDiagnostics: '\ue9ce', // eye
+  more: '\ue918',           // more_vert (vertical dots)
 } as const;
 
 /** Creates an icon span element */
