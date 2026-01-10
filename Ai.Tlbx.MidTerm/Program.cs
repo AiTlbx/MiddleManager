@@ -48,13 +48,13 @@ public class Program
             catch
             {
                 // Event log may not be available in all contexts
-                // Try writing to a file as fallback
+                // Try writing to a file as fallback using existing log directory pattern
                 try
                 {
-                    var logPath = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                        "MidTerm", "startup-debug.log");
-                    Directory.CreateDirectory(Path.GetDirectoryName(logPath)!);
+                    var isService = LogPaths.DetectWindowsServiceMode();
+                    var logDir = LogPaths.GetLogDirectory(isService);
+                    Directory.CreateDirectory(logDir);
+                    var logPath = Path.Combine(logDir, "startup-debug.log");
                     File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{level}] {message}{Environment.NewLine}");
                 }
                 catch
