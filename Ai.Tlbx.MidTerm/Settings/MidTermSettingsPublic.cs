@@ -1,5 +1,6 @@
 using Ai.Tlbx.MidTerm.Common.Logging;
 using Ai.Tlbx.MidTerm.Common.Shells;
+using Ai.Tlbx.MidTerm.Services;
 
 namespace Ai.Tlbx.MidTerm.Settings;
 
@@ -31,8 +32,6 @@ public sealed class MidTermSettingsPublic
     // Security - User to spawn terminals as (when running as service)
     public string? RunAsUser { get; set; }
     public string? RunAsUserSid { get; set; }
-    public int? RunAsUid { get; set; }
-    public int? RunAsGid { get; set; }
 
     // Authentication (public fields only - no PasswordHash, SessionSecret)
     public bool AuthenticationEnabled { get; set; }
@@ -66,8 +65,6 @@ public sealed class MidTermSettingsPublic
             ClipboardShortcuts = settings.ClipboardShortcuts,
             RunAsUser = settings.RunAsUser,
             RunAsUserSid = settings.RunAsUserSid,
-            RunAsUid = settings.RunAsUid,
-            RunAsGid = settings.RunAsGid,
             AuthenticationEnabled = settings.AuthenticationEnabled,
             CertificatePath = settings.CertificatePath,
             LogLevel = settings.LogLevel
@@ -93,10 +90,25 @@ public sealed class MidTermSettingsPublic
         settings.CopyOnSelect = CopyOnSelect;
         settings.RightClickPaste = RightClickPaste;
         settings.ClipboardShortcuts = ClipboardShortcuts;
+
+        // SECURITY: Validate RunAsUser before applying
+        if (!OperatingSystem.IsWindows())
+        {
+            var (isValid, error) = UserValidationService.ValidateRunAsUser(RunAsUser);
+            if (!isValid)
+            {
+                throw new ArgumentException(error);
+            }
+        }
         settings.RunAsUser = RunAsUser;
+
+        // SECURITY: Validate Windows SID format
+        if (OperatingSystem.IsWindows() && !UserValidationService.IsValidWindowsSid(RunAsUserSid))
+        {
+            throw new ArgumentException($"Invalid Windows SID format: {RunAsUserSid}");
+        }
         settings.RunAsUserSid = RunAsUserSid;
-        settings.RunAsUid = RunAsUid;
-        settings.RunAsGid = RunAsGid;
+
         settings.AuthenticationEnabled = AuthenticationEnabled;
         settings.CertificatePath = CertificatePath;
         settings.LogLevel = LogLevel;

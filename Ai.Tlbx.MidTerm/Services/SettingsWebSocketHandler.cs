@@ -8,14 +8,28 @@ namespace Ai.Tlbx.MidTerm.Services;
 public sealed class SettingsWebSocketHandler
 {
     private readonly SettingsService _settingsService;
+    private readonly AuthService _authService;
 
-    public SettingsWebSocketHandler(SettingsService settingsService)
+    public SettingsWebSocketHandler(SettingsService settingsService, AuthService authService)
     {
         _settingsService = settingsService;
+        _authService = authService;
     }
 
     public async Task HandleAsync(HttpContext context)
     {
+        // SECURITY: Validate auth before accepting WebSocket
+        var settings = _settingsService.Load();
+        if (settings.AuthenticationEnabled && !string.IsNullOrEmpty(settings.PasswordHash))
+        {
+            var token = context.Request.Cookies["mm-session"];
+            if (token is null || !_authService.ValidateSessionToken(token))
+            {
+                context.Response.StatusCode = 401;
+                return;
+            }
+        }
+
         using var ws = await context.WebSockets.AcceptWebSocketAsync();
         var sendLock = new SemaphoreSlim(1, 1);
 

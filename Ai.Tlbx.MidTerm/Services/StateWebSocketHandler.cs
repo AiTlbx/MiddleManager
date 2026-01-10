@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Ai.Tlbx.MidTerm.Models;
 using Ai.Tlbx.MidTerm.Models.Update;
+using Ai.Tlbx.MidTerm.Settings;
 
 namespace Ai.Tlbx.MidTerm.Services;
 
@@ -10,17 +11,35 @@ public sealed class StateWebSocketHandler
 {
     private readonly TtyHostSessionManager _sessionManager;
     private readonly UpdateService _updateService;
+    private readonly SettingsService _settingsService;
+    private readonly AuthService _authService;
 
     public StateWebSocketHandler(
         TtyHostSessionManager sessionManager,
-        UpdateService updateService)
+        UpdateService updateService,
+        SettingsService settingsService,
+        AuthService authService)
     {
         _sessionManager = sessionManager;
         _updateService = updateService;
+        _settingsService = settingsService;
+        _authService = authService;
     }
 
     public async Task HandleAsync(HttpContext context)
     {
+        // SECURITY: Validate auth before accepting WebSocket
+        var settings = _settingsService.Load();
+        if (settings.AuthenticationEnabled && !string.IsNullOrEmpty(settings.PasswordHash))
+        {
+            var token = context.Request.Cookies["mm-session"];
+            if (token is null || !_authService.ValidateSessionToken(token))
+            {
+                context.Response.StatusCode = 401;
+                return;
+            }
+        }
+
         using var ws = await context.WebSockets.AcceptWebSocketAsync();
         var sendLock = new SemaphoreSlim(1, 1);
         UpdateInfo? lastUpdate = null;

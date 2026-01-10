@@ -18,7 +18,7 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
     private readonly ConcurrentDictionary<string, string> _tempDirectories = new();
     private readonly string? _expectedTtyHostVersion;
     private readonly string? _minCompatibleVersion;
-    private readonly string? _runAsUser;
+    private string? _runAsUser;
     private bool _disposed;
 
     public event Action<string, int, int, ReadOnlyMemory<byte>>? OnOutput;
@@ -43,6 +43,12 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
         {
             return null;
         }
+    }
+
+    public void UpdateRunAsUser(string? runAsUser)
+    {
+        _runAsUser = runAsUser;
+        Console.WriteLine($"[TtyHostSessionManager] RunAsUser updated to: {runAsUser ?? "(none)"}");
     }
 
     /// <summary>

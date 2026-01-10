@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Text;
 using Ai.Tlbx.MidTerm.Common.Logging;
+using Ai.Tlbx.MidTerm.Settings;
 
 namespace Ai.Tlbx.MidTerm.Services;
 
@@ -8,17 +9,35 @@ public sealed class MuxWebSocketHandler
 {
     private readonly TtyHostSessionManager _sessionManager;
     private readonly TtyHostMuxConnectionManager _muxManager;
+    private readonly SettingsService _settingsService;
+    private readonly AuthService _authService;
 
     public MuxWebSocketHandler(
         TtyHostSessionManager sessionManager,
-        TtyHostMuxConnectionManager muxManager)
+        TtyHostMuxConnectionManager muxManager,
+        SettingsService settingsService,
+        AuthService authService)
     {
         _sessionManager = sessionManager;
         _muxManager = muxManager;
+        _settingsService = settingsService;
+        _authService = authService;
     }
 
     public async Task HandleAsync(HttpContext context)
     {
+        // SECURITY: Validate auth before accepting WebSocket
+        var settings = _settingsService.Load();
+        if (settings.AuthenticationEnabled && !string.IsNullOrEmpty(settings.PasswordHash))
+        {
+            var token = context.Request.Cookies["mm-session"];
+            if (token is null || !_authService.ValidateSessionToken(token))
+            {
+                context.Response.StatusCode = 401;
+                return;
+            }
+        }
+
         using var ws = await context.WebSockets.AcceptWebSocketAsync();
         var clientId = Guid.NewGuid().ToString("N");
 

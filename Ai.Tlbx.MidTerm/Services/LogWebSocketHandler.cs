@@ -3,6 +3,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using Ai.Tlbx.MidTerm.Common.Logging;
+using Ai.Tlbx.MidTerm.Settings;
 
 namespace Ai.Tlbx.MidTerm.Services;
 
@@ -17,20 +18,40 @@ public sealed class LogWebSocketHandler : IDisposable
 
     private readonly LogFileWatcher _fileWatcher;
     private readonly TtyHostSessionManager _sessionManager;
+    private readonly SettingsService _settingsService;
+    private readonly AuthService _authService;
     private readonly ConcurrentDictionary<string, LogClient> _clients = new();
     private readonly string _subscriptionId;
     private bool _disposed;
 
-    public LogWebSocketHandler(LogFileWatcher fileWatcher, TtyHostSessionManager sessionManager)
+    public LogWebSocketHandler(
+        LogFileWatcher fileWatcher,
+        TtyHostSessionManager sessionManager,
+        SettingsService settingsService,
+        AuthService authService)
     {
         _fileWatcher = fileWatcher;
         _sessionManager = sessionManager;
+        _settingsService = settingsService;
+        _authService = authService;
 
         _subscriptionId = _fileWatcher.Subscribe(BroadcastLogEntry);
     }
 
     public async Task HandleAsync(HttpContext context)
     {
+        // SECURITY: Validate auth before accepting WebSocket
+        var settings = _settingsService.Load();
+        if (settings.AuthenticationEnabled && !string.IsNullOrEmpty(settings.PasswordHash))
+        {
+            var token = context.Request.Cookies["mm-session"];
+            if (token is null || !_authService.ValidateSessionToken(token))
+            {
+                context.Response.StatusCode = 401;
+                return;
+            }
+        }
+
         using var ws = await context.WebSockets.AcceptWebSocketAsync();
         var clientId = Guid.NewGuid().ToString("N");
         var client = new LogClient(clientId, ws);

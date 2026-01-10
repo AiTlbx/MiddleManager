@@ -88,11 +88,25 @@ public class Program
         var sessionManager = new TtyHostSessionManager(runAsUser: settings.RunAsUser);
         var muxManager = new TtyHostMuxConnectionManager(sessionManager);
 
+        // Listen for runAsUser settings changes (affects new terminals only)
+        settingsService.AddSettingsListener(newSettings =>
+        {
+            var (isValid, _) = UserValidationService.ValidateRunAsUser(newSettings.RunAsUser);
+            if (isValid)
+            {
+                sessionManager.UpdateRunAsUser(newSettings.RunAsUser);
+            }
+            else
+            {
+                Console.WriteLine($"[Settings] Ignoring invalid RunAsUser from file: {newSettings.RunAsUser}");
+            }
+        });
+
         // Configure remaining endpoints
         AuthEndpoints.MapAuthEndpoints(app, settingsService, authService);
         MapSystemEndpoints(app, sessionManager, updateService, settingsService, version);
         SessionApiEndpoints.MapSessionEndpoints(app, sessionManager);
-        MapWebSocketMiddleware(app, sessionManager, muxManager, updateService, settingsService, logDirectory);
+        MapWebSocketMiddleware(app, sessionManager, muxManager, updateService, settingsService, authService, logDirectory);
 
         // Register cleanup for graceful shutdown (service restart, Ctrl+C)
         var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
@@ -276,7 +290,8 @@ public class Program
         if (args.Contains("--generate-cert"))
         {
             var force = args.Contains("--force");
-            GenerateCertificateCommand(force);
+            var serviceMode = args.Contains("--service-mode");
+            GenerateCertificateCommand(force, serviceMode);
             return true;
         }
 
@@ -297,7 +312,7 @@ public class Program
         Console.WriteLine("  --hash-password     Hash a password (reads from stdin)");
         Console.WriteLine("  --write-secret <k>  Store secret (reads value from stdin)");
         Console.WriteLine("                      Keys: password_hash, session_secret, certificate_password");
-        Console.WriteLine("  --generate-cert     Generate HTTPS certificate");
+        Console.WriteLine("  --generate-cert     Generate HTTPS certificate (add --service-mode for service install)");
         Console.WriteLine("  --apply-update      Download and apply latest update");
         Console.WriteLine();
         Console.WriteLine("Password Recovery:");
@@ -339,11 +354,30 @@ public class Program
         return password.ToString();
     }
 
-    private static void GenerateCertificateCommand(bool force)
+    private static void GenerateCertificateCommand(bool force, bool serviceMode)
     {
         var settingsService = new SettingsService();
         var settings = settingsService.Load();
-        var settingsDir = Path.GetDirectoryName(settingsService.SettingsPath) ?? ".";
+
+        // If serviceMode is explicitly requested, use service directory regardless of detection
+        string settingsDir;
+        if (serviceMode)
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                var programData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+                settingsDir = Path.Combine(programData, "MidTerm");
+            }
+            else
+            {
+                settingsDir = "/usr/local/etc/midterm";
+            }
+            Directory.CreateDirectory(settingsDir);
+        }
+        else
+        {
+            settingsDir = Path.GetDirectoryName(settingsService.SettingsPath) ?? ".";
+        }
 
         var certPath = Path.Combine(settingsDir, "midterm.pem");
         var keyId = "midterm";
@@ -371,7 +405,8 @@ public class Program
         CertificateGenerator.ExportPublicCertToPem(cert, certPath);
 
         // Store private key with OS-level protection
-        var protector = Services.Security.CertificateProtectorFactory.Create(settingsDir, settingsService.IsRunningAsService);
+        var isService = serviceMode || settingsService.IsRunningAsService;
+        var protector = Services.Security.CertificateProtectorFactory.Create(settingsDir, isService);
         var privateKeyBytes = cert.GetECDsaPrivateKey()?.ExportPkcs8PrivateKey()
                               ?? cert.GetRSAPrivateKey()?.ExportPkcs8PrivateKey()
                               ?? throw new InvalidOperationException("Failed to export private key");
@@ -845,10 +880,17 @@ public class Program
 
         app.MapPut("/api/settings", (MidTermSettingsPublic publicSettings) =>
         {
-            var currentSettings = settingsService.Load();
-            publicSettings.ApplyTo(currentSettings);
-            settingsService.Save(currentSettings);
-            return Results.Ok();
+            try
+            {
+                var currentSettings = settingsService.Load();
+                publicSettings.ApplyTo(currentSettings);
+                settingsService.Save(currentSettings);
+                return Results.Ok();
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
         });
 
         app.MapGet("/api/users", () =>
@@ -864,13 +906,14 @@ public class Program
         TtyHostMuxConnectionManager muxManager,
         UpdateService updateService,
         SettingsService settingsService,
+        AuthService authService,
         string logDirectory)
     {
-        var muxHandler = new MuxWebSocketHandler(sessionManager, muxManager);
-        var stateHandler = new StateWebSocketHandler(sessionManager, updateService);
-        var settingsHandler = new SettingsWebSocketHandler(settingsService);
+        var muxHandler = new MuxWebSocketHandler(sessionManager, muxManager, settingsService, authService);
+        var stateHandler = new StateWebSocketHandler(sessionManager, updateService, settingsService, authService);
+        var settingsHandler = new SettingsWebSocketHandler(settingsService, authService);
         var logFileWatcher = new LogFileWatcher(logDirectory, TimeSpan.FromMilliseconds(250));
-        var logHandler = new LogWebSocketHandler(logFileWatcher, sessionManager);
+        var logHandler = new LogWebSocketHandler(logFileWatcher, sessionManager, settingsService, authService);
 
         app.Use(async (context, next) =>
         {
