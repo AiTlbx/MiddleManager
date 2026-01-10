@@ -82,8 +82,6 @@ public sealed class MidTermSettings
     // Security - User to spawn terminals as (when running as service)
     public string? RunAsUser { get; set; }
     public string? RunAsUserSid { get; set; }  // Windows: User SID for token lookup
-    public int? RunAsUid { get; set; }         // Unix: User ID
-    public int? RunAsGid { get; set; }         // Unix: Group ID
 
     // Authentication
     public bool AuthenticationEnabled { get; set; } = false;

@@ -1,7 +1,7 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Ai.Tlbx.MidTerm.Common.Logging;
 #if WINDOWS
-using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 #endif
 
@@ -82,6 +82,9 @@ public static class TtyHostSpawner
     }
 
 #if !WINDOWS
+    [DllImport("libc", EntryPoint = "geteuid")]
+    private static extern uint geteuid();
+
     private static bool SpawnUnix(string args, string? runAsUser, out int processId)
     {
         processId = 0;
@@ -91,31 +94,28 @@ public static class TtyHostSpawner
             ProcessStartInfo psi;
 
             // If running as root and runAsUser is configured, use sudo -u to drop privileges
-            var isRoot = Environment.GetEnvironmentVariable("USER") == "root" ||
-                         Environment.GetEnvironmentVariable("EUID") == "0" ||
-                         Environment.GetEnvironmentVariable("SUDO_USER") is not null;
+            var isRoot = geteuid() == 0;
 
-            // If runAsUser not configured but we're root, try SUDO_USER as fallback
-            // This handles cases where service settings don't have runAsUser set
-            var effectiveRunAsUser = runAsUser;
-            if (string.IsNullOrEmpty(effectiveRunAsUser) && isRoot)
+            if (isRoot && !string.IsNullOrEmpty(runAsUser))
             {
-                effectiveRunAsUser = Environment.GetEnvironmentVariable("SUDO_USER");
-            }
+                // SECURITY: Defensive re-validation before sudo command
+                if (!UserValidationService.IsValidUsernameFormat(runAsUser))
+                {
+                    Console.WriteLine($"[TtyHostSpawner] SECURITY: Rejected invalid username format: {runAsUser}");
+                    return false;
+                }
 
-            if (isRoot && !string.IsNullOrEmpty(effectiveRunAsUser))
-            {
                 psi = new ProcessStartInfo
                 {
                     FileName = "sudo",
-                    Arguments = $"-u {effectiveRunAsUser} {TtyHostPath} {args}",
+                    Arguments = $"-u {runAsUser} {TtyHostPath} {args}",
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardInput = false,
                     RedirectStandardOutput = false,
                     RedirectStandardError = false
                 };
-                Console.WriteLine($"[TtyHostSpawner] Spawning as user: {effectiveRunAsUser}");
+                Console.WriteLine($"[TtyHostSpawner] Spawning as user: {runAsUser}");
             }
             else
             {

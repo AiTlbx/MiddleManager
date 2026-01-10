@@ -87,11 +87,25 @@ public class Program
         var sessionManager = new TtyHostSessionManager(runAsUser: settings.RunAsUser);
         var muxManager = new TtyHostMuxConnectionManager(sessionManager);
 
+        // Listen for runAsUser settings changes (affects new terminals only)
+        settingsService.AddSettingsListener(newSettings =>
+        {
+            var (isValid, _) = UserValidationService.ValidateRunAsUser(newSettings.RunAsUser);
+            if (isValid)
+            {
+                sessionManager.UpdateRunAsUser(newSettings.RunAsUser);
+            }
+            else
+            {
+                Console.WriteLine($"[Settings] Ignoring invalid RunAsUser from file: {newSettings.RunAsUser}");
+            }
+        });
+
         // Configure remaining endpoints
         AuthEndpoints.MapAuthEndpoints(app, settingsService, authService);
         MapSystemEndpoints(app, sessionManager, updateService, settingsService, version);
         SessionApiEndpoints.MapSessionEndpoints(app, sessionManager);
-        MapWebSocketMiddleware(app, sessionManager, muxManager, updateService, settingsService, logDirectory);
+        MapWebSocketMiddleware(app, sessionManager, muxManager, updateService, settingsService, authService, logDirectory);
 
         // Register cleanup for graceful shutdown (service restart, Ctrl+C)
         var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
@@ -844,10 +858,17 @@ public class Program
 
         app.MapPut("/api/settings", (MidTermSettingsPublic publicSettings) =>
         {
-            var currentSettings = settingsService.Load();
-            publicSettings.ApplyTo(currentSettings);
-            settingsService.Save(currentSettings);
-            return Results.Ok();
+            try
+            {
+                var currentSettings = settingsService.Load();
+                publicSettings.ApplyTo(currentSettings);
+                settingsService.Save(currentSettings);
+                return Results.Ok();
+            }
+            catch (ArgumentException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
         });
 
         app.MapGet("/api/users", () =>
@@ -863,13 +884,14 @@ public class Program
         TtyHostMuxConnectionManager muxManager,
         UpdateService updateService,
         SettingsService settingsService,
+        AuthService authService,
         string logDirectory)
     {
-        var muxHandler = new MuxWebSocketHandler(sessionManager, muxManager);
-        var stateHandler = new StateWebSocketHandler(sessionManager, updateService);
-        var settingsHandler = new SettingsWebSocketHandler(settingsService);
+        var muxHandler = new MuxWebSocketHandler(sessionManager, muxManager, settingsService, authService);
+        var stateHandler = new StateWebSocketHandler(sessionManager, updateService, settingsService, authService);
+        var settingsHandler = new SettingsWebSocketHandler(settingsService, authService);
         var logFileWatcher = new LogFileWatcher(logDirectory, TimeSpan.FromMilliseconds(250));
-        var logHandler = new LogWebSocketHandler(logFileWatcher, sessionManager);
+        var logHandler = new LogWebSocketHandler(logFileWatcher, sessionManager, settingsService, authService);
 
         app.Use(async (context, next) =>
         {

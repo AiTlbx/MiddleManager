@@ -297,8 +297,6 @@ write_service_settings() {
     # Build JSON with optional fields
     local json_content="{
   \"runAsUser\": \"$INSTALLING_USER\",
-  \"runAsUid\": $INSTALLING_UID,
-  \"runAsGid\": $INSTALLING_GID,
   \"authenticationEnabled\": true"
 
     if [ -n "$PASSWORD_HASH" ]; then
