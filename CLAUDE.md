@@ -1,5 +1,18 @@
 # CLAUDE.md
 
+## ⚠️ IMPORTANT: DO NOT USE BACKGROUND TASKS ⚠️
+
+**DO NOT USE BACKGROUND TASKS. DO NOT USE BACKGROUND TASKS. DO NOT USE BACKGROUND TASKS.**
+
+The `run_in_background` feature of Claude Code is currently broken. Never use:
+- `run_in_background: true` on Bash commands
+- Background task execution
+- Any command that runs in the background
+
+**DO NOT USE BACKGROUND TASKS.** This section will be removed when the feature works again.
+
+---
+
 Guidance for Claude Code when working with this repository.
 
 ## What This Is

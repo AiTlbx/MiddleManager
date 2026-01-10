@@ -400,20 +400,36 @@ function Install-MidTerm
         if ($existingService)
         {
             Write-Host "Stopping existing service..." -ForegroundColor Gray
-            # Don't wait for graceful shutdown - immediately kill processes
-            Stop-Service -Name $ServiceName -Force -NoWait -ErrorAction SilentlyContinue
+            Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
+
+            # Kill any remaining processes
             Get-Process -Name "mt-host", "mthost", "mt" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Milliseconds 500
+
+            # Wait for processes to fully exit (file handles released)
+            $maxWait = 10
+            $waited = 0
+            while ($waited -lt $maxWait)
+            {
+                $procs = Get-Process -Name "mt-host", "mthost", "mt" -ErrorAction SilentlyContinue
+                if (-not $procs) { break }
+                Start-Sleep -Milliseconds 500
+                $waited++
+            }
+
+            if ($waited -ge $maxWait)
+            {
+                Write-Host "  Warning: Some processes may still be running" -ForegroundColor Yellow
+            }
         }
 
         # Migration: remove old MidTermHost service from v2.1.x
         if ($oldHostService)
         {
             Write-Host "Migrating from old two-service architecture..." -ForegroundColor Yellow
-            Stop-Service -Name $OldHostServiceName -Force -NoWait -ErrorAction SilentlyContinue
+            Stop-Service -Name $OldHostServiceName -Force -ErrorAction SilentlyContinue
             Get-Process -Name "mt-host" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 1
             sc.exe delete $OldHostServiceName | Out-Null
-            Start-Sleep -Milliseconds 500
         }
     }
     else
@@ -446,30 +462,64 @@ function Install-MidTerm
     $destConHostBinary = Join-Path $installDir $TtyHostBinaryName
 
     Write-Host "Installing binaries..." -ForegroundColor Gray
-    try
-    {
-        Copy-Item $sourceWebBinary $destWebBinary -Force -ErrorAction Stop
-        Write-Host "  Installed: $WebBinaryName" -ForegroundColor Gray
-    }
-    catch
-    {
-        Write-Host "  Failed to copy $WebBinaryName - file may be locked" -ForegroundColor Red
-        Write-Host "  Error: $_" -ForegroundColor Red
-        throw
-    }
 
-    if (Test-Path $sourceConHostBinary)
+    # Retry logic for file copy (handles may take time to release)
+    $maxRetries = 15
+    $retryDelay = 500
+
+    # Copy mt.exe with retry
+    $copied = $false
+    for ($i = 0; $i -lt $maxRetries; $i++)
     {
         try
         {
-            Copy-Item $sourceConHostBinary $destConHostBinary -Force -ErrorAction Stop
-            Write-Host "  Installed: $TtyHostBinaryName" -ForegroundColor Gray
+            Copy-Item $sourceWebBinary $destWebBinary -Force -ErrorAction Stop
+            Write-Host "  Installed: $WebBinaryName" -ForegroundColor Gray
+            $copied = $true
+            break
         }
         catch
         {
-            Write-Host "  Failed to copy $TtyHostBinaryName - file may be locked" -ForegroundColor Red
-            Write-Host "  Error: $_" -ForegroundColor Red
-            throw
+            if ($i -eq 0)
+            {
+                Write-Host "  Waiting for $WebBinaryName to be released..." -ForegroundColor Yellow
+            }
+            Start-Sleep -Milliseconds $retryDelay
+        }
+    }
+    if (-not $copied)
+    {
+        Write-Host "  Failed to copy $WebBinaryName after $maxRetries attempts - file is locked" -ForegroundColor Red
+        Write-Host "  Try manually stopping the MidTerm service or process" -ForegroundColor Red
+        throw "Failed to install $WebBinaryName - file locked"
+    }
+
+    # Copy mthost.exe with retry
+    if (Test-Path $sourceConHostBinary)
+    {
+        $copied = $false
+        for ($i = 0; $i -lt $maxRetries; $i++)
+        {
+            try
+            {
+                Copy-Item $sourceConHostBinary $destConHostBinary -Force -ErrorAction Stop
+                Write-Host "  Installed: $TtyHostBinaryName" -ForegroundColor Gray
+                $copied = $true
+                break
+            }
+            catch
+            {
+                if ($i -eq 0)
+                {
+                    Write-Host "  Waiting for $TtyHostBinaryName to be released..." -ForegroundColor Yellow
+                }
+                Start-Sleep -Milliseconds $retryDelay
+            }
+        }
+        if (-not $copied)
+        {
+            Write-Host "  Failed to copy $TtyHostBinaryName after $maxRetries attempts - file is locked" -ForegroundColor Red
+            throw "Failed to install $TtyHostBinaryName - file locked"
         }
     }
 
@@ -624,9 +674,18 @@ function Install-AsService
     if ($existingService)
     {
         Write-Host "Removing existing service..." -ForegroundColor Gray
-        Stop-Service -Name $ServiceName -Force -NoWait -ErrorAction SilentlyContinue
+        Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
         Get-Process -Name "mt-host", "mthost", "mt" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Milliseconds 500
+
+        # Wait for processes to exit
+        $maxWait = 10
+        for ($i = 0; $i -lt $maxWait; $i++)
+        {
+            $procs = Get-Process -Name "mt-host", "mthost", "mt" -ErrorAction SilentlyContinue
+            if (-not $procs) { break }
+            Start-Sleep -Milliseconds 500
+        }
+
         sc.exe delete $ServiceName | Out-Null
         Start-Sleep -Milliseconds 500
     }

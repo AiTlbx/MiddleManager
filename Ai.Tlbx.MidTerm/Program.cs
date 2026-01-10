@@ -62,6 +62,9 @@ public class Program
         Log.Initialize("mt", logDirectory, settings.LogLevel);
         Log.Info(() => $"MidTerm server starting (LogLevel: {settings.LogLevel})");
 
+        // Log startup status for diagnostics
+        LogStartupStatus(settingsService, settings, port, bindAddress);
+
         // HSTS middleware - always enabled (HTTPS only)
         app.Use(async (context, next) =>
         {
@@ -110,6 +113,13 @@ public class Program
 
         // Register cleanup for graceful shutdown (service restart, Ctrl+C)
         var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+
+        // Log successful startup when server is fully operational
+        lifetime.ApplicationStarted.Register(() =>
+        {
+            Log.Info(() => $"Server fully operational - listening on https://{bindAddress}:{port}");
+        });
+
         lifetime.ApplicationStopping.Register(() =>
         {
             Console.WriteLine("Shutdown requested, cleaning up...");
@@ -984,6 +994,72 @@ public class Program
             Console.WriteLine();
             Environment.Exit(1);
         }
+    }
+
+    private static void LogStartupStatus(SettingsService settingsService, MidTermSettings settings, int port, string bindAddress)
+    {
+        // Log settings status
+        var settingsStatus = settingsService.LoadStatus switch
+        {
+            SettingsLoadStatus.LoadedFromFile => $"loaded from {settingsService.SettingsPath}",
+            SettingsLoadStatus.MigratedFromOld => $"migrated from {settingsService.SettingsPath}.old",
+            SettingsLoadStatus.ErrorFallbackToDefault => $"ERROR loading {settingsService.SettingsPath}: {settingsService.LoadError}",
+            _ => "using defaults (no settings file)"
+        };
+        Log.Info(() => $"Settings: {settingsStatus}");
+
+        // Log mode
+        Log.Info(() => $"Mode: {(settingsService.IsRunningAsService ? "Service" : "User")}");
+
+        // Log password/auth status
+        var hasPassword = !string.IsNullOrEmpty(settings.PasswordHash);
+        var authEnabled = settings.AuthenticationEnabled;
+        if (hasPassword && authEnabled)
+        {
+            Log.Info(() => "Authentication: enabled (password configured)");
+        }
+        else if (hasPassword && !authEnabled)
+        {
+            Log.Warn(() => "Authentication: DISABLED (password exists but auth is disabled)");
+        }
+        else if (!hasPassword && authEnabled)
+        {
+            Log.Warn(() => "Authentication: MISCONFIGURED (auth enabled but no password set)");
+        }
+        else
+        {
+            var isNetworkBound = bindAddress != "127.0.0.1" && bindAddress != "localhost";
+            if (isNetworkBound)
+            {
+                Log.Warn(() => "Authentication: DISABLED - server exposed on network without password!");
+            }
+            else
+            {
+                Log.Info(() => "Authentication: disabled (localhost only)");
+            }
+        }
+
+        // Log certificate status
+        if (_loadedCertificate is not null)
+        {
+            if (_isFallbackCertificate)
+            {
+                Log.Warn(() => "Certificate: using emergency fallback (in-memory generated)");
+            }
+            else
+            {
+                var certPath = settings.CertificatePath ?? "unknown";
+                var keyProtection = settings.KeyProtection == KeyProtectionMethod.OsProtected ? "OS-protected" : "legacy PFX";
+                Log.Info(() => $"Certificate: loaded from {certPath} ({keyProtection})");
+            }
+        }
+        else
+        {
+            Log.Error(() => "Certificate: FAILED to load - HTTPS will not work!");
+        }
+
+        // Log binding
+        Log.Info(() => $"Binding: https://{bindAddress}:{port}");
     }
 
     private static void PrintWelcomeBanner(int port, string bindAddress, SettingsService settingsService, string version)
