@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <Version>5.11.6.5</Version>
+    <Version>5.11.6.6</Version>
     <InvariantGlobalization>true</InvariantGlobalization>
     <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
     <EnableDefaultContentItems>false</EnableDefaultContentItems>
@@ -28,7 +28,8 @@
     <TrimmerRemoveSymbols>true</TrimmerRemoveSymbols>
     <StackTraceSupport>true</StackTraceSupport>
     <UseSystemResourceKeys>true</UseSystemResourceKeys>
-    <IlcGenerateStackTraceData>true</IlcGenerateStackTraceData>
+    <IlcGenerateStackTraceData>false</IlcGenerateStackTraceData>
+    <UseSizeOptimizedLinq>true</UseSizeOptimizedLinq>
     <DebuggerSupport>false</DebuggerSupport>
     <DebugType>none</DebugType>
     <EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>

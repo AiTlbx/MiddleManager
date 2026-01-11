@@ -12,8 +12,8 @@
     <SelfContained>true</SelfContained>
     <ServerGarbageCollection>false</ServerGarbageCollection>
 
-    <Version>5.10.6.1</Version>
-    <FileVersion>5.10.6.1</FileVersion>
+    <Version>5.10.6.2</Version>
+    <FileVersion>5.10.6.2</FileVersion>
   </PropertyGroup>
 
   <!-- Publish-only: AOT optimizations -->
@@ -28,10 +28,12 @@
     <IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
     <IlcTrimMetadata>true</IlcTrimMetadata>
     <IlcGenerateCompleteTypeMetadata>false</IlcGenerateCompleteTypeMetadata>
+    <IlcDisableReflection>true</IlcDisableReflection>
     <TrimmerRemoveSymbols>true</TrimmerRemoveSymbols>
     <StackTraceSupport>true</StackTraceSupport>
     <UseSystemResourceKeys>true</UseSystemResourceKeys>
-    <IlcGenerateStackTraceData>true</IlcGenerateStackTraceData>
+    <IlcGenerateStackTraceData>false</IlcGenerateStackTraceData>
+    <UseSizeOptimizedLinq>true</UseSizeOptimizedLinq>
     <DebuggerSupport>false</DebuggerSupport>
     <DebugType>none</DebugType>
     <EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
