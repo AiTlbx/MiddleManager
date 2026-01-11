@@ -122,6 +122,7 @@ html, body {
     padding: 6px 12px;
     border-bottom: 1px solid var(--border-color);
     background-color: #06060E;
+    position: relative;
 }
 
 .sidebar-brand {

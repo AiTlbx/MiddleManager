@@ -80,7 +80,8 @@ function updateSessionProcessInfo(sessionId: string): void {
   if (fgInfo.name) {
     const fgIndicator = document.createElement('span');
     fgIndicator.className = 'session-foreground';
-    fgIndicator.textContent = `\u25B6 ${fgInfo.name}`;
+    const cwdDisplay = fgInfo.cwd ? ` \u2022 ${shortenPath(fgInfo.cwd)}` : '';
+    fgIndicator.textContent = `\u25B6 ${fgInfo.name}${cwdDisplay}`;
     if (fgInfo.cwd) {
       fgIndicator.title = fgInfo.cwd;
     }
@@ -95,6 +96,21 @@ function updateSessionProcessInfo(sessionId: string): void {
     racingLog.textContent = `\u26A1 ${racingText}`;
     processInfoEl.appendChild(racingLog);
   }
+}
+
+// =============================================================================
+// Path Utilities
+// =============================================================================
+
+/**
+ * Shorten a path for display (last 2 segments)
+ */
+function shortenPath(path: string): string {
+  const parts = path.replace(/\\/g, '/').split('/');
+  if (parts.length <= 2) {
+    return path;
+  }
+  return parts.slice(-2).join('/');
 }
 
 // =============================================================================
@@ -219,7 +235,8 @@ export function renderSessionList(): void {
     if (fgInfo.name) {
       const fgIndicator = document.createElement('span');
       fgIndicator.className = 'session-foreground';
-      fgIndicator.textContent = `\u25B6 ${fgInfo.name}`;
+      const cwdDisplay = fgInfo.cwd ? ` \u2022 ${shortenPath(fgInfo.cwd)}` : '';
+      fgIndicator.textContent = `\u25B6 ${fgInfo.name}${cwdDisplay}`;
       if (fgInfo.cwd) {
         fgIndicator.title = fgInfo.cwd;
       }

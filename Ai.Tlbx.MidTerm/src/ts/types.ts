@@ -66,6 +66,7 @@ export interface ProcessState {
 export interface RacingLogEntry {
   pid: number;
   name: string;
+  commandLine: string | null;
   timestamp: number;
 }
 

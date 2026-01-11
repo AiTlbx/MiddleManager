@@ -71,6 +71,7 @@ export function handleProcessEvent(sessionId: string, payload: ProcessEventPaylo
     const entry: RacingLogEntry = {
       pid: payload.Pid,
       name: payload.Name,
+      commandLine: payload.CommandLine,
       timestamp: Date.now()
     };
 
@@ -132,7 +133,15 @@ export function getRacingLogText(sessionId: string): string {
     return '';
   }
 
-  return state.recentProcesses.map(e => e.name).join(' \u2192 ');
+  return state.recentProcesses.map(e => {
+    if (e.commandLine) {
+      const truncated = e.commandLine.length > 20
+        ? e.commandLine.slice(0, 20) + '\u2026'
+        : e.commandLine;
+      return truncated;
+    }
+    return e.name;
+  }).join(' \u2192 ');
 }
 
 /**
