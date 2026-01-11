@@ -125,11 +125,10 @@ $versionJsonPath = "$PSScriptRoot\version.json"
 
 $versionJson = Get-Content $versionJsonPath | ConvertFrom-Json
 $baseWebVersion = $versionJson.web
-$basePtyVersion = $versionJson.pty
+$currentPtyVersion = $versionJson.pty
 
-# Parse base versions to strip any existing 4th component
+# Parse web version to compute next local version
 $webParts = $baseWebVersion.Split('.')
-$ptyParts = $basePtyVersion.Split('.')
 
 if ($webParts.Count -eq 4) {
     # Already has 4th component - increment it
@@ -148,37 +147,23 @@ if ($webParts.Count -eq 4) {
     }
 }
 
-# Strip 4th component from PTY base version if present
-if ($ptyParts.Count -eq 4) {
-    $basePtyVersion = "$($ptyParts[0]).$($ptyParts[1]).$($ptyParts[2])"
-}
-
 $localWebVersion = "$baseWebVersion.$buildNum"
 
-# PTY needs its own buildNum to ensure it's always different from installed version
+# When InfluencesTtyHost=yes, PTY syncs to web version (full update)
+# When InfluencesTtyHost=no, PTY keeps its current version unchanged
 if ($InfluencesTtyHost -eq "yes") {
-    $ptyBuildNum = 1
-    $localVersionFile = "$OutputDir\version.json"
-    if (Test-Path $localVersionFile) {
-        $localVersion = Get-Content $localVersionFile | ConvertFrom-Json
-        $localPtyParts = $localVersion.pty.Split('.')
-        if ($localPtyParts.Count -eq 4 -and ($localPtyParts[0..2] -join '.') -eq $basePtyVersion) {
-            $ptyBuildNum = [int]$localPtyParts[3] + 1
-        }
-    }
-    $localPtyVersion = "$basePtyVersion.$ptyBuildNum"
+    $localPtyVersion = $localWebVersion
 } else {
-    $localPtyVersion = $basePtyVersion
+    $localPtyVersion = $currentPtyVersion
 }
 
 $updateType = if ($InfluencesTtyHost -eq "yes") { "Full" } else { "WebOnly" }
-Write-Host "  Base web version: $baseWebVersion" -ForegroundColor Gray
-Write-Host "  Local web version: $localWebVersion" -ForegroundColor White
-if ($InfluencesTtyHost -eq "yes") {
-    Write-Host "  Base pty version: $basePtyVersion" -ForegroundColor Gray
-    Write-Host "  Local pty version: $localPtyVersion" -ForegroundColor White
-}
+Write-Host "  Base version: $baseWebVersion" -ForegroundColor Gray
+Write-Host "  Local version: $localWebVersion" -ForegroundColor White
 Write-Host "  Update type: $updateType" -ForegroundColor White
+if ($InfluencesTtyHost -eq "yes") {
+    Write-Host "  PTY synced to: $localPtyVersion" -ForegroundColor White
+}
 Write-Host ""
 
 # ===========================================
