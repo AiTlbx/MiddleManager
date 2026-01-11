@@ -18,8 +18,12 @@ import {
   MUX_TYPE_RESYNC,
   MUX_TYPE_BUFFER_REQUEST,
   MUX_TYPE_COMPRESSED_OUTPUT,
-  MUX_TYPE_ACTIVE_HINT
+  MUX_TYPE_ACTIVE_HINT,
+  MUX_TYPE_PROCESS_EVENT,
+  MUX_TYPE_FOREGROUND_CHANGE
 } from '../../constants';
+import type { ProcessEventPayload, ForegroundChangePayload } from '../../types';
+import { handleProcessEvent, handleForegroundChange } from '../process';
 import { parseOutputFrame, parseCompressedOutputFrame, scheduleReconnect, checkVersionAndReload } from '../../utils';
 import {
   muxWs,
@@ -300,6 +304,22 @@ export function connectMuxWebSocket(): void {
       // Queue ALL output frames to guarantee strict ordering
       if (payload.length >= 4) {
         queueOutputFrame(sessionId, payload.slice(), type === MUX_TYPE_COMPRESSED_OUTPUT);
+      }
+    } else if (type === MUX_TYPE_PROCESS_EVENT) {
+      try {
+        const jsonStr = new TextDecoder().decode(payload);
+        const eventPayload = JSON.parse(jsonStr) as ProcessEventPayload;
+        handleProcessEvent(sessionId, eventPayload);
+      } catch (e) {
+        log.error(() => `Failed to parse process event: ${e}`);
+      }
+    } else if (type === MUX_TYPE_FOREGROUND_CHANGE) {
+      try {
+        const jsonStr = new TextDecoder().decode(payload);
+        const changePayload = JSON.parse(jsonStr) as ForegroundChangePayload;
+        handleForegroundChange(sessionId, changePayload);
+      } catch (e) {
+        log.error(() => `Failed to parse foreground change: ${e}`);
       }
     }
   };

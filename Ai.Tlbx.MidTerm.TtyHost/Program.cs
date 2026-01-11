@@ -9,9 +9,11 @@ using System.Net.Sockets;
 #endif
 using Ai.Tlbx.MidTerm.Common.Ipc;
 using Ai.Tlbx.MidTerm.Common.Logging;
+using Ai.Tlbx.MidTerm.Common.Process;
 using Ai.Tlbx.MidTerm.Common.Protocol;
 using Ai.Tlbx.MidTerm.Common.Shells;
 using Ai.Tlbx.MidTerm.TtyHost.Ipc;
+using Ai.Tlbx.MidTerm.TtyHost.Process;
 using Ai.Tlbx.MidTerm.TtyHost.Pty;
 
 namespace Ai.Tlbx.MidTerm.TtyHost;
@@ -101,6 +103,7 @@ public static class Program
             ?? shellRegistry.GetConfigurationOrDefault(null);
 
         IPtyConnection? pty = null;
+        IProcessMonitor? processMonitor = null;
         try
         {
             pty = PtyConnectionFactory.Create(
@@ -111,9 +114,16 @@ public static class Program
                 config.Rows,
                 shellConfig.GetEnvironmentVariables());
 
-            var session = new TerminalSession(config.SessionId, pty, shellConfig.ShellType, config.Cols, config.Rows);
+            processMonitor = CreateProcessMonitor();
+            var session = new TerminalSession(config.SessionId, pty, shellConfig.ShellType, config.Cols, config.Rows, processMonitor);
             var endpoint = IpcEndpoint.GetSessionEndpoint(config.SessionId, Environment.ProcessId);
             Log.Info(() => $"PTY ready, PID={pty.Pid}, endpoint={endpoint}");
+
+            if (processMonitor is not null)
+            {
+                processMonitor.StartMonitoring(pty.Pid);
+                Log.Info(() => $"Process monitor started for PID={pty.Pid}");
+            }
 
             using var cts = new CancellationTokenSource();
             _shutdownCts = cts;
@@ -137,7 +147,30 @@ public static class Program
         }
         finally
         {
+            processMonitor?.StopMonitoring();
+            processMonitor?.Dispose();
             pty?.Dispose();
+        }
+    }
+
+    private static IProcessMonitor? CreateProcessMonitor()
+    {
+        try
+        {
+#if WINDOWS
+            return new WindowsProcessMonitor();
+#elif LINUX
+            return new LinuxProcessMonitor();
+#elif MACOS
+            return new MacOSProcessMonitor();
+#else
+            return null;
+#endif
+        }
+        catch (Exception ex)
+        {
+            Log.Warn(() => $"Failed to create process monitor: {ex.Message}");
+            return null;
         }
     }
 
@@ -287,6 +320,57 @@ public static class Program
                 catch (Exception ex) { Log.Exception(ex, "OnStateChange"); }
             }
 
+            void OnProcessEvent(ProcessEvent evt)
+            {
+                try
+                {
+                    if (client.IsConnected && handshakeComplete)
+                    {
+                        var payload = new ProcessEventPayload
+                        {
+                            Type = evt.Type,
+                            Pid = evt.Pid,
+                            ParentPid = evt.ParentPid,
+                            Name = evt.Name,
+                            CommandLine = evt.CommandLine,
+                            ExitCode = evt.ExitCode,
+                            Timestamp = evt.Timestamp
+                        };
+                        var msg = TtyHostProtocol.CreateProcessEvent(payload);
+                        lock (stream)
+                        {
+                            stream.Write(msg);
+                            stream.Flush();
+                        }
+                    }
+                }
+                catch (Exception ex) { Log.Exception(ex, "OnProcessEvent"); }
+            }
+
+            void OnForegroundChanged(ForegroundProcessInfo info)
+            {
+                try
+                {
+                    if (client.IsConnected && handshakeComplete)
+                    {
+                        var payload = new ForegroundChangePayload
+                        {
+                            Pid = info.Pid,
+                            Name = info.Name,
+                            CommandLine = info.CommandLine,
+                            Cwd = info.Cwd
+                        };
+                        var msg = TtyHostProtocol.CreateForegroundChange(payload);
+                        lock (stream)
+                        {
+                            stream.Write(msg);
+                            stream.Flush();
+                        }
+                    }
+                }
+                catch (Exception ex) { Log.Exception(ex, "OnForegroundChanged"); }
+            }
+
             void OnHandshakeComplete()
             {
                 lock (outputLock)
@@ -340,6 +424,8 @@ public static class Program
                     {
                         stateChangeSubscribed = true;
                         session.OnStateChanged += OnStateChange;
+                        session.OnProcessEvent += OnProcessEvent;
+                        session.OnForegroundChanged += OnForegroundChanged;
                     }
                 }).ConfigureAwait(false);
             }
@@ -347,6 +433,8 @@ public static class Program
             {
                 session.OnOutput -= OnOutput;
                 session.OnStateChanged -= OnStateChange;
+                session.OnProcessEvent -= OnProcessEvent;
+                session.OnForegroundChanged -= OnForegroundChanged;
             }
         }
         catch (Exception ex)
@@ -674,6 +762,7 @@ internal sealed class TerminalSession
     private const int BufferCapacity = 10 * 1024 * 1024; // 10MB fixed buffer
 
     private readonly IPtyConnection _pty;
+    private readonly IProcessMonitor? _processMonitor;
     private readonly CircularByteBuffer _outputBuffer = new(BufferCapacity);
     private readonly object _bufferLock = new();
 
@@ -690,14 +779,23 @@ internal sealed class TerminalSession
 
     public event Action<ReadOnlyMemory<byte>>? OnOutput;
     public event Action? OnStateChanged;
+    public event Action<ProcessEvent>? OnProcessEvent;
+    public event Action<ForegroundProcessInfo>? OnForegroundChanged;
 
-    public TerminalSession(string id, IPtyConnection pty, ShellType shellType, int cols, int rows)
+    public TerminalSession(string id, IPtyConnection pty, ShellType shellType, int cols, int rows, IProcessMonitor? processMonitor = null)
     {
         Id = id;
         _pty = pty;
+        _processMonitor = processMonitor;
         ShellType = shellType;
         Cols = cols;
         Rows = rows;
+
+        if (_processMonitor is not null)
+        {
+            _processMonitor.OnProcessEvent += evt => OnProcessEvent?.Invoke(evt);
+            _processMonitor.OnForegroundChanged += info => OnForegroundChanged?.Invoke(info);
+        }
     }
 
     public async Task StartReadLoopAsync(CancellationToken ct)
@@ -783,7 +881,7 @@ internal sealed class TerminalSession
 
     public SessionInfo GetInfo()
     {
-        return new SessionInfo
+        var info = new SessionInfo
         {
             Id = Id,
             Pid = Pid,
@@ -797,6 +895,25 @@ internal sealed class TerminalSession
             CreatedAt = CreatedAt,
             TtyHostVersion = Program.Version
         };
+
+        if (_processMonitor is not null)
+        {
+            info.CurrentDirectory = _processMonitor.GetProcessCwd(Pid);
+            var foregroundPid = _processMonitor.GetForegroundProcess(Pid);
+            if (foregroundPid != Pid)
+            {
+                info.ForegroundPid = foregroundPid;
+                info.ForegroundName = _processMonitor.GetProcessName(foregroundPid);
+                info.ForegroundCommandLine = _processMonitor.GetProcessCommandLine(foregroundPid);
+            }
+        }
+
+        return info;
+    }
+
+    public ProcessTreeSnapshot? GetProcessSnapshot()
+    {
+        return _processMonitor?.GetProcessTreeSnapshot(Pid);
     }
 
     public void Kill()

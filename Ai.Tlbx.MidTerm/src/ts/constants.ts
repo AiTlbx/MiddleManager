@@ -31,6 +31,8 @@ export const MUX_TYPE_RESYNC = 0x05;  // Server -> Client: Clear terminals, buff
 export const MUX_TYPE_BUFFER_REQUEST = 0x06; // Client -> Server: Request buffer refresh
 export const MUX_TYPE_COMPRESSED_OUTPUT = 0x07; // Server -> Client: GZip compressed output
 export const MUX_TYPE_ACTIVE_HINT = 0x08; // Client -> Server: Hint which session is active
+export const MUX_TYPE_PROCESS_EVENT = 0x09; // Server -> Client: Process lifecycle event
+export const MUX_TYPE_FOREGROUND_CHANGE = 0x0A; // Server -> Client: Foreground process changed
 
 // =============================================================================
 // Terminal Themes
@@ -152,6 +154,7 @@ export const ICONS = {
   tabSecurity: '\ue908',   // key
   tabDiagnostics: '\ue9ce', // eye
   more: '\ue918',           // more_vert (vertical dots)
+  history: '\ue967',        // history (clock with arrow)
 } as const;
 
 /** Creates an icon span element */

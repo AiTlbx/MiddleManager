@@ -5,7 +5,7 @@
  * including empty state and mobile title updates.
  */
 
-import type { Session } from '../../types';
+import type { Session, ProcessState } from '../../types';
 import {
   sessions,
   activeSessionId,
@@ -14,6 +14,12 @@ import {
   dom
 } from '../../state';
 import { icon } from '../../constants';
+import {
+  registerProcessStateCallback,
+  getForegroundInfo,
+  getRacingLogText,
+  isRacingLogVisible
+} from '../process';
 
 // =============================================================================
 // Callback Types
@@ -36,10 +42,59 @@ let mobileActionBackdrop: HTMLDivElement | null = null;
 // =============================================================================
 
 /**
+ * Initialize session list module
+ */
+export function initializeSessionList(): void {
+  registerProcessStateCallback(handleProcessStateChange);
+}
+
+/**
  * Set callbacks for session list interactions
  */
 export function setSessionListCallbacks(cbs: SessionListCallbacks): void {
   callbacks = cbs;
+}
+
+/**
+ * Handle process state change and update the UI
+ */
+function handleProcessStateChange(sessionId: string, _state: ProcessState): void {
+  updateSessionProcessInfo(sessionId);
+}
+
+/**
+ * Update process info display for a specific session
+ */
+function updateSessionProcessInfo(sessionId: string): void {
+  const processInfoEl = document.querySelector(
+    `.session-process-info[data-session-id="${sessionId}"]`
+  ) as HTMLElement | null;
+
+  if (!processInfoEl) return;
+
+  // Clear existing content
+  processInfoEl.innerHTML = '';
+
+  // Foreground process indicator
+  const fgInfo = getForegroundInfo(sessionId);
+  if (fgInfo.name) {
+    const fgIndicator = document.createElement('span');
+    fgIndicator.className = 'session-foreground';
+    fgIndicator.textContent = `\u25B6 ${fgInfo.name}`;
+    if (fgInfo.cwd) {
+      fgIndicator.title = fgInfo.cwd;
+    }
+    processInfoEl.appendChild(fgIndicator);
+  }
+
+  // Racing subprocess log
+  const racingText = getRacingLogText(sessionId);
+  if (racingText && isRacingLogVisible(sessionId)) {
+    const racingLog = document.createElement('span');
+    racingLog.className = 'session-racing-log';
+    racingLog.textContent = `\u26A1 ${racingText}`;
+    processInfoEl.appendChild(racingLog);
+  }
 }
 
 // =============================================================================
@@ -152,6 +207,36 @@ export function renderSessionList(): void {
       subtitle.className = 'session-subtitle';
       subtitle.textContent = displayInfo.secondary;
       info.appendChild(subtitle);
+    }
+
+    // Process indicator container
+    const processInfo = document.createElement('div');
+    processInfo.className = 'session-process-info';
+    processInfo.dataset.sessionId = session.id;
+
+    // Foreground process indicator
+    const fgInfo = getForegroundInfo(session.id);
+    if (fgInfo.name) {
+      const fgIndicator = document.createElement('span');
+      fgIndicator.className = 'session-foreground';
+      fgIndicator.textContent = `\u25B6 ${fgInfo.name}`;
+      if (fgInfo.cwd) {
+        fgIndicator.title = fgInfo.cwd;
+      }
+      processInfo.appendChild(fgIndicator);
+    }
+
+    // Racing subprocess log
+    const racingText = getRacingLogText(session.id);
+    if (racingText && isRacingLogVisible(session.id)) {
+      const racingLog = document.createElement('span');
+      racingLog.className = 'session-racing-log';
+      racingLog.textContent = `\u26A1 ${racingText}`;
+      processInfo.appendChild(racingLog);
+    }
+
+    if (processInfo.children.length > 0) {
+      info.appendChild(processInfo);
     }
 
     const actions = document.createElement('div');

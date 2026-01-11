@@ -1,0 +1,689 @@
+#if WINDOWS
+using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using System.Text;
+using Ai.Tlbx.MidTerm.Common.Logging;
+using Ai.Tlbx.MidTerm.Common.Process;
+
+namespace Ai.Tlbx.MidTerm.TtyHost.Process;
+
+/// <summary>
+/// Windows implementation of process monitoring using Toolhelp32 for enumeration
+/// and NtQueryInformationProcess for CWD retrieval.
+/// </summary>
+[SupportedOSPlatform("windows")]
+public sealed class WindowsProcessMonitor : IProcessMonitor
+{
+    private readonly object _lock = new();
+    private readonly ConcurrentDictionary<int, ProcessInfo> _processTree = new();
+    private int _rootPid;
+    private bool _monitoring;
+    private bool _disposed;
+    private CancellationTokenSource? _pollCts;
+    private Task? _pollTask;
+
+    public event Action<ProcessEvent>? OnProcessEvent;
+    public event Action<ForegroundProcessInfo>? OnForegroundChanged;
+
+    public bool SupportsRealTimeEvents => false;
+
+    public void StartMonitoring(int rootPid)
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(WindowsProcessMonitor));
+
+        lock (_lock)
+        {
+            _rootPid = rootPid;
+            _monitoring = true;
+
+            _pollCts = new CancellationTokenSource();
+            _pollTask = Task.Run(() => PollProcessTreeAsync(_pollCts.Token));
+        }
+    }
+
+    public void StopMonitoring()
+    {
+        lock (_lock)
+        {
+            _monitoring = false;
+            _pollCts?.Cancel();
+            try
+            {
+                _pollTask?.Wait(1000);
+            }
+            catch { }
+            _pollCts?.Dispose();
+            _pollCts = null;
+            _pollTask = null;
+        }
+    }
+
+    private async Task PollProcessTreeAsync(CancellationToken ct)
+    {
+        var previousPids = new HashSet<int>();
+        int? previousForeground = null;
+
+        while (!ct.IsCancellationRequested && _monitoring)
+        {
+            try
+            {
+                await Task.Delay(500, ct);
+
+                var currentPids = new HashSet<int>();
+                var descendants = GetDescendantProcesses(_rootPid);
+
+                foreach (var pid in descendants)
+                {
+                    currentPids.Add(pid);
+
+                    if (!previousPids.Contains(pid))
+                    {
+                        var name = GetProcessName(pid);
+                        var cmdLine = GetProcessCommandLine(pid);
+                        var parentPid = GetParentPid(pid);
+
+                        var info = new ProcessInfo
+                        {
+                            Pid = pid,
+                            ParentPid = parentPid,
+                            Name = name ?? "unknown",
+                            CommandLine = cmdLine,
+                            Cwd = GetProcessCwd(pid)
+                        };
+                        _processTree[pid] = info;
+
+                        OnProcessEvent?.Invoke(new ProcessEvent
+                        {
+                            Type = ProcessEventType.Exec,
+                            Pid = pid,
+                            ParentPid = parentPid,
+                            Name = name,
+                            CommandLine = cmdLine,
+                            Timestamp = DateTime.UtcNow
+                        });
+                    }
+                }
+
+                foreach (var pid in previousPids)
+                {
+                    if (!currentPids.Contains(pid))
+                    {
+                        _processTree.TryRemove(pid, out _);
+                        OnProcessEvent?.Invoke(new ProcessEvent
+                        {
+                            Type = ProcessEventType.Exit,
+                            Pid = pid,
+                            Timestamp = DateTime.UtcNow
+                        });
+                    }
+                }
+
+                previousPids = currentPids;
+
+                var foreground = GetForegroundProcess(_rootPid);
+                if (foreground != previousForeground)
+                {
+                    previousForeground = foreground;
+                    var fgName = GetProcessName(foreground);
+                    var fgCwd = GetProcessCwd(foreground);
+                    var fgCmd = GetProcessCommandLine(foreground);
+
+                    OnForegroundChanged?.Invoke(new ForegroundProcessInfo
+                    {
+                        Pid = foreground,
+                        Name = fgName ?? "shell",
+                        CommandLine = fgCmd,
+                        Cwd = fgCwd
+                    });
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                Log.Warn(() => $"Process polling error: {ex.Message}");
+            }
+        }
+    }
+
+    public string? GetProcessCwd(int pid)
+    {
+        if (_disposed) return null;
+
+        try
+        {
+            var hProcess = OpenProcess(
+                PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+                false,
+                (uint)pid);
+
+            if (hProcess == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            try
+            {
+                var pbi = new PROCESS_BASIC_INFORMATION();
+                int returnLength;
+                var status = NtQueryInformationProcess(
+                    hProcess,
+                    0,
+                    ref pbi,
+                    Marshal.SizeOf<PROCESS_BASIC_INFORMATION>(),
+                    out returnLength);
+
+                if (status != 0 || pbi.PebBaseAddress == IntPtr.Zero)
+                {
+                    return null;
+                }
+
+                var peb = new PEB();
+                if (!ReadProcessMemory(hProcess, pbi.PebBaseAddress, ref peb, Marshal.SizeOf<PEB>(), out _))
+                {
+                    return null;
+                }
+
+                if (peb.ProcessParameters == IntPtr.Zero)
+                {
+                    return null;
+                }
+
+                var processParams = new RTL_USER_PROCESS_PARAMETERS();
+                if (!ReadProcessMemory(hProcess, peb.ProcessParameters, ref processParams,
+                    Marshal.SizeOf<RTL_USER_PROCESS_PARAMETERS>(), out _))
+                {
+                    return null;
+                }
+
+                if (processParams.CurrentDirectory.DosPath.Length == 0 ||
+                    processParams.CurrentDirectory.DosPath.Buffer == IntPtr.Zero)
+                {
+                    return null;
+                }
+
+                var buffer = new byte[processParams.CurrentDirectory.DosPath.Length];
+                if (!ReadProcessMemory(hProcess, processParams.CurrentDirectory.DosPath.Buffer,
+                    buffer, buffer.Length, out _))
+                {
+                    return null;
+                }
+
+                var cwd = Encoding.Unicode.GetString(buffer).TrimEnd('\0');
+                if (cwd.EndsWith('\\') && cwd.Length > 3)
+                {
+                    cwd = cwd.TrimEnd('\\');
+                }
+                return cwd;
+            }
+            finally
+            {
+                CloseHandle(hProcess);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Verbose(() => $"GetProcessCwd({pid}) failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    public string? GetProcessName(int pid)
+    {
+        if (_disposed) return null;
+
+        try
+        {
+            var hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if (hSnapshot == IntPtr.Zero || hSnapshot == INVALID_HANDLE_VALUE)
+            {
+                return null;
+            }
+
+            try
+            {
+                var pe = new PROCESSENTRY32W { dwSize = (uint)Marshal.SizeOf<PROCESSENTRY32W>() };
+                if (Process32FirstW(hSnapshot, ref pe))
+                {
+                    do
+                    {
+                        if (pe.th32ProcessID == pid)
+                        {
+                            return pe.szExeFile;
+                        }
+                    } while (Process32NextW(hSnapshot, ref pe));
+                }
+            }
+            finally
+            {
+                CloseHandle(hSnapshot);
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    public string? GetProcessCommandLine(int pid)
+    {
+        if (_disposed) return null;
+
+        try
+        {
+            var hProcess = OpenProcess(
+                PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+                false,
+                (uint)pid);
+
+            if (hProcess == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            try
+            {
+                var pbi = new PROCESS_BASIC_INFORMATION();
+                var status = NtQueryInformationProcess(
+                    hProcess,
+                    0,
+                    ref pbi,
+                    Marshal.SizeOf<PROCESS_BASIC_INFORMATION>(),
+                    out _);
+
+                if (status != 0 || pbi.PebBaseAddress == IntPtr.Zero)
+                {
+                    return null;
+                }
+
+                var peb = new PEB();
+                if (!ReadProcessMemory(hProcess, pbi.PebBaseAddress, ref peb, Marshal.SizeOf<PEB>(), out _))
+                {
+                    return null;
+                }
+
+                if (peb.ProcessParameters == IntPtr.Zero)
+                {
+                    return null;
+                }
+
+                var processParams = new RTL_USER_PROCESS_PARAMETERS();
+                if (!ReadProcessMemory(hProcess, peb.ProcessParameters, ref processParams,
+                    Marshal.SizeOf<RTL_USER_PROCESS_PARAMETERS>(), out _))
+                {
+                    return null;
+                }
+
+                if (processParams.CommandLine.Length == 0 ||
+                    processParams.CommandLine.Buffer == IntPtr.Zero)
+                {
+                    return null;
+                }
+
+                var buffer = new byte[processParams.CommandLine.Length];
+                if (!ReadProcessMemory(hProcess, processParams.CommandLine.Buffer,
+                    buffer, buffer.Length, out _))
+                {
+                    return null;
+                }
+
+                return Encoding.Unicode.GetString(buffer).TrimEnd('\0');
+            }
+            finally
+            {
+                CloseHandle(hProcess);
+            }
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public IReadOnlyList<int> GetChildProcesses(int pid)
+    {
+        if (_disposed) return [];
+
+        var children = new List<int>();
+        try
+        {
+            var hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if (hSnapshot == IntPtr.Zero || hSnapshot == INVALID_HANDLE_VALUE)
+            {
+                return [];
+            }
+
+            try
+            {
+                var pe = new PROCESSENTRY32W { dwSize = (uint)Marshal.SizeOf<PROCESSENTRY32W>() };
+                if (Process32FirstW(hSnapshot, ref pe))
+                {
+                    do
+                    {
+                        if (pe.th32ParentProcessID == pid)
+                        {
+                            children.Add((int)pe.th32ProcessID);
+                        }
+                    } while (Process32NextW(hSnapshot, ref pe));
+                }
+            }
+            finally
+            {
+                CloseHandle(hSnapshot);
+            }
+        }
+        catch { }
+
+        return children;
+    }
+
+    private IReadOnlyList<int> GetDescendantProcesses(int rootPid)
+    {
+        var descendants = new List<int>();
+        var toVisit = new Queue<int>();
+        toVisit.Enqueue(rootPid);
+
+        while (toVisit.Count > 0)
+        {
+            var pid = toVisit.Dequeue();
+            var children = GetChildProcesses(pid);
+            foreach (var child in children)
+            {
+                if (!descendants.Contains(child))
+                {
+                    descendants.Add(child);
+                    toVisit.Enqueue(child);
+                }
+            }
+        }
+
+        return descendants;
+    }
+
+    private int GetParentPid(int pid)
+    {
+        try
+        {
+            var hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if (hSnapshot == IntPtr.Zero || hSnapshot == INVALID_HANDLE_VALUE)
+            {
+                return 0;
+            }
+
+            try
+            {
+                var pe = new PROCESSENTRY32W { dwSize = (uint)Marshal.SizeOf<PROCESSENTRY32W>() };
+                if (Process32FirstW(hSnapshot, ref pe))
+                {
+                    do
+                    {
+                        if (pe.th32ProcessID == pid)
+                        {
+                            return (int)pe.th32ParentProcessID;
+                        }
+                    } while (Process32NextW(hSnapshot, ref pe));
+                }
+            }
+            finally
+            {
+                CloseHandle(hSnapshot);
+            }
+        }
+        catch { }
+
+        return 0;
+    }
+
+    public int GetForegroundProcess(int shellPid)
+    {
+        if (_disposed) return shellPid;
+
+        var descendants = GetDescendantProcesses(shellPid);
+        if (descendants.Count == 0)
+        {
+            return shellPid;
+        }
+
+        var childrenMap = new Dictionary<int, List<int>>();
+        childrenMap[shellPid] = [];
+
+        foreach (var pid in descendants)
+        {
+            var parent = GetParentPid(pid);
+            if (!childrenMap.ContainsKey(parent))
+            {
+                childrenMap[parent] = [];
+            }
+            childrenMap[parent].Add(pid);
+            if (!childrenMap.ContainsKey(pid))
+            {
+                childrenMap[pid] = [];
+            }
+        }
+
+        int FindLeaf(int current)
+        {
+            if (!childrenMap.TryGetValue(current, out var children) || children.Count == 0)
+            {
+                return current;
+            }
+            return FindLeaf(children[0]);
+        }
+
+        return FindLeaf(shellPid);
+    }
+
+    public ProcessTreeSnapshot GetProcessTreeSnapshot(int shellPid)
+    {
+        var processes = new List<ProcessInfo>();
+        var descendants = GetDescendantProcesses(shellPid);
+
+        foreach (var pid in descendants)
+        {
+            processes.Add(new ProcessInfo
+            {
+                Pid = pid,
+                ParentPid = GetParentPid(pid),
+                Name = GetProcessName(pid) ?? "unknown",
+                CommandLine = GetProcessCommandLine(pid),
+                Cwd = GetProcessCwd(pid)
+            });
+        }
+
+        var foregroundPid = GetForegroundProcess(shellPid);
+        ForegroundProcessInfo? foreground = null;
+        if (foregroundPid != shellPid)
+        {
+            foreground = new ForegroundProcessInfo
+            {
+                Pid = foregroundPid,
+                Name = GetProcessName(foregroundPid) ?? "unknown",
+                CommandLine = GetProcessCommandLine(foregroundPid),
+                Cwd = GetProcessCwd(foregroundPid)
+            };
+        }
+
+        return new ProcessTreeSnapshot
+        {
+            ShellPid = shellPid,
+            ShellCwd = GetProcessCwd(shellPid),
+            Foreground = foreground,
+            Processes = processes
+        };
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        StopMonitoring();
+    }
+
+    #region Native Interop
+
+    private const uint PROCESS_QUERY_INFORMATION = 0x0400;
+    private const uint PROCESS_VM_READ = 0x0010;
+    private const uint TH32CS_SNAPPROCESS = 0x00000002;
+    private static readonly IntPtr INVALID_HANDLE_VALUE = new(-1);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(uint dwDesiredAccess, bool bInheritHandle, uint dwProcessId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseHandle(IntPtr hObject);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr CreateToolhelp32Snapshot(uint dwFlags, uint th32ProcessID);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool Process32FirstW(IntPtr hSnapshot, ref PROCESSENTRY32W lppe);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool Process32NextW(IntPtr hSnapshot, ref PROCESSENTRY32W lppe);
+
+    [DllImport("ntdll.dll")]
+    private static extern int NtQueryInformationProcess(
+        IntPtr processHandle,
+        int processInformationClass,
+        ref PROCESS_BASIC_INFORMATION processInformation,
+        int processInformationLength,
+        out int returnLength);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ReadProcessMemory(
+        IntPtr hProcess,
+        IntPtr lpBaseAddress,
+        ref PEB lpBuffer,
+        int dwSize,
+        out int lpNumberOfBytesRead);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ReadProcessMemory(
+        IntPtr hProcess,
+        IntPtr lpBaseAddress,
+        ref RTL_USER_PROCESS_PARAMETERS lpBuffer,
+        int dwSize,
+        out int lpNumberOfBytesRead);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ReadProcessMemory(
+        IntPtr hProcess,
+        IntPtr lpBaseAddress,
+        byte[] lpBuffer,
+        int dwSize,
+        out int lpNumberOfBytesRead);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct PROCESSENTRY32W
+    {
+        public uint dwSize;
+        public uint cntUsage;
+        public uint th32ProcessID;
+        public IntPtr th32DefaultHeapID;
+        public uint th32ModuleID;
+        public uint cntThreads;
+        public uint th32ParentProcessID;
+        public int pcPriClassBase;
+        public uint dwFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+        public string szExeFile;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PROCESS_BASIC_INFORMATION
+    {
+        public IntPtr Reserved1;
+        public IntPtr PebBaseAddress;
+        public IntPtr Reserved2_0;
+        public IntPtr Reserved2_1;
+        public IntPtr UniqueProcessId;
+        public IntPtr Reserved3;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct UNICODE_STRING
+    {
+        public ushort Length;
+        public ushort MaximumLength;
+        public IntPtr Buffer;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CURDIR
+    {
+        public UNICODE_STRING DosPath;
+        public IntPtr Handle;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PEB
+    {
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]
+        public byte[] Reserved1;
+        public byte BeingDebugged;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 1)]
+        public byte[] Reserved2;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]
+        public IntPtr[] Reserved3;
+        public IntPtr Ldr;
+        public IntPtr ProcessParameters;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RTL_USER_PROCESS_PARAMETERS
+    {
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
+        public byte[] Reserved1;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 10)]
+        public IntPtr[] Reserved2;
+        public UNICODE_STRING ImagePathName;
+        public UNICODE_STRING CommandLine;
+        public IntPtr Environment;
+        public uint StartingX;
+        public uint StartingY;
+        public uint CountX;
+        public uint CountY;
+        public uint CountCharsX;
+        public uint CountCharsY;
+        public uint FillAttribute;
+        public uint WindowFlags;
+        public uint ShowWindowFlags;
+        public UNICODE_STRING WindowTitle;
+        public UNICODE_STRING DesktopInfo;
+        public UNICODE_STRING ShellInfo;
+        public UNICODE_STRING RuntimeData;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
+        public RTL_DRIVE_LETTER_CURDIR[] CurrentDirectores;
+        public ulong EnvironmentSize;
+        public ulong EnvironmentVersion;
+        public IntPtr PackageDependencyData;
+        public uint ProcessGroupId;
+        public uint LoaderThreads;
+        public UNICODE_STRING RedirectionDllName;
+        public UNICODE_STRING HeapPartitionName;
+        public IntPtr DefaultThreadpoolCpuSetMasks;
+        public uint DefaultThreadpoolCpuSetMaskCount;
+        public uint DefaultThreadpoolThreadMaximum;
+        public CURDIR CurrentDirectory;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RTL_DRIVE_LETTER_CURDIR
+    {
+        public ushort Flags;
+        public ushort Length;
+        public uint TimeStamp;
+        public UNICODE_STRING DosPath;
+    }
+
+    #endregion
+}
+#endif

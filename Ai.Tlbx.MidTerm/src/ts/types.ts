@@ -21,6 +21,52 @@ export interface Session {
   cols: number;
   rows: number;
   manuallyNamed?: boolean;
+  currentDirectory?: string;
+  foregroundPid?: number;
+  foregroundName?: string;
+  foregroundCommandLine?: string;
+}
+
+// =============================================================================
+// Process Monitoring Types
+// =============================================================================
+
+/** Process event type */
+export type ProcessEventType = 'Fork' | 'Exec' | 'Exit';
+
+/** Process lifecycle event from server */
+export interface ProcessEventPayload {
+  Type: ProcessEventType;
+  Pid: number;
+  ParentPid: number;
+  Name: string | null;
+  CommandLine: string | null;
+  ExitCode: number | null;
+  Timestamp: string;
+}
+
+/** Foreground process change from server */
+export interface ForegroundChangePayload {
+  Pid: number;
+  Name: string;
+  CommandLine: string | null;
+  Cwd: string | null;
+}
+
+/** Process state for a session */
+export interface ProcessState {
+  foregroundPid: number | null;
+  foregroundName: string | null;
+  foregroundCwd: string | null;
+  recentProcesses: RacingLogEntry[];
+  showRacingLog: boolean;
+}
+
+/** Entry in the racing subprocess log */
+export interface RacingLogEntry {
+  pid: number;
+  name: string;
+  timestamp: number;
 }
 
 /** Terminal state for a session */

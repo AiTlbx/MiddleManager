@@ -242,6 +242,18 @@ public sealed class MuxClient : IAsyncDisposable
     }
 
     /// <summary>
+    /// Queue a pre-built frame to be sent immediately (fire-and-forget).
+    /// Used for process events and foreground changes.
+    /// </summary>
+    public void QueueFrame(byte[] frame)
+    {
+        if (_cts.IsCancellationRequested) return;
+        if (WebSocket.State != WebSocketState.Open) return;
+
+        _ = SendFrameAsync(frame);
+    }
+
+    /// <summary>
     /// Send a frame directly (bypassing buffering) - used for init/sync frames.
     /// </summary>
     public async Task<bool> TrySendAsync(byte[] data)

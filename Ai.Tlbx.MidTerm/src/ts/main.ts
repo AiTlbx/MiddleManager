@@ -52,7 +52,8 @@ import {
   expandSidebar,
   restoreSidebarState,
   setupSidebarResize,
-  initShareAccessButton
+  initShareAccessButton,
+  initializeSessionList
 } from './modules/sidebar';
 import {
   toggleSettings,
@@ -75,6 +76,13 @@ import {
   handleUpdateInfo
 } from './modules/updating';
 import { initDiagnosticsPanel } from './modules/diagnostics';
+import {
+  initializeCommandHistory,
+  initHistoryDropdown,
+  toggleHistoryDropdown,
+  type CommandHistoryEntry
+} from './modules/history';
+import { registerShellTypeLookup } from './modules/process';
 import {
   cacheDOMElements,
   sessions,
@@ -128,6 +136,13 @@ async function init(): Promise<void> {
   cacheDOMElements();
   restoreSidebarState();
   setupSidebarResize();
+  initializeSessionList();
+  initializeCommandHistory();
+  initHistoryDropdown(spawnFromHistory);
+  registerShellTypeLookup((sessionId) => {
+    const session = sessions.find(s => s.id === sessionId);
+    return session?.shellType ?? null;
+  });
 
   const fontPromise = preloadTerminalFont();
   setFontsReadyPromise(fontPromise);
@@ -428,6 +443,50 @@ function promptRenameSession(sessionId: string): void {
   }
 }
 
+function spawnFromHistory(entry: CommandHistoryEntry): void {
+  const rect = dom.terminalsArea?.getBoundingClientRect();
+  let cols = currentSettings?.defaultCols ?? 120;
+  let rows = currentSettings?.defaultRows ?? 30;
+
+  if (rect && rect.width > 100 && rect.height > 100) {
+    const fontSize = currentSettings?.fontSize ?? 14;
+    const charWidth = fontSize * FONT_CHAR_WIDTH_RATIO;
+    const lineHeight = fontSize * FONT_LINE_HEIGHT_RATIO;
+
+    const availWidth = rect.width - TERMINAL_PADDING;
+    const availHeight = rect.height - TERMINAL_PADDING;
+
+    const measuredCols = Math.floor(availWidth / charWidth);
+    const measuredRows = Math.floor(availHeight / lineHeight);
+
+    if (measuredCols > MIN_TERMINAL_COLS && measuredRows > MIN_TERMINAL_ROWS) {
+      cols = Math.min(measuredCols, MAX_TERMINAL_COLS);
+      rows = Math.min(measuredRows, MAX_TERMINAL_ROWS);
+    }
+  }
+
+  closeSidebar();
+
+  fetch('/api/sessions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      Cols: cols,
+      Rows: rows,
+      ShellType: entry.shellType,
+      WorkingDirectory: entry.workingDirectory
+    })
+  })
+    .then((r) => r.json())
+    .then((session) => {
+      newlyCreatedSessions.add(session.id);
+      selectSession(session.id);
+    })
+    .catch((e) => {
+      log.error(() => `Failed to spawn from history: ${e}`);
+    });
+}
+
 // =============================================================================
 // Notifications
 // =============================================================================
@@ -554,6 +613,8 @@ function bindEvents(): void {
   if (changelogBackdrop) {
     changelogBackdrop.addEventListener('click', closeChangelog);
   }
+
+  bindClick('btn-history', toggleHistoryDropdown);
 
   import('./modules/settings').then((mod) => {
     mod.bindSettingsAutoSave();

@@ -24,6 +24,8 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
     public event Action<string, int, int, ReadOnlyMemory<byte>>? OnOutput;
     public event Action<string>? OnStateChanged;
     public event Action<string>? OnSessionClosed;
+    public event Action<string, ProcessEventPayload>? OnProcessEvent;
+    public event Action<string, ForegroundChangePayload>? OnForegroundChanged;
 
     public TtyHostSessionManager(string? expectedVersion = null, string? minCompatibleVersion = null, string? runAsUser = null)
     {
@@ -457,6 +459,8 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
     private void SubscribeToClient(TtyHostClient client)
     {
         client.OnOutput += (sessionId, cols, rows, data) => OnOutput?.Invoke(sessionId, cols, rows, data);
+        client.OnProcessEvent += (sessionId, payload) => OnProcessEvent?.Invoke(sessionId, payload);
+        client.OnForegroundChanged += (sessionId, payload) => OnForegroundChanged?.Invoke(sessionId, payload);
         client.OnStateChanged += async sessionId =>
         {
             // Update cached info

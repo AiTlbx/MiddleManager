@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
+using System.Text.Json;
 using System.Threading.Channels;
 using Ai.Tlbx.MidTerm.Common.Logging;
+using Ai.Tlbx.MidTerm.Common.Protocol;
 
 namespace Ai.Tlbx.MidTerm.Services;
 
@@ -24,6 +26,8 @@ public sealed class TtyHostMuxConnectionManager
         _sessionManager = sessionManager;
         _sessionManager.OnOutput += HandleOutput;
         _sessionManager.OnSessionClosed += HandleSessionClosed;
+        _sessionManager.OnProcessEvent += HandleProcessEvent;
+        _sessionManager.OnForegroundChanged += HandleForegroundChanged;
 
         _cts = new CancellationTokenSource();
         _outputProcessor = ProcessOutputQueueAsync(_cts.Token);
@@ -40,6 +44,34 @@ public sealed class TtyHostMuxConnectionManager
     private void HandleOutput(string sessionId, int cols, int rows, ReadOnlyMemory<byte> data)
     {
         _outputQueue.Writer.TryWrite((sessionId, cols, rows, data.ToArray()));
+    }
+
+    private void HandleProcessEvent(string sessionId, ProcessEventPayload payload)
+    {
+        var jsonPayload = JsonSerializer.SerializeToUtf8Bytes(payload, TtyHostJsonContext.Default.ProcessEventPayload);
+        var frame = MuxProtocol.CreateProcessEventFrame(sessionId, jsonPayload);
+
+        foreach (var client in _clients.Values)
+        {
+            if (client.WebSocket.State == WebSocketState.Open)
+            {
+                client.QueueFrame(frame);
+            }
+        }
+    }
+
+    private void HandleForegroundChanged(string sessionId, ForegroundChangePayload payload)
+    {
+        var jsonPayload = JsonSerializer.SerializeToUtf8Bytes(payload, TtyHostJsonContext.Default.ForegroundChangePayload);
+        var frame = MuxProtocol.CreateForegroundChangeFrame(sessionId, jsonPayload);
+
+        foreach (var client in _clients.Values)
+        {
+            if (client.WebSocket.State == WebSocketState.Open)
+            {
+                client.QueueFrame(frame);
+            }
+        }
     }
 
     private async Task ProcessOutputQueueAsync(CancellationToken ct)
