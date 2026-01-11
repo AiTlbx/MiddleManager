@@ -110,10 +110,12 @@ public static class ServerSetup
         IFileProvider fileProvider = Directory.Exists(wwwrootPath)
             ? new PhysicalFileProvider(Path.GetFullPath(wwwrootPath))
             : new EmbeddedWebRootFileProvider(Assembly.GetExecutingAssembly(), "Ai.Tlbx.MidTerm");
+        var useCompressedFiles = false;
 #else
         IFileProvider fileProvider = new EmbeddedWebRootFileProvider(
             Assembly.GetExecutingAssembly(),
             "Ai.Tlbx.MidTerm");
+        var useCompressedFiles = true;
 #endif
 
         // Rewrite clean URLs to .html files
@@ -129,9 +131,16 @@ public static class ServerSetup
 
         app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = fileProvider });
 
+        // In release builds, serve pre-compressed .br files for text assets
+        if (useCompressedFiles)
+        {
+            app.UseMiddleware<CompressedStaticFilesMiddleware>(fileProvider);
+        }
+
         var contentTypeProvider = new FileExtensionContentTypeProvider();
         contentTypeProvider.Mappings[".ico"] = "image/x-icon";
         contentTypeProvider.Mappings[".webmanifest"] = "application/manifest+json";
+        contentTypeProvider.Mappings[".br"] = "application/octet-stream";
 
         app.UseStaticFiles(new StaticFileOptions
         {
