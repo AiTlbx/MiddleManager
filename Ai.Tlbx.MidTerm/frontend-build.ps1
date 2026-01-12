@@ -56,13 +56,14 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Bundling with esbuild (version: $Version)..." -ForegroundColor Cyan
 
 $mainTs = Join-Path $TsSource "main.ts"
+$jsonVersion = "'""$Version""'"
 & npx esbuild $mainTs `
     --bundle `
     --minify `
     --sourcemap=linked `
     --outfile=$OutFile `
     --target=es2020 `
-    "--define:BUILD_VERSION=`"$Version`""
+    "--define:BUILD_VERSION=$jsonVersion"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "esbuild failed"
