@@ -187,7 +187,6 @@ function writeToTerminal(
   }
 
   // Resize if dimensions are valid and different
-  let didResize = false;
   if (cols > 0 && rows > 0 && cols <= 500 && rows <= 500 && state.opened) {
     const currentCols = state.terminal.cols;
     const currentRows = state.terminal.rows;
@@ -198,7 +197,6 @@ function writeToTerminal(
         state.serverCols = cols;
         state.serverRows = rows;
         applyTerminalScaling(sessionId, state);
-        didResize = true;
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : String(e);
         log.warn(() => `Terminal resize deferred: ${message}`);
@@ -211,12 +209,10 @@ function writeToTerminal(
     state.terminal.write(data);
   }
 
-  // After resize, ensure cursor is visible. Another client connecting may trigger
-  // shell redraw that sends \e[?25l (hide), and the matching \e[?25h (show) can
-  // get lost due to batching. Write after data so it takes effect.
-  if (didResize) {
-    state.terminal.write('\x1b[?25h');
-  }
+  // DISABLED: Was causing cursor to disappear in some cases
+  // if (didResize) {
+  //   state.terminal.write('\x1b[?25h');
+  // }
 }
 
 // =============================================================================
@@ -272,13 +268,12 @@ export function connectMuxWebSocket(): void {
       sendActiveSessionHint(activeSessionId);
     }
 
-    // Ensure cursor is visible on all terminals after reconnect.
-    // Cursor visibility can get lost when another client connects.
-    sessionTerminals.forEach((state) => {
-      if (state.opened) {
-        state.terminal.write('\x1b[?25h');
-      }
-    });
+    // DISABLED: Was causing cursor to disappear in some cases
+    // sessionTerminals.forEach((state) => {
+    //   if (state.opened) {
+    //     state.terminal.write('\x1b[?25h');
+    //   }
+    // });
   };
 
   ws.onmessage = (event) => {
