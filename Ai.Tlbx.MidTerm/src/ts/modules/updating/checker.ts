@@ -118,7 +118,12 @@ export function waitForServerAndReload(): void {
 /**
  * Manually check for updates and update the UI
  */
-export function checkForUpdates(): void {
+export function checkForUpdates(e?: MouseEvent): void {
+  // Prevent event bubbling that could trigger unintended handlers
+  if (e) {
+    e.stopPropagation();
+  }
+
   const btn = document.getElementById('btn-check-updates') as HTMLButtonElement | null;
 
   if (btn) {

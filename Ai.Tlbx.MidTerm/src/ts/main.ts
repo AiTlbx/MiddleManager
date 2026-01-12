@@ -359,12 +359,12 @@ function deleteSession(sessionId: string): void {
     sessions.splice(idx, 1);
   }
 
-  // If this was the active session, select another
+  // If this was the active session, select another (but don't close settings panel)
   if (activeSessionId === sessionId) {
     setActiveSessionId(null);
     const firstSession = sessions[0];
     if (firstSession) {
-      selectSession(firstSession.id);
+      selectSession(firstSession.id, { closeSettingsPanel: false });
     }
   }
 

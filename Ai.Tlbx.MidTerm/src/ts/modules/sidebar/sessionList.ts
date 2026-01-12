@@ -334,8 +334,11 @@ export function updateEmptyState(): void {
   if (!dom.emptyState) return;
 
   if (sessions.length === 0) {
-    dom.emptyState.classList.remove('hidden');
-    if (dom.settingsView) dom.settingsView.classList.add('hidden');
+    // Only show empty state if settings panel is not open
+    if (!settingsOpen) {
+      dom.emptyState.classList.remove('hidden');
+      if (dom.settingsView) dom.settingsView.classList.add('hidden');
+    }
   } else if (!settingsOpen) {
     dom.emptyState.classList.add('hidden');
   }
