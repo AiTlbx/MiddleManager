@@ -1,5 +1,5 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Force LF line endings everywhere (all modern editors handle this fine)
+* text=auto eol=lf
 
 # Binary files
 *.woff binary
