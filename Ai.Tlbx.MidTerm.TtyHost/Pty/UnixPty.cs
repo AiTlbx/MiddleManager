@@ -8,7 +8,7 @@ public sealed class UnixPty : IPtyConnection
 {
     private readonly object _lock = new();
     private int _masterFd = -1;
-    private Process? _process;
+    private System.Diagnostics.Process? _process;
     private Microsoft.Win32.SafeHandles.SafeFileHandle? _masterHandle; // Single handle for both streams
     private FileStream? _writerStream;
     private FileStream? _readerStream;
@@ -173,7 +173,7 @@ public sealed class UnixPty : IPtyConnection
             }
         }
 
-        _process = Process.Start(psi);
+        _process = System.Diagnostics.Process.Start(psi);
         if (_process is null)
         {
             throw new InvalidOperationException("Failed to start process");
