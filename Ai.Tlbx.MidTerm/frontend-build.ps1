@@ -36,7 +36,8 @@ Write-Host "Type-checking TypeScript..." -ForegroundColor Cyan
 # Format: file(line,col): error CODE: message
 # This allows VS Error List to pick up TypeScript errors
 $tscPath = Join-Path $PSScriptRoot "../node_modules/typescript/lib/tsc.js"
-& node $tscPath --noEmit --pretty false
+$tsconfigPath = Join-Path $PSScriptRoot "tsconfig.json"
+& node $tscPath --noEmit --pretty false --project $tsconfigPath
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
