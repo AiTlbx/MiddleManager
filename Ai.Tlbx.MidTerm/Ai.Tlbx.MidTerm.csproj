@@ -114,16 +114,15 @@
   <Target Name="CollectFrontendResources" AfterTargets="BuildFrontend" BeforeTargets="CoreCompile">
     <ItemGroup Condition="'$(IsPublishing)' != 'true'">
       <!-- Debug: embed original files (exclude .br) -->
-      <EmbeddedResource Include="wwwroot\**\*" Exclude="wwwroot\**\*.br" LinkBase="wwwroot" />
+      <EmbeddedResource Include="wwwroot\**\*" Exclude="wwwroot\**\*.br" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(IsPublishing)' == 'true'">
       <!-- Publish: embed .br files for compressible assets -->
-      <EmbeddedResource Include="wwwroot\**\*.br" LinkBase="wwwroot" />
+      <EmbeddedResource Include="wwwroot\**\*.br" />
       <!-- Publish: embed non-compressible originals (fonts, images, etc.) -->
       <EmbeddedResource Include="wwwroot\**\*"
-                        Exclude="wwwroot\**\*.js;wwwroot\**\*.css;wwwroot\**\*.html;wwwroot\**\*.txt;wwwroot\**\*.json;wwwroot\**\*.map;wwwroot\**\*.svg;wwwroot\**\*.br"
-                        LinkBase="wwwroot" />
+                        Exclude="wwwroot\**\*.js;wwwroot\**\*.css;wwwroot\**\*.html;wwwroot\**\*.txt;wwwroot\**\*.json;wwwroot\**\*.map;wwwroot\**\*.svg;wwwroot\**\*.br" />
     </ItemGroup>
   </Target>
 
