@@ -108,17 +108,39 @@
           ConsoleToMsBuild="true" />
   </Target>
 
-  <!-- Static embedded resources - files must exist at project evaluation time -->
-  <!-- Debug builds: original files (frontend-build.ps1 creates terminal.min.js) -->
-  <!-- Publish builds: .br files (release scripts run frontend-build.ps1 -Publish before dotnet publish) -->
+  <!-- ============================================ -->
+  <!-- EMBEDDED RESOURCES - READ THIS CAREFULLY!   -->
+  <!-- ============================================ -->
+  <!--
+    CRITICAL: These MUST be static ItemGroups, NOT inside a Target!
+
+    WHY: ItemGroups inside Targets do NOT work for EmbeddedResource in AOT builds.
+         We tried CreateItem and ItemGroup-inside-Target - both result in 0 resources
+         being embedded in the final AOT binary. Only static ItemGroups work.
+
+    REQUIREMENT: Files must EXIST when MSBuild evaluates the project (before targets run).
+
+    WORKFLOW:
+      - Debug (F5 in VS): BuildFrontend target creates terminal.min.js, then static
+        ItemGroup picks up wwwroot files. Works because BuildFrontend runs early.
+      - Publish: release-local.ps1 / release.yml call frontend-build.ps1 BEFORE
+        dotnet publish, so .br files exist when MSBuild evaluates the ItemGroup.
+
+    IF YOU GET 404 ERRORS AFTER PUBLISH:
+      1. Check mt.exe size - should be ~19MB with resources, ~17MB without
+      2. Verify frontend-build.ps1 -Publish runs BEFORE dotnet publish in your script
+      3. Verify .br files exist in wwwroot before dotnet publish starts
+      4. DO NOT try to "fix" this by moving ItemGroups into Targets - it won't work!
+  -->
   <ItemGroup Condition="'$(IsPublishing)' != 'true'">
+    <!-- Debug: embed original files (exclude .br) -->
     <EmbeddedResource Include="wwwroot\**\*" Exclude="wwwroot\**\*.br" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(IsPublishing)' == 'true'">
-    <!-- Brotli-compressed versions of text assets -->
+    <!-- Publish: embed Brotli-compressed versions of text assets -->
     <EmbeddedResource Include="wwwroot\**\*.br" />
-    <!-- Non-compressible originals (fonts, images, favicon) -->
+    <!-- Publish: embed non-compressible originals (fonts, images, favicon) -->
     <EmbeddedResource Include="wwwroot\**\*"
                       Exclude="wwwroot\**\*.js;wwwroot\**\*.css;wwwroot\**\*.html;wwwroot\**\*.txt;wwwroot\**\*.json;wwwroot\**\*.map;wwwroot\**\*.svg;wwwroot\**\*.br" />
   </ItemGroup>

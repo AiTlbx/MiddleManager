@@ -2,6 +2,16 @@
 # Frontend build script - handles TypeScript, bundling, and compression
 # Cross-platform: Windows, macOS, Linux
 #
+# IMPORTANT FOR PUBLISH BUILDS:
+#   This script MUST run BEFORE 'dotnet publish' starts!
+#   The csproj uses static ItemGroups for EmbeddedResource which are evaluated
+#   when MSBuild loads the project. If .br files don't exist at that moment,
+#   they won't be embedded and you'll get 404 errors.
+#
+#   Correct order in release scripts:
+#     1. frontend-build.ps1 -Publish    <-- Creates .br files
+#     2. dotnet publish                  <-- Embeds existing .br files
+#
 # Usage:
 #   ./frontend-build.ps1                    # Debug build (TypeScript + esbuild)
 #   ./frontend-build.ps1 -Publish           # Publish build (+ Brotli compression)

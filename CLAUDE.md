@@ -32,7 +32,7 @@ MidTerm is a web-based terminal multiplexer. Native AOT compiled, runs on macOS/
 ## Build Commands
 
 ```bash
-# Build web server
+# Build web server (debug)
 dotnet build Ai.Tlbx.MidTerm/Ai.Tlbx.MidTerm.csproj
 
 # Test
