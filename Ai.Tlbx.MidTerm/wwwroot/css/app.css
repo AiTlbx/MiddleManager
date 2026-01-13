@@ -70,6 +70,19 @@
     --btn-primary-hover: #89B4FF;
     --btn-secondary: #414868;
     --btn-secondary-hover: #545C7E;
+    --bg-hover: var(--bg-hover);
+    --bg-dropdown: var(--bg-dropdown);
+    --bg-settings: var(--bg-settings);
+    --bg-success: var(--bg-success);
+    --border-success: var(--border-success);
+    --bg-error: var(--bg-error);
+    --border-error: var(--border-error);
+    --bg-warning: var(--bg-warning);
+    --accent-warning: var(--accent-warning);
+    --diag-exception: var(--diag-exception);
+    --progress-bar: var(--progress-bar);
+    --progress-warning: var(--progress-warning);
+    --warning-badge: var(--warning-badge);
 }
 
 html, body {
@@ -113,7 +126,7 @@ html, body {
 
 .sidebar-resize-grip:hover,
 .sidebar-resize-grip.active {
-    background-color: #24283B;
+    background-color: var(--bg-hover);
 }
 
 .sidebar-header {
@@ -121,7 +134,7 @@ html, body {
     align-items: center;
     padding: 6px 12px;
     border-bottom: 1px solid var(--border-color);
-    background-color: #06060E;
+    background-color: var(--terminal-bg);
     position: relative;
 }
 
@@ -205,11 +218,11 @@ html, body {
 }
 
 .session-item:hover {
-    background-color: #1F2335;
+    background-color: var(--bg-dropdown);
 }
 
 .session-item.active {
-    background-color: #24283B;
+    background-color: var(--bg-hover);
     border-left-color: var(--accent-blue);
 }
 
@@ -490,7 +503,7 @@ html, body {
     display: flex;
     align-items: center;
     gap: 2px;
-    background: linear-gradient(to right, transparent, #1F2335 8px, #1F2335);
+    background: linear-gradient(to right, transparent, var(--bg-dropdown) 8px, var(--bg-dropdown));
     padding-left: 12px;
     opacity: 0;
     pointer-events: none;
@@ -503,7 +516,7 @@ html, body {
 }
 
 .session-item.active .session-actions {
-    background: linear-gradient(to right, transparent, #24283B 8px, #24283B);
+    background: linear-gradient(to right, transparent, var(--bg-hover) 8px, var(--bg-hover));
 }
 
 .session-resize,
@@ -570,7 +583,7 @@ html, body {
     border-top: 1px solid var(--border-color);
     font-size: 11px;
     color: var(--text-muted);
-    background-color: #06060E;
+    background-color: var(--terminal-bg);
 }
 
 .sidebar-footer .footer-row {
@@ -714,26 +727,26 @@ html, body {
 .terminal-container .xterm-viewport {
     overflow-y: scroll !important;
     scrollbar-width: thin;
-    scrollbar-color: #565B73 #101014;
+    scrollbar-color: var(--text-muted) var(--bg-primary);
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar {
     width: 7px;
-    background: #101014;
+    background: var(--bg-primary);
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar-track {
-    background: #101014;
+    background: var(--bg-primary);
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar-thumb {
-    background: #565B73;
+    background: var(--text-muted);
     border-radius: 3px;
     min-height: 30px;
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar-thumb:hover {
-    background: #787C99;
+    background: var(--text-secondary);
 }
 
 /* Hide xterm.js custom overlay scrollbar - we use native scrollbar */
@@ -874,7 +887,7 @@ html, body {
     }
 
     .sidebar-resize-grip:active {
-        background-color: #24283B;
+        background-color: var(--bg-hover);
     }
 
     .sidebar-resize-grip:active::before {
@@ -1491,7 +1504,7 @@ html, body {
 .settings-tabs {
     display: flex;
     flex-direction: column;
-    background: #14151E;
+    background: var(--bg-settings);
     border-right: 1px solid var(--border-color);
     padding: 16px 0;
     overflow-y: auto;
@@ -1575,7 +1588,7 @@ html, body {
     align-items: center;
     justify-content: space-between;
     padding: 10px 0;
-    border-bottom: 1px solid #1F2335;
+    border-bottom: 1px solid var(--bg-dropdown);
     gap: 16px;
 }
 
@@ -1726,7 +1739,7 @@ html, body {
 
 .setting-info {
     padding: 8px 12px;
-    background-color: #1F2335;
+    background-color: var(--bg-dropdown);
     border-radius: 4px;
     margin-bottom: 8px;
     font-size: 13px;
@@ -1748,7 +1761,7 @@ html, body {
     align-items: center;
     gap: 8px;
     padding: 12px;
-    background-color: #1F2335;
+    background-color: var(--bg-dropdown);
     border-radius: 4px;
     margin-bottom: 8px;
 }
@@ -1765,7 +1778,7 @@ html, body {
 .license-type {
     font-size: 12px;
     color: var(--accent-green);
-    background-color: #1A2F23;
+    background-color: var(--bg-success);
     padding: 2px 8px;
     border-radius: 3px;
 }
@@ -1795,8 +1808,8 @@ html, body {
 .update-panel {
     margin-bottom: 12px;
     padding: 10px;
-    background-color: #1A2F23;
-    border: 1px solid #2D5A3D;
+    background-color: var(--bg-success);
+    border: 1px solid var(--border-success);
     border-radius: 4px;
 }
 
@@ -1993,7 +2006,7 @@ html, body {
 }
 
 .update-card.github .btn-update:hover:not(:disabled) {
-    background: #4a90d9;
+    background: var(--progress-bar);
 }
 
 .update-card.github .btn-update:disabled {
@@ -2028,7 +2041,7 @@ html, body {
 }
 
 .update-card.local .btn-update:hover:not(:disabled) {
-    background: #e69500;
+    background: var(--progress-warning);
 }
 
 .update-card.local .btn-update:disabled {
@@ -2245,7 +2258,7 @@ html, body {
 }
 
 .status-item {
-    background-color: #1F2335;
+    background-color: var(--bg-dropdown);
     padding: 12px;
     border-radius: 6px;
 }
@@ -2276,7 +2289,7 @@ html, body {
 }
 
 .status-details {
-    background-color: #1A1B26;
+    background-color: var(--bg-sidebar);
     border-radius: 6px;
     padding: 12px;
     font-size: 12px;
@@ -2286,7 +2299,7 @@ html, body {
     display: flex;
     justify-content: space-between;
     padding: 6px 0;
-    border-bottom: 1px solid #1F2335;
+    border-bottom: 1px solid var(--bg-dropdown);
 }
 
 .status-detail-row:last-child {
@@ -2312,8 +2325,8 @@ html, body {
 .status-error-msg {
     margin-top: 12px;
     padding: 10px;
-    background-color: #2F1A1A;
-    border: 1px solid #5A2D2D;
+    background-color: var(--bg-error);
+    border: 1px solid var(--border-error);
     border-radius: 6px;
     color: var(--accent-red);
     font-size: 13px;
@@ -2331,7 +2344,7 @@ html, body {
     align-items: center;
     gap: 12px;
     padding: 10px 16px;
-    background-color: #3D2A1A;
+    background-color: var(--bg-warning);
     border-bottom: 1px solid var(--accent-orange);
     color: var(--accent-orange);
     font-size: 13px;
@@ -2363,7 +2376,7 @@ html, body {
 }
 
 .warning-btn:hover {
-    background-color: #FFB17A;
+    background-color: var(--warning-badge);
 }
 
 .warning-dismiss {
@@ -2470,8 +2483,8 @@ html, body {
 
 .error-message {
     padding: 12px;
-    background-color: #2F1A1A;
-    border: 1px solid #5A2D2D;
+    background-color: var(--bg-error);
+    border: 1px solid var(--border-error);
     border-radius: 6px;
     color: var(--accent-red);
     font-size: 13px;
@@ -2617,7 +2630,7 @@ html, body {
 /* Version Mismatch Warning Banner */
 .warning-banner {
     padding: 10px 16px;
-    background-color: #3D2A1A;
+    background-color: var(--bg-warning);
     border-bottom: 1px solid var(--accent-orange);
     color: var(--accent-orange);
     font-size: 13px;
@@ -2943,7 +2956,7 @@ html, body {
     text-transform: uppercase;
 }
 
-.diag-log-level.exception { color: #ff6b6b; }
+.diag-log-level.exception { color: var(--diag-exception); }
 .diag-log-level.error { color: var(--accent-red); }
 .diag-log-level.warn { color: var(--accent-orange); }
 .diag-log-level.info { color: var(--accent-cyan); }
@@ -3223,7 +3236,7 @@ html, body {
 }
 
 .warning-box strong {
-    color: #ffc107;
+    color: var(--accent-warning);
 }
 
 .endpoints-list {
