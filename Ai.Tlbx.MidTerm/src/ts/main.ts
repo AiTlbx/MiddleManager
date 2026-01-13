@@ -80,6 +80,7 @@ import {
   type CommandHistoryEntry,
 } from './modules/history';
 import { registerShellTypeLookup } from './modules/process';
+import { initTouchController } from './modules/touchController';
 import {
   cacheDOMElements,
   sessions,
@@ -162,6 +163,7 @@ async function init(): Promise<void> {
   initShareAccessButton();
   setupResizeObserver();
   setupVisualViewport();
+  initTouchController();
 
   fetchVersion();
   fetchNetworks();

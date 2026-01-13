@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=overlays-content" />
     <title>MidTerm</title>
 
     <!-- Favicons -->
@@ -539,6 +539,46 @@
                         <button type="submit" id="btn-save-password" class="btn-primary">Save</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Touch Controller Bar (mobile only) -->
+    <div id="touch-controller" class="touch-controller" aria-label="Terminal touch controls">
+        <div class="touch-bar-main">
+            <div class="touch-group touch-modifiers">
+                <button class="touch-key touch-modifier" data-modifier="ctrl" aria-pressed="false">Ctrl</button>
+                <button class="touch-key touch-modifier" data-modifier="alt" aria-pressed="false">Alt</button>
+                <button class="touch-key touch-modifier" data-modifier="shift" aria-pressed="false">Shift</button>
+            </div>
+            <div class="touch-group touch-arrows">
+                <button class="touch-key" data-key="up" aria-label="Arrow up">&#9650;</button>
+                <button class="touch-key" data-key="left" aria-label="Arrow left">&#9664;</button>
+                <button class="touch-key" data-key="down" aria-label="Arrow down">&#9660;</button>
+                <button class="touch-key" data-key="right" aria-label="Arrow right">&#9654;</button>
+            </div>
+            <button class="touch-key touch-expand" data-action="expand" aria-expanded="false" aria-controls="touch-panel">
+                <span class="expand-icon">&#8943;</span>
+            </button>
+        </div>
+        <div id="touch-panel" class="touch-panel" aria-hidden="true">
+            <div class="touch-panel-row">
+                <button class="touch-key" data-key="tab">Tab</button>
+                <button class="touch-key" data-key="esc">Esc</button>
+                <button class="touch-key" data-key="enter">Enter</button>
+                <button class="touch-key" data-key="backspace">&#9003;</button>
+            </div>
+            <div class="touch-panel-row">
+                <button class="touch-key" data-key="home">Home</button>
+                <button class="touch-key" data-key="end">End</button>
+                <button class="touch-key" data-key="pgup">PgUp</button>
+                <button class="touch-key" data-key="pgdn">PgDn</button>
+            </div>
+            <div class="touch-panel-row">
+                <button class="touch-key" data-key="insert">Ins</button>
+                <button class="touch-key" data-key="delete">Del</button>
+                <button class="touch-key" data-key="ctrlc">^C</button>
+                <button class="touch-key" data-key="ctrld">^D</button>
             </div>
         </div>
     </div>

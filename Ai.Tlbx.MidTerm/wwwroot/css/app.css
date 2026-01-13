@@ -3289,3 +3289,165 @@ html, body {
     max-width: 280px;
     display: inline-block;
 }
+
+/* ==========================================================================
+   Touch Controller Bar (Mobile)
+   ========================================================================== */
+
+.touch-controller {
+    display: none;
+    position: fixed;
+    bottom: env(keyboard-inset-height, 0px);
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    background: var(--bg-sidebar);
+    border-top: 1px solid var(--border-color);
+    padding: 8px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    flex-direction: column;
+    gap: 8px;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.touch-controller.visible {
+    display: flex;
+}
+
+/* Hide on devices with precise pointer (keyboard/mouse attached) */
+@media (hover: hover) and (pointer: fine) {
+    .touch-controller {
+        display: none !important;
+    }
+}
+
+/* Main bar layout */
+.touch-bar-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+/* Key groups */
+.touch-group {
+    display: flex;
+    gap: 4px;
+}
+
+/* Arrow keys in cross pattern */
+.touch-arrows {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 2px;
+}
+
+.touch-arrows [data-key="up"] {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+.touch-arrows [data-key="left"] {
+    grid-column: 1;
+    grid-row: 2;
+}
+
+.touch-arrows [data-key="down"] {
+    grid-column: 2;
+    grid-row: 2;
+}
+
+.touch-arrows [data-key="right"] {
+    grid-column: 3;
+    grid-row: 2;
+}
+
+/* Individual keys - matches topbar button style */
+.touch-key {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px 10px;
+    border: none;
+    border-radius: 8px;
+    background: var(--btn-secondary);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background-color 0.1s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.touch-key:active {
+    background: var(--btn-secondary-hover);
+}
+
+/* Sticky modifier active state */
+.touch-modifier.active {
+    background: var(--accent-blue);
+    color: var(--bg-primary);
+}
+
+/* Expand button */
+.touch-expand {
+    min-width: 44px;
+}
+
+.touch-expand .expand-icon {
+    display: inline-block;
+    transition: transform 0.2s;
+}
+
+.touch-expand[aria-expanded="true"] .expand-icon {
+    transform: rotate(90deg);
+}
+
+/* Fold-out panel */
+.touch-panel {
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-color);
+}
+
+.touch-panel.expanded {
+    display: flex;
+}
+
+.touch-panel-row {
+    display: flex;
+    gap: 4px;
+    justify-content: space-around;
+}
+
+.touch-panel-row .touch-key {
+    flex: 1;
+    max-width: 80px;
+}
+
+/* Adjust terminal area when touch bar visible */
+body.touch-mode .terminals-area {
+    padding-bottom: 70px;
+}
+
+body.touch-mode.touch-panel-expanded .terminals-area {
+    padding-bottom: 180px;
+}
+
+/* Small screen adjustments */
+@media (max-width: 400px) {
+    .touch-key {
+        min-width: 38px;
+        min-height: 38px;
+        padding: 6px 8px;
+        font-size: 11px;
+    }
+
+    .touch-modifiers .touch-key {
+        padding: 6px 6px;
+    }
+}
