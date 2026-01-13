@@ -20,7 +20,7 @@ import {
   sessions,
 } from '../../state';
 import { getClipboardStyle, parseOutputFrame } from '../../utils';
-import { applyTerminalScaling, fitSessionToScreen } from './scaling';
+import { applyTerminalScaling } from './scaling';
 import { setupFileDrop, handleClipboardPaste, sanitizePasteContent } from './fileDrop';
 import { isBracketedPasteEnabled } from '../comms';
 
@@ -212,8 +212,16 @@ export function createTerminalForSession(
     requestAnimationFrame(() => {
       if (!sessionTerminals.has(sessionId)) return; // Session was deleted
 
-      // Fit terminal to current viewport using actual measured cell dimensions
-      fitSessionToScreen(sessionId);
+      // Sync xterm to server dimensions (local only, no server notification)
+      // This ensures the terminal matches what the server has without triggering resize race conditions
+      if (state.serverCols > 0 && state.serverRows > 0) {
+        try {
+          state.terminal.resize(state.serverCols, state.serverRows);
+        } catch {
+          // Resize may fail if terminal not fully initialized
+        }
+      }
+      applyTerminalScaling(sessionId, state);
 
       setupTerminalEvents(sessionId, terminal, container);
     });
