@@ -133,6 +133,16 @@ public class Program
 
         var sessionManager = new TtyHostSessionManager(runAsUser: settings.RunAsUser);
         var muxManager = new TtyHostMuxConnectionManager(sessionManager);
+        var historyService = new HistoryService(settingsService);
+
+        sessionManager.OnForegroundChanged += (sessionId, payload) =>
+        {
+            var session = sessionManager.GetSession(sessionId);
+            if (session is not null && !string.IsNullOrEmpty(payload.Name) && !string.IsNullOrEmpty(payload.Cwd))
+            {
+                historyService.RecordEntry(session.ShellType, payload.Name, payload.CommandLine, payload.Cwd);
+            }
+        };
 
         settingsService.AddSettingsListener(newSettings =>
         {
@@ -160,6 +170,7 @@ public class Program
         AuthEndpoints.MapAuthEndpoints(app, settingsService, authService);
         EndpointSetup.MapSystemEndpoints(app, sessionManager, updateService, settingsService, version);
         SessionApiEndpoints.MapSessionEndpoints(app, sessionManager);
+        HistoryEndpoints.MapHistoryEndpoints(app, historyService);
         EndpointSetup.MapWebSocketMiddleware(app, sessionManager, muxManager, updateService, settingsService, authService, logDirectory);
 
         var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();

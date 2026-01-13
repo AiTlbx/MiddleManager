@@ -6,12 +6,12 @@
 
 export {
   registerProcessStateCallback,
-  registerShellTypeLookup,
   getProcessState,
   handleProcessEvent,
   handleForegroundChange,
   clearProcessState,
   getRacingLogText,
+  getFullRacingLog,
   isRacingLogVisible,
   getForegroundInfo,
 } from './processMonitor';

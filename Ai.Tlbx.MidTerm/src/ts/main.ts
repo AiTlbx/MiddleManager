@@ -77,9 +77,8 @@ import {
   initializeCommandHistory,
   initHistoryDropdown,
   toggleHistoryDropdown,
-  type CommandHistoryEntry,
+  type LaunchEntry,
 } from './modules/history';
-import { registerShellTypeLookup } from './modules/process';
 import { initTouchController } from './modules/touchController';
 import {
   cacheDOMElements,
@@ -143,10 +142,6 @@ async function init(): Promise<void> {
   initializeSessionList();
   initializeCommandHistory();
   initHistoryDropdown(spawnFromHistory);
-  registerShellTypeLookup((sessionId) => {
-    const session = sessions.find((s) => s.id === sessionId);
-    return session?.shellType ?? null;
-  });
 
   const fontPromise = preloadTerminalFont();
   setFontsReadyPromise(fontPromise);
@@ -448,7 +443,7 @@ function promptRenameSession(sessionId: string): void {
   }
 }
 
-function spawnFromHistory(entry: CommandHistoryEntry): void {
+function spawnFromHistory(entry: LaunchEntry): void {
   const rect = dom.terminalsArea?.getBoundingClientRect();
   let cols = currentSettings?.defaultCols ?? 120;
   let rows = currentSettings?.defaultRows ?? 30;
@@ -486,6 +481,12 @@ function spawnFromHistory(entry: CommandHistoryEntry): void {
     .then((session) => {
       newlyCreatedSessions.add(session.id);
       selectSession(session.id);
+
+      if (entry.commandLine) {
+        setTimeout(() => {
+          sendInput(session.id, entry.commandLine!);
+        }, 100);
+      }
     })
     .catch((e) => {
       log.error(() => `Failed to spawn from history: ${e}`);

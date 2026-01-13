@@ -51,6 +51,8 @@ namespace Ai.Tlbx.MidTerm.Services;
 [JsonSerializable(typeof(List<LogSessionInfo>))]
 [JsonSerializable(typeof(List<LogEntryMessage>))]
 [JsonSerializable(typeof(SettingsWsMessage))]
+[JsonSerializable(typeof(LaunchEntry))]
+[JsonSerializable(typeof(List<LaunchEntry>))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, UseStringEnumConverter = true)]
 public partial class AppJsonContext : JsonSerializerContext
 {

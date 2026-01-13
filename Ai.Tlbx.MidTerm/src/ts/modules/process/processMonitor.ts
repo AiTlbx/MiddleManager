@@ -12,25 +12,14 @@ import type {
   RacingLogEntry,
 } from '../../types';
 import { createLogger } from '../logging';
-import { recordCommand } from '../history';
 
 const log = createLogger('process');
 
 const MAX_RACING_LOG_ENTRIES = 10;
-const RACING_LOG_HIDE_DELAY = 2000;
 
 const processStates = new Map<string, ProcessState>();
-const hideTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 let onProcessStateChanged: ((sessionId: string, state: ProcessState) => void) | null = null;
-let getSessionShellType: ((sessionId: string) => string | null) | null = null;
-
-/**
- * Register function to get shell type for a session.
- */
-export function registerShellTypeLookup(fn: (sessionId: string) => string | null): void {
-  getSessionShellType = fn;
-}
 
 /**
  * Register callback for process state changes.
@@ -79,7 +68,6 @@ export function handleProcessEvent(sessionId: string, payload: ProcessEventPaylo
     }
 
     state.showRacingLog = true;
-    resetHideTimer(sessionId, state);
     notifyStateChange(sessionId, state);
 
     log.verbose(() => `Process exec: ${payload.Name} (${payload.Pid})`);
@@ -90,6 +78,7 @@ export function handleProcessEvent(sessionId: string, payload: ProcessEventPaylo
 
 /**
  * Handle foreground process change from server.
+ * Backend records history automatically via OnForegroundChanged event.
  */
 export function handleForegroundChange(sessionId: string, payload: ForegroundChangePayload): void {
   const state = getProcessState(sessionId);
@@ -100,13 +89,6 @@ export function handleForegroundChange(sessionId: string, payload: ForegroundCha
 
   notifyStateChange(sessionId, state);
 
-  if (payload.Name && payload.Cwd && getSessionShellType) {
-    const shellType = getSessionShellType(sessionId);
-    if (shellType) {
-      recordCommand(shellType, payload.Name, payload.Cwd);
-    }
-  }
-
   log.verbose(() => `Foreground: ${payload.Name} (${payload.Pid}) in ${payload.Cwd}`);
 }
 
@@ -114,18 +96,31 @@ export function handleForegroundChange(sessionId: string, payload: ForegroundCha
  * Clear process state for a session.
  */
 export function clearProcessState(sessionId: string): void {
-  const timer = hideTimers.get(sessionId);
-  if (timer) {
-    clearTimeout(timer);
-    hideTimers.delete(sessionId);
-  }
   processStates.delete(sessionId);
 }
 
 /**
- * Get racing log display text.
+ * Get racing log display text (single line - latest entry only).
  */
 export function getRacingLogText(sessionId: string): string {
+  const state = processStates.get(sessionId);
+  if (!state || state.recentProcesses.length === 0) {
+    return '';
+  }
+
+  const latest = state.recentProcesses[state.recentProcesses.length - 1]!;
+  if (latest.commandLine) {
+    return latest.commandLine.length > 40
+      ? latest.commandLine.slice(0, 40) + '\u2026'
+      : latest.commandLine;
+  }
+  return latest.name;
+}
+
+/**
+ * Get full racing log for hover tooltip (all entries).
+ */
+export function getFullRacingLog(sessionId: string): string {
   const state = processStates.get(sessionId);
   if (!state || state.recentProcesses.length === 0) {
     return '';
@@ -134,21 +129,19 @@ export function getRacingLogText(sessionId: string): string {
   return state.recentProcesses
     .map((e) => {
       if (e.commandLine) {
-        const truncated =
-          e.commandLine.length > 20 ? e.commandLine.slice(0, 20) + '\u2026' : e.commandLine;
-        return truncated;
+        return e.commandLine.length > 60 ? e.commandLine.slice(0, 60) + '\u2026' : e.commandLine;
       }
       return e.name;
     })
-    .join(' \u2192 ');
+    .join('\n');
 }
 
 /**
- * Check if racing log should be visible.
+ * Check if racing log has entries.
  */
 export function isRacingLogVisible(sessionId: string): boolean {
   const state = processStates.get(sessionId);
-  return state?.showRacingLog ?? false;
+  return (state?.recentProcesses.length ?? 0) > 0;
 }
 
 /**
@@ -160,21 +153,6 @@ export function getForegroundInfo(sessionId: string): { name: string | null; cwd
     name: state?.foregroundName ?? null,
     cwd: state?.foregroundCwd ?? null,
   };
-}
-
-function resetHideTimer(sessionId: string, state: ProcessState): void {
-  const existing = hideTimers.get(sessionId);
-  if (existing) {
-    clearTimeout(existing);
-  }
-
-  const timer = setTimeout(() => {
-    state.showRacingLog = false;
-    hideTimers.delete(sessionId);
-    notifyStateChange(sessionId, state);
-  }, RACING_LOG_HIDE_DELAY);
-
-  hideTimers.set(sessionId, timer);
 }
 
 function notifyStateChange(sessionId: string, state: ProcessState): void {

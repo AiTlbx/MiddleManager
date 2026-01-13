@@ -12,6 +12,7 @@ import {
   registerProcessStateCallback,
   getForegroundInfo,
   getRacingLogText,
+  getFullRacingLog,
   isRacingLogVisible,
 } from '../process';
 
@@ -82,12 +83,13 @@ function updateSessionProcessInfo(sessionId: string): void {
     processInfoEl.appendChild(fgIndicator);
   }
 
-  // Racing subprocess log
+  // Racing subprocess log (single line, full history on hover)
   const racingText = getRacingLogText(sessionId);
   if (racingText && isRacingLogVisible(sessionId)) {
     const racingLog = document.createElement('span');
     racingLog.className = 'session-racing-log';
     racingLog.textContent = `\u26A1 ${racingText}`;
+    racingLog.title = getFullRacingLog(sessionId);
     processInfoEl.appendChild(racingLog);
   }
 }
@@ -238,12 +240,13 @@ export function renderSessionList(): void {
       processInfo.appendChild(fgIndicator);
     }
 
-    // Racing subprocess log
+    // Racing subprocess log (single line, full history on hover)
     const racingText = getRacingLogText(session.id);
     if (racingText && isRacingLogVisible(session.id)) {
       const racingLog = document.createElement('span');
       racingLog.className = 'session-racing-log';
       racingLog.textContent = `\u26A1 ${racingText}`;
+      racingLog.title = getFullRacingLog(session.id);
       processInfo.appendChild(racingLog);
     }
 

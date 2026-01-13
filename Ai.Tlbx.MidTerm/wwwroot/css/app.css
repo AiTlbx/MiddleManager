@@ -437,6 +437,37 @@ html, body {
     color: var(--accent-red);
 }
 
+.history-item-star {
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-right: 4px;
+    transition: color 0.1s;
+}
+
+.history-item-star:hover {
+    color: var(--accent-orange);
+}
+
+.history-item-star.starred {
+    color: var(--accent-orange);
+}
+
+.history-item-star.loading,
+.history-item-star:disabled {
+    opacity: 0.5;
+    cursor: wait;
+}
+
 .session-rename-input {
     font-size: 13px;
     padding: 2px 4px;
