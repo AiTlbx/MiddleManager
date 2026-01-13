@@ -38,6 +38,8 @@ public abstract class ShellConfigurationBase : IShellConfiguration
     /// - WT_SESSION: Plain GUID without braces
     /// - TERM: Must NOT be set (Windows Terminal doesn't set it)
     /// - COLORTERM: Must NOT be set (Windows Terminal doesn't set it)
+    /// - TEMP/TMP: Must use long path names, not 8.3 short names (e.g., JOHANN~1.SCH)
+    ///   Short names break Claude Code's image path detection/matching.
     ///
     /// If these don't match exactly, Claude Code won't recognize image paths dropped/pasted
     /// into the terminal and will just show the raw path instead of [Image #1].
@@ -66,6 +68,10 @@ public abstract class ShellConfigurationBase : IShellConfiguration
             // DO NOT set TERM or COLORTERM - Windows Terminal doesn't set these
             env["WT_SESSION"] = Guid.NewGuid().ToString();
             env["WT_PROFILE_ID"] = "{" + Guid.NewGuid().ToString() + "}";
+
+            // Fix TEMP/TMP 8.3 short path names (e.g., C:\Users\JOHANN~1.SCH\...)
+            // Short paths break Claude Code's image path detection when usernames exceed 8 chars.
+            NormalizeTempPaths(env);
         }
         else
         {
@@ -80,6 +86,32 @@ public abstract class ShellConfigurationBase : IShellConfiguration
         env["MSYS"] = "enable_pcon";
 
         return env;
+    }
+
+    private static void NormalizeTempPaths(Dictionary<string, string> env)
+    {
+        // If TEMP/TMP contain a tilde (~), they're using 8.3 short names.
+        // Reconstruct from LOCALAPPDATA which Windows always provides as long path.
+        if (!env.TryGetValue("LOCALAPPDATA", out var localAppData) || string.IsNullOrEmpty(localAppData))
+        {
+            return;
+        }
+
+        var longTempPath = Path.Combine(localAppData, "Temp");
+        if (!Directory.Exists(longTempPath))
+        {
+            return;
+        }
+
+        if (env.TryGetValue("TEMP", out var temp) && temp.Contains('~'))
+        {
+            env["TEMP"] = longTempPath;
+        }
+
+        if (env.TryGetValue("TMP", out var tmp) && tmp.Contains('~'))
+        {
+            env["TMP"] = longTempPath;
+        }
     }
 
     public virtual bool IsAvailable()

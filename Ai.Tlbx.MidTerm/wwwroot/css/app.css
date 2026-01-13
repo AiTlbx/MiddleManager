@@ -710,29 +710,30 @@ html, body {
     flex-shrink: 0;
 }
 
-/* Permanent dark scrollbar for xterm - takes 7px space, doesn't overlay */
+/* Permanent dark scrollbar for xterm */
 .terminal-container .xterm-viewport {
     overflow-y: scroll !important;
     scrollbar-width: thin;
-    scrollbar-color: var(--text-muted) var(--bg-primary);
+    scrollbar-color: #565B73 #101014;
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar {
     width: 7px;
-    background: var(--bg-primary);
+    background: #101014;
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar-track {
-    background: var(--bg-primary);
+    background: #101014;
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar-thumb {
-    background: var(--text-muted);
+    background: #565B73;
     border-radius: 3px;
+    min-height: 30px;
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar-thumb:hover {
-    background: var(--text-secondary);
+    background: #787C99;
 }
 
 /* Hide xterm.js custom overlay scrollbar - we use native scrollbar */
