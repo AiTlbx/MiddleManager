@@ -92,6 +92,7 @@ import {
   setActiveSessionId,
   setFontsReadyPromise,
   setRenamingSessionId,
+  isSessionListRerendering,
   newlyCreatedSessions,
   pendingSessions,
 } from './state';
@@ -430,6 +431,8 @@ function startInlineRename(sessionId: string): void {
   let committed = false;
   function finishRename(): void {
     if (committed) return;
+    // Skip if blur was triggered by re-render (element will be reattached)
+    if (isSessionListRerendering) return;
     committed = true;
     setRenamingSessionId(null);
     renameSession(sessionId, input.value);
@@ -438,6 +441,8 @@ function startInlineRename(sessionId: string): void {
 
   function cancelRename(): void {
     if (committed) return;
+    // Skip if triggered by re-render
+    if (isSessionListRerendering) return;
     committed = true;
     setRenamingSessionId(null);
     input.replaceWith(titleSpan as Node);

@@ -99,6 +99,9 @@ export let fontsReadyPromise: Promise<void> | null = null;
 /** Session currently being renamed (guards against re-render destroying input) */
 export let renamingSessionId: string | null = null;
 
+/** True during session list re-render (prevents blur from committing rename) */
+export let isSessionListRerendering = false;
+
 // =============================================================================
 // DOM Element Cache
 // =============================================================================
@@ -194,6 +197,10 @@ export function setWindowsBuildNumber(build: number | null): void {
 
 export function setRenamingSessionId(id: string | null): void {
   renamingSessionId = id;
+}
+
+export function setSessionListRerendering(value: boolean): void {
+  isSessionListRerendering = value;
 }
 
 // =============================================================================

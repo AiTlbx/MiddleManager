@@ -13,6 +13,7 @@ import {
   pendingSessions,
   dom,
   renamingSessionId,
+  setSessionListRerendering,
 } from '../../state';
 import { icon } from '../../constants';
 import {
@@ -184,173 +185,180 @@ export function getSessionDisplayName(session: Session): string {
 export function renderSessionList(): void {
   if (!dom.sessionList) return;
 
-  // Preserve the item being renamed (if any) to avoid destroying the input mid-edit
-  let renamingElement: HTMLElement | null = null;
-  if (renamingSessionId) {
-    renamingElement = dom.sessionList.querySelector(
-      `[data-session-id="${renamingSessionId}"]`,
-    ) as HTMLElement | null;
-    if (renamingElement) {
-      renamingElement.remove();
-    }
-  }
-
-  dom.sessionList.innerHTML = '';
-
-  sessions.forEach((session) => {
-    // Reuse preserved element for the session being renamed
-    if (session.id === renamingSessionId && renamingElement) {
-      // Update active class in case it changed
-      renamingElement.classList.toggle('active', session.id === activeSessionId);
-      dom.sessionList!.appendChild(renamingElement);
-      return;
-    }
-    const isPending = pendingSessions.has(session.id);
-    const item = document.createElement('div');
-    item.className =
-      'session-item' +
-      (session.id === activeSessionId ? ' active' : '') +
-      (isPending ? ' pending' : '');
-    item.dataset.sessionId = session.id;
-
-    if (!isPending) {
-      item.addEventListener('click', () => {
-        closeMobileActionMenu();
-        if (callbacks) {
-          callbacks.onSelect(session.id);
-          callbacks.onCloseSidebar();
-        }
-      });
+  // Set flag to prevent blur handler from committing rename during DOM manipulation
+  setSessionListRerendering(true);
+  try {
+    // Preserve the item being renamed (if any) to avoid destroying the input mid-edit
+    let renamingElement: HTMLElement | null = null;
+    if (renamingSessionId) {
+      renamingElement = dom.sessionList.querySelector(
+        `[data-session-id="${renamingSessionId}"]`,
+      ) as HTMLElement | null;
+      if (renamingElement) {
+        renamingElement.remove();
+      }
     }
 
-    const info = document.createElement('div');
-    info.className = 'session-info';
+    dom.sessionList.innerHTML = '';
 
-    if (isPending) {
-      const spinner = document.createElement('span');
-      spinner.className = 'session-spinner';
-      info.appendChild(spinner);
+    sessions.forEach((session) => {
+      // Reuse preserved element for the session being renamed
+      if (session.id === renamingSessionId && renamingElement) {
+        // Update active class in case it changed
+        renamingElement.classList.toggle('active', session.id === activeSessionId);
+        dom.sessionList!.appendChild(renamingElement);
+        return;
+      }
+      const isPending = pendingSessions.has(session.id);
+      const item = document.createElement('div');
+      item.className =
+        'session-item' +
+        (session.id === activeSessionId ? ' active' : '') +
+        (isPending ? ' pending' : '');
+      item.dataset.sessionId = session.id;
+
+      if (!isPending) {
+        item.addEventListener('click', () => {
+          closeMobileActionMenu();
+          if (callbacks) {
+            callbacks.onSelect(session.id);
+            callbacks.onCloseSidebar();
+          }
+        });
+      }
+
+      const info = document.createElement('div');
+      info.className = 'session-info';
+
+      if (isPending) {
+        const spinner = document.createElement('span');
+        spinner.className = 'session-spinner';
+        info.appendChild(spinner);
+      }
+
+      const displayInfo = getSessionDisplayInfo(session);
+
+      const title = document.createElement('span');
+      title.className = 'session-title';
+      title.textContent = displayInfo.primary;
+      info.appendChild(title);
+
+      if (displayInfo.secondary) {
+        item.classList.add('two-line');
+        const subtitle = document.createElement('span');
+        subtitle.className = 'session-subtitle';
+        subtitle.textContent = displayInfo.secondary;
+        info.appendChild(subtitle);
+      }
+
+      // Process indicator container
+      const processInfo = document.createElement('div');
+      processInfo.className = 'session-process-info';
+      processInfo.dataset.sessionId = session.id;
+
+      // Foreground process indicator
+      const fgInfo = getForegroundInfo(session.id);
+      if (fgInfo.name) {
+        const fgIndicator = document.createElement('span');
+        fgIndicator.className = 'session-foreground';
+        const cmdDisplay = fgInfo.commandLine ?? fgInfo.name;
+        const truncatedCmd =
+          cmdDisplay.length > 30 ? cmdDisplay.slice(0, 30) + '\u2026' : cmdDisplay;
+        const cwdDisplay = fgInfo.cwd ? ` \u2022 ${shortenPath(fgInfo.cwd)}` : '';
+        fgIndicator.textContent = `\u25B6 ${truncatedCmd}${cwdDisplay}`;
+        fgIndicator.title = `${fgInfo.commandLine ?? fgInfo.name}\n${fgInfo.cwd ?? ''}`;
+        processInfo.appendChild(fgIndicator);
+      }
+
+      // Racing subprocess log (single line, full history on hover)
+      const racingText = getRacingLogText(session.id);
+      if (racingText && isRacingLogVisible(session.id)) {
+        const racingLog = document.createElement('span');
+        racingLog.className = 'session-racing-log';
+        racingLog.textContent = `\u26A1 ${racingText}`;
+        racingLog.title = getFullRacingLog(session.id);
+        processInfo.appendChild(racingLog);
+      }
+
+      // Always add processInfo container so updateSessionProcessInfo can find it later
+      info.appendChild(processInfo);
+
+      const actions = document.createElement('div');
+      actions.className = 'session-actions';
+
+      if (!isPending) {
+        const resizeBtn = document.createElement('button');
+        resizeBtn.className = 'session-resize';
+        resizeBtn.innerHTML = icon('resize');
+        resizeBtn.title = 'Fit to screen';
+        resizeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          closeMobileActionMenu();
+          if (callbacks) {
+            callbacks.onResize(session.id);
+          }
+        });
+
+        const renameBtn = document.createElement('button');
+        renameBtn.className = 'session-rename';
+        renameBtn.innerHTML = icon('rename');
+        renameBtn.title = 'Rename session';
+        renameBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          closeMobileActionMenu();
+          if (callbacks) {
+            callbacks.onRename(session.id);
+          }
+        });
+
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'session-close';
+        closeBtn.innerHTML = icon('close');
+        closeBtn.title = 'Close session';
+        closeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          closeMobileActionMenu();
+          if (callbacks) {
+            callbacks.onDelete(session.id);
+          }
+        });
+
+        actions.appendChild(resizeBtn);
+        actions.appendChild(renameBtn);
+        actions.appendChild(closeBtn);
+      }
+
+      item.appendChild(info);
+
+      // Mobile menu button (toggles action bar visibility)
+      if (!isPending) {
+        const menuBtn = document.createElement('button');
+        menuBtn.className = 'session-menu-btn';
+        menuBtn.innerHTML = icon('more');
+        menuBtn.title = 'Actions';
+        menuBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const isOpen = item.classList.contains('menu-open');
+          closeMobileActionMenu();
+          if (!isOpen) {
+            item.classList.add('menu-open');
+            showMobileBackdrop();
+          }
+        });
+        item.appendChild(menuBtn);
+      }
+
+      item.appendChild(actions);
+      dom.sessionList!.appendChild(item);
+    });
+
+    // Count only non-pending sessions
+    const realSessionCount = sessions.filter((s) => !pendingSessions.has(s.id)).length;
+    if (dom.sessionCount) {
+      dom.sessionCount.textContent = String(realSessionCount);
     }
-
-    const displayInfo = getSessionDisplayInfo(session);
-
-    const title = document.createElement('span');
-    title.className = 'session-title';
-    title.textContent = displayInfo.primary;
-    info.appendChild(title);
-
-    if (displayInfo.secondary) {
-      item.classList.add('two-line');
-      const subtitle = document.createElement('span');
-      subtitle.className = 'session-subtitle';
-      subtitle.textContent = displayInfo.secondary;
-      info.appendChild(subtitle);
-    }
-
-    // Process indicator container
-    const processInfo = document.createElement('div');
-    processInfo.className = 'session-process-info';
-    processInfo.dataset.sessionId = session.id;
-
-    // Foreground process indicator
-    const fgInfo = getForegroundInfo(session.id);
-    if (fgInfo.name) {
-      const fgIndicator = document.createElement('span');
-      fgIndicator.className = 'session-foreground';
-      const cmdDisplay = fgInfo.commandLine ?? fgInfo.name;
-      const truncatedCmd = cmdDisplay.length > 30 ? cmdDisplay.slice(0, 30) + '\u2026' : cmdDisplay;
-      const cwdDisplay = fgInfo.cwd ? ` \u2022 ${shortenPath(fgInfo.cwd)}` : '';
-      fgIndicator.textContent = `\u25B6 ${truncatedCmd}${cwdDisplay}`;
-      fgIndicator.title = `${fgInfo.commandLine ?? fgInfo.name}\n${fgInfo.cwd ?? ''}`;
-      processInfo.appendChild(fgIndicator);
-    }
-
-    // Racing subprocess log (single line, full history on hover)
-    const racingText = getRacingLogText(session.id);
-    if (racingText && isRacingLogVisible(session.id)) {
-      const racingLog = document.createElement('span');
-      racingLog.className = 'session-racing-log';
-      racingLog.textContent = `\u26A1 ${racingText}`;
-      racingLog.title = getFullRacingLog(session.id);
-      processInfo.appendChild(racingLog);
-    }
-
-    // Always add processInfo container so updateSessionProcessInfo can find it later
-    info.appendChild(processInfo);
-
-    const actions = document.createElement('div');
-    actions.className = 'session-actions';
-
-    if (!isPending) {
-      const resizeBtn = document.createElement('button');
-      resizeBtn.className = 'session-resize';
-      resizeBtn.innerHTML = icon('resize');
-      resizeBtn.title = 'Fit to screen';
-      resizeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeMobileActionMenu();
-        if (callbacks) {
-          callbacks.onResize(session.id);
-        }
-      });
-
-      const renameBtn = document.createElement('button');
-      renameBtn.className = 'session-rename';
-      renameBtn.innerHTML = icon('rename');
-      renameBtn.title = 'Rename session';
-      renameBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeMobileActionMenu();
-        if (callbacks) {
-          callbacks.onRename(session.id);
-        }
-      });
-
-      const closeBtn = document.createElement('button');
-      closeBtn.className = 'session-close';
-      closeBtn.innerHTML = icon('close');
-      closeBtn.title = 'Close session';
-      closeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeMobileActionMenu();
-        if (callbacks) {
-          callbacks.onDelete(session.id);
-        }
-      });
-
-      actions.appendChild(resizeBtn);
-      actions.appendChild(renameBtn);
-      actions.appendChild(closeBtn);
-    }
-
-    item.appendChild(info);
-
-    // Mobile menu button (toggles action bar visibility)
-    if (!isPending) {
-      const menuBtn = document.createElement('button');
-      menuBtn.className = 'session-menu-btn';
-      menuBtn.innerHTML = icon('more');
-      menuBtn.title = 'Actions';
-      menuBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const isOpen = item.classList.contains('menu-open');
-        closeMobileActionMenu();
-        if (!isOpen) {
-          item.classList.add('menu-open');
-          showMobileBackdrop();
-        }
-      });
-      item.appendChild(menuBtn);
-    }
-
-    item.appendChild(actions);
-    dom.sessionList!.appendChild(item);
-  });
-
-  // Count only non-pending sessions
-  const realSessionCount = sessions.filter((s) => !pendingSessions.has(s.id)).length;
-  if (dom.sessionCount) {
-    dom.sessionCount.textContent = String(realSessionCount);
+  } finally {
+    setSessionListRerendering(false);
   }
 }
 
