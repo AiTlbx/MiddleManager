@@ -835,8 +835,7 @@ html, body {
     text-overflow: ellipsis;
 }
 
-.title-bar-actions {
-    margin-left: auto;
+.title-bar-buttons {
     display: flex;
     gap: 4px;
     flex-shrink: 0;
