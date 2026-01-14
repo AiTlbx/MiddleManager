@@ -30,6 +30,7 @@
     "typescript-eslint": "^8.53.0"
   },
   "dependencies": {
+    "midterm": "file:",
     "nanostores": "^1.1.0"
   }
 }

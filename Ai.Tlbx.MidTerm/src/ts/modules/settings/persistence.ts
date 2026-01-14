@@ -7,13 +7,8 @@
 
 import type { Settings, ThemeName, TerminalState, HealthResponse } from '../../types';
 import { THEMES, TERMINAL_FONT_STACK, JS_BUILD_VERSION } from '../../constants';
-import {
-  currentSettings,
-  setCurrentSettings,
-  dom,
-  sessionTerminals,
-  settingsOpen,
-} from '../../state';
+import { currentSettings, setCurrentSettings, dom, sessionTerminals } from '../../state';
+import { $settingsOpen } from '../../stores';
 import { setCookie } from '../../utils';
 
 /**
@@ -195,7 +190,7 @@ export function applySettingsToTerminals(): void {
  * Updates the form if settings panel is open, applies to terminals, and updates theme.
  */
 export function applyReceivedSettings(settings: Settings): void {
-  if (settingsOpen) {
+  if ($settingsOpen.get()) {
     populateSettingsForm(settings);
   }
 

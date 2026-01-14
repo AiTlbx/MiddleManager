@@ -6,15 +6,8 @@
  */
 
 import type { Session, ProcessState } from '../../types';
-import {
-  sessions,
-  activeSessionId,
-  settingsOpen,
-  pendingSessions,
-  dom,
-  renamingSessionId,
-  setSessionListRerendering,
-} from '../../state';
+import { pendingSessions, dom, setSessionListRerendering } from '../../state';
+import { $settingsOpen, $activeSessionId, $sessionList, $renamingSessionId } from '../../stores';
 import { icon } from '../../constants';
 import {
   registerProcessStateCallback,
@@ -190,11 +183,15 @@ export function renderSessionList(): void {
   setSessionListRerendering(true);
 
   try {
+    const sessions = $sessionList.get();
+    const activeSessionId = $activeSessionId.get();
+    const renamingId = $renamingSessionId.get();
+
     // Find element being renamed (if any) - we'll keep it attached to prevent focus loss
     let renamingElement: HTMLElement | null = null;
-    if (renamingSessionId) {
+    if (renamingId) {
       renamingElement = dom.sessionList.querySelector(
-        `[data-session-id="${renamingSessionId}"]`,
+        `[data-session-id="${renamingId}"]`,
       ) as HTMLElement | null;
     }
 
@@ -208,7 +205,7 @@ export function renderSessionList(): void {
 
     sessions.forEach((session) => {
       // Reuse preserved element for the session being renamed
-      if (session.id === renamingSessionId && renamingElement) {
+      if (session.id === renamingId && renamingElement) {
         // Update active class in case it changed
         renamingElement.classList.toggle('active', session.id === activeSessionId);
         dom.sessionList!.appendChild(renamingElement);
@@ -386,13 +383,15 @@ export function renderSessionList(): void {
 export function updateEmptyState(): void {
   if (!dom.emptyState) return;
 
+  const isSettingsOpen = $settingsOpen.get();
+  const sessions = $sessionList.get();
   if (sessions.length === 0) {
     // Only show empty state if settings panel is not open
-    if (!settingsOpen) {
+    if (!isSettingsOpen) {
       dom.emptyState.classList.remove('hidden');
       if (dom.settingsView) dom.settingsView.classList.add('hidden');
     }
-  } else if (!settingsOpen) {
+  } else if (!isSettingsOpen) {
     dom.emptyState.classList.add('hidden');
   }
 }
@@ -404,6 +403,8 @@ export function updateEmptyState(): void {
 export function updateMobileTitle(): void {
   if (!dom.mobileTitle) return;
 
+  const sessions = $sessionList.get();
+  const activeSessionId = $activeSessionId.get();
   const session = sessions.find((s) => s.id === activeSessionId);
   dom.mobileTitle.textContent = session ? getSessionDisplayName(session) : 'MidTerm';
 

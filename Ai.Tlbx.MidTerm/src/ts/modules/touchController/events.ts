@@ -4,7 +4,7 @@
  * Manages touch interactions for the controller bar.
  */
 
-import { activeSessionId } from '../../state';
+import { $activeSessionId } from '../../stores';
 import { sendInput } from '../comms/muxChannel';
 import { KEY_SEQUENCES, SELECTORS, CSS_CLASSES } from './constants';
 import { toggleModifier, consumeModifiers, getModifierCode, type ModifierKey } from './modifiers';
@@ -108,7 +108,7 @@ function handleExpandToggle(): void {
 }
 
 function handleKeyPress(key: string): void {
-  const sessionId = activeSessionId;
+  const sessionId = $activeSessionId.get();
   if (!sessionId) return;
 
   const mods = consumeModifiers();

@@ -5,7 +5,8 @@
  * keyboard shortcuts, and search result navigation.
  */
 
-import { sessionTerminals, activeSessionId } from '../../state';
+import { sessionTerminals } from '../../state';
+import { $activeSessionId } from '../../stores';
 
 import { type Terminal } from '@xterm/xterm';
 import { SearchAddon } from '@xterm/addon-search';
@@ -70,17 +71,19 @@ export function hideSearch(): void {
     searchVisible = false;
   }
 
+  const activeId = $activeSessionId.get();
+
   // Clear decorations from active terminal
-  if (activeSessionId) {
-    const state = searchStates.get(activeSessionId);
+  if (activeId) {
+    const state = searchStates.get(activeId);
     if (state?.addon) {
       state.addon.clearDecorations();
     }
   }
 
   // Return focus to terminal
-  if (activeSessionId) {
-    const termState = sessionTerminals.get(activeSessionId);
+  if (activeId) {
+    const termState = sessionTerminals.get(activeId);
     if (termState) {
       termState.terminal.focus();
     }
@@ -98,12 +101,13 @@ export function isSearchVisible(): boolean {
  * Find next match
  */
 export function findNext(): void {
-  if (!activeSessionId || !searchInput) return;
+  const activeId = $activeSessionId.get();
+  if (!activeId || !searchInput) return;
 
   const query = searchInput.value;
   if (!query) return;
 
-  const state = searchStates.get(activeSessionId);
+  const state = searchStates.get(activeId);
   if (!state?.addon) return;
 
   const result = state.addon.findNext(query, { incremental: false });
@@ -114,12 +118,13 @@ export function findNext(): void {
  * Find previous match
  */
 export function findPrevious(): void {
-  if (!activeSessionId || !searchInput) return;
+  const activeId = $activeSessionId.get();
+  if (!activeId || !searchInput) return;
 
   const query = searchInput.value;
   if (!query) return;
 
-  const state = searchStates.get(activeSessionId);
+  const state = searchStates.get(activeId);
   if (!state?.addon) return;
 
   const result = state.addon.findPrevious(query);
@@ -152,7 +157,7 @@ export function bindSearchEvents(): void {
 
   if (searchInput) {
     searchInput.addEventListener('input', () => {
-      if (activeSessionId && searchInput.value) {
+      if ($activeSessionId.get() && searchInput.value) {
         findNext();
       } else if (searchResults) {
         searchResults.textContent = '0/0';

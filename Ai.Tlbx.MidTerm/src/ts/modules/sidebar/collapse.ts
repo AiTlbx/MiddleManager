@@ -5,7 +5,8 @@
  * and island title updates for desktop view.
  */
 
-import { sidebarOpen, setSidebarOpen, setSidebarCollapsed, dom } from '../../state';
+import { dom } from '../../state';
+import { $sidebarOpen, $sidebarCollapsed } from '../../stores';
 import { getCookie, setCookie } from '../../utils';
 import { updateMobileTitle } from './sessionList';
 import { rescaleAllTerminals } from '../terminal/scaling';
@@ -28,15 +29,16 @@ const MAX_SIDEBAR_WIDTH = 400;
  * Toggle mobile sidebar visibility
  */
 export function toggleSidebar(): void {
-  setSidebarOpen(!sidebarOpen);
-  if (dom.app) dom.app.classList.toggle('sidebar-open', sidebarOpen);
+  const isOpen = !$sidebarOpen.get();
+  $sidebarOpen.set(isOpen);
+  if (dom.app) dom.app.classList.toggle('sidebar-open', isOpen);
 }
 
 /**
  * Close mobile sidebar
  */
 export function closeSidebar(): void {
-  setSidebarOpen(false);
+  $sidebarOpen.set(false);
   if (dom.app) dom.app.classList.remove('sidebar-open');
 }
 
@@ -48,7 +50,7 @@ export function closeSidebar(): void {
  * Collapse sidebar to icon-only mode (desktop)
  */
 export function collapseSidebar(): void {
-  setSidebarCollapsed(true);
+  $sidebarCollapsed.set(true);
   if (dom.app) dom.app.classList.add('sidebar-collapsed');
   setCookie(SIDEBAR_COLLAPSED_COOKIE, 'true');
   updateMobileTitle();
@@ -59,7 +61,7 @@ export function collapseSidebar(): void {
  * Expand sidebar to full width (desktop)
  */
 export function expandSidebar(): void {
-  setSidebarCollapsed(false);
+  $sidebarCollapsed.set(false);
   if (dom.app) dom.app.classList.remove('sidebar-collapsed');
   setCookie(SIDEBAR_COLLAPSED_COOKIE, 'false');
   requestAnimationFrame(rescaleAllTerminals);
@@ -74,7 +76,7 @@ export function expandSidebar(): void {
  */
 export function restoreSidebarState(): void {
   if (getCookie(SIDEBAR_COLLAPSED_COOKIE) === 'true' && window.innerWidth > DESKTOP_BREAKPOINT) {
-    setSidebarCollapsed(true);
+    $sidebarCollapsed.set(true);
     if (dom.app) dom.app.classList.add('sidebar-collapsed');
   }
 

@@ -11,22 +11,22 @@ import { createLogger } from '../logging';
 
 const log = createLogger('state');
 import {
-  sessions,
-  activeSessionId,
-  settingsOpen,
   stateWs,
   stateReconnectTimer,
-  stateWsConnected,
-  muxWsConnected,
   sessionTerminals,
   newlyCreatedSessions,
   setStateWs,
   setStateReconnectTimer,
-  setStateWsConnected,
-  setSessions,
-  setActiveSessionId,
   setUpdateInfo,
 } from '../../state';
+import {
+  $settingsOpen,
+  $stateWsConnected,
+  $connectionStatus,
+  $activeSessionId,
+  $sessionList,
+  setSessions,
+} from '../../stores';
 
 // Forward declarations for functions from other modules
 // These will be imported when those modules are created
@@ -87,8 +87,7 @@ export function connectStateWebSocket(): void {
   setStateWs(ws);
 
   ws.onopen = () => {
-    setStateWsConnected(true);
-    updateConnectionStatus();
+    $stateWsConnected.set(true);
   };
 
   ws.onmessage = (event) => {
@@ -104,8 +103,7 @@ export function connectStateWebSocket(): void {
   };
 
   ws.onclose = () => {
-    setStateWsConnected(false);
-    updateConnectionStatus();
+    $stateWsConnected.set(false);
     scheduleStateReconnect();
   };
 
@@ -156,16 +154,19 @@ export function handleStateUpdate(newSessions: Session[]): void {
   updateEmptyState();
 
   // Auto-select first session if none active (but not if settings are open)
-  const firstSession = sessions[0];
-  if (!activeSessionId && firstSession && !settingsOpen) {
+  const isSettingsOpen = $settingsOpen.get();
+  const activeId = $activeSessionId.get();
+  const sessionList = $sessionList.get();
+  const firstSession = sessionList[0];
+  if (!activeId && firstSession && !isSettingsOpen) {
     selectSession(firstSession.id, { closeSettingsPanel: false });
   }
 
   // Handle active session being deleted (but not if settings are open)
-  if (activeSessionId && !sessions.find((s) => s.id === activeSessionId)) {
-    setActiveSessionId(null);
-    const nextSession = sessions[0];
-    if (nextSession && !settingsOpen) {
+  if (activeId && !sessionList.find((s) => s.id === activeId)) {
+    $activeSessionId.set(null);
+    const nextSession = sessionList[0];
+    if (nextSession && !isSettingsOpen) {
       selectSession(nextSession.id, { closeSettingsPanel: false });
     }
   }
@@ -190,26 +191,28 @@ export function scheduleStateReconnect(): void {
 }
 
 /**
- * Update the connection status indicator in the UI.
+ * Initialize the connection status indicator.
+ * Subscribes to $connectionStatus store for reactive updates.
  */
-export function updateConnectionStatus(): void {
-  const indicator = document.getElementById('connection-status');
-  if (!indicator) return;
+export function initConnectionStatusIndicator(): void {
+  $connectionStatus.subscribe((status) => {
+    const indicator = document.getElementById('connection-status');
+    if (!indicator) return;
 
-  let status: string;
-  let text: string;
+    let text: string;
+    switch (status) {
+      case 'connected':
+        text = '';
+        break;
+      case 'disconnected':
+        text = 'Server disconnected';
+        break;
+      case 'reconnecting':
+        text = 'Reconnecting...';
+        break;
+    }
 
-  if (stateWsConnected && muxWsConnected) {
-    status = 'connected';
-    text = '';
-  } else if (!stateWsConnected && !muxWsConnected) {
-    status = 'disconnected';
-    text = 'Server disconnected';
-  } else {
-    status = 'reconnecting';
-    text = 'Reconnecting...';
-  }
-
-  indicator.className = `connection-status ${status}`;
-  indicator.textContent = text;
+    indicator.className = `connection-status ${status}`;
+    indicator.textContent = text;
+  });
 }

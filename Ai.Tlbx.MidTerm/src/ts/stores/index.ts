@@ -1,14 +1,217 @@
 /**
  * Nanostores State Management
  *
- * This module provides reactive state management using nanostores.
- * Migration from legacy state.ts will happen incrementally.
+ * Reactive state management using nanostores.
+ * Replaces imperative state from state.ts with reactive stores.
  *
- * Usage:
- *   import { $sessions, $activeSessionId } from './stores';
- *   $sessions.subscribe(sessions => renderSessionList(sessions));
- *   $sessions.set([...newSessions]);
+ * Naming convention: $storeName (dollar prefix for stores)
+ *
+ * Store types:
+ * - atom: single value
+ * - map: key-value collection
+ * - computed: derived from other stores
  */
 
-// Nanostores is available - stores will be added during migration
-export {};
+import { atom, map, computed } from 'nanostores';
+import type {
+  Session,
+  Settings,
+  UpdateInfo,
+  AuthStatus,
+  ProcessState,
+  TerminalState,
+} from '../types';
+
+// =============================================================================
+// Session Stores
+// =============================================================================
+
+/**
+ * Session collection keyed by session ID.
+ * Use $sessions.setKey(id, session) for updates.
+ */
+export const $sessions = map<Record<string, Session>>({});
+
+/** Currently active session ID */
+export const $activeSessionId = atom<string | null>(null);
+
+/** Session currently being renamed (guards input focus during re-renders) */
+export const $renamingSessionId = atom<string | null>(null);
+
+/**
+ * Sessions as a sorted array for rendering.
+ * Sorted by creation order (first in list is oldest).
+ */
+export const $sessionList = computed($sessions, (sessions) => {
+  return Object.values(sessions);
+});
+
+/** Current active session object (derived) */
+export const $activeSession = computed([$sessions, $activeSessionId], (sessions, activeId) =>
+  activeId ? (sessions[activeId] ?? null) : null,
+);
+
+/** Whether there are any sessions */
+export const $hasSessions = computed($sessionList, (list) => list.length > 0);
+
+// =============================================================================
+// Terminal State Store
+// =============================================================================
+
+/**
+ * Terminal state collection keyed by session ID.
+ * Contains xterm.js Terminal instances, FitAddons, containers.
+ */
+export const $sessionTerminals = map<Record<string, TerminalState>>({});
+
+// =============================================================================
+// Process State Store
+// =============================================================================
+
+/**
+ * Process state collection keyed by session ID.
+ * Tracks foreground process and racing subprocess log.
+ */
+export const $processStates = map<Record<string, ProcessState>>({});
+
+// =============================================================================
+// UI State Stores
+// =============================================================================
+
+/** Settings panel visibility */
+export const $settingsOpen = atom<boolean>(false);
+
+/** Mobile sidebar visibility */
+export const $sidebarOpen = atom<boolean>(false);
+
+/** Desktop sidebar collapsed state */
+export const $sidebarCollapsed = atom<boolean>(false);
+
+// =============================================================================
+// Connection State Stores
+// =============================================================================
+
+/** State WebSocket connected flag */
+export const $stateWsConnected = atom<boolean>(false);
+
+/** Mux WebSocket connected flag */
+export const $muxWsConnected = atom<boolean>(false);
+
+/** Tracks if mux WebSocket has ever connected (for reconnect detection) */
+export const $muxHasConnected = atom<boolean>(false);
+
+/**
+ * Connection status (derived).
+ * Replaces updateConnectionStatus() function.
+ */
+export const $connectionStatus = computed(
+  [$stateWsConnected, $muxWsConnected],
+  (stateConnected, muxConnected): 'connected' | 'disconnected' | 'reconnecting' => {
+    if (stateConnected && muxConnected) return 'connected';
+    if (!stateConnected && !muxConnected) return 'disconnected';
+    return 'reconnecting';
+  },
+);
+
+// =============================================================================
+// Data Stores
+// =============================================================================
+
+/** User settings from server */
+export const $currentSettings = atom<Settings | null>(null);
+
+/** Update info from server */
+export const $updateInfo = atom<UpdateInfo | null>(null);
+
+/** Auth status from server */
+export const $authStatus = atom<AuthStatus | null>(null);
+
+/** Windows build number for ConPTY configuration (null on non-Windows) */
+export const $windowsBuildNumber = atom<number | null>(null);
+
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Get session by ID from the store.
+ * Convenience function for quick lookups.
+ */
+export function getSession(sessionId: string): Session | undefined {
+  return $sessions.get()[sessionId];
+}
+
+/**
+ * Update a session in the store.
+ * Creates if doesn't exist, updates if exists.
+ */
+export function setSession(session: Session): void {
+  $sessions.setKey(session.id, session);
+}
+
+/**
+ * Remove a session from the store.
+ */
+export function removeSession(sessionId: string): void {
+  const sessions = { ...$sessions.get() };
+  delete sessions[sessionId];
+  $sessions.set(sessions);
+}
+
+/**
+ * Set all sessions (replaces entire collection).
+ * Used when receiving session list from server.
+ */
+export function setSessions(sessionList: Session[]): void {
+  const sessionsMap: Record<string, Session> = {};
+  for (const session of sessionList) {
+    sessionsMap[session.id] = session;
+  }
+  $sessions.set(sessionsMap);
+}
+
+/**
+ * Get terminal state by session ID.
+ */
+export function getTerminalState(sessionId: string): TerminalState | undefined {
+  return $sessionTerminals.get()[sessionId];
+}
+
+/**
+ * Set terminal state for a session.
+ */
+export function setTerminalState(sessionId: string, state: TerminalState): void {
+  $sessionTerminals.setKey(sessionId, state);
+}
+
+/**
+ * Remove terminal state for a session.
+ */
+export function removeTerminalState(sessionId: string): void {
+  const terminals = { ...$sessionTerminals.get() };
+  delete terminals[sessionId];
+  $sessionTerminals.set(terminals);
+}
+
+/**
+ * Get process state by session ID.
+ */
+export function getProcessState(sessionId: string): ProcessState | undefined {
+  return $processStates.get()[sessionId];
+}
+
+/**
+ * Set process state for a session.
+ */
+export function setProcessState(sessionId: string, state: ProcessState): void {
+  $processStates.setKey(sessionId, state);
+}
+
+/**
+ * Remove process state for a session.
+ */
+export function removeProcessState(sessionId: string): void {
+  const states = { ...$processStates.get() };
+  delete states[sessionId];
+  $processStates.set(states);
+}

@@ -5,7 +5,7 @@
  * Files are uploaded to the server and the resulting path is inserted into the terminal.
  */
 
-import { activeSessionId } from '../../state';
+import { $activeSessionId } from '../../stores';
 
 // =============================================================================
 // Constants
@@ -200,14 +200,15 @@ async function uploadFile(sessionId: string, file: File): Promise<string | null>
  * - Text files: read content and paste (with 40KB limit)
  */
 async function handleFileDrop(files: FileList): Promise<void> {
-  if (!activeSessionId || files.length === 0) return;
+  const activeId = $activeSessionId.get();
+  if (!activeId || files.length === 0) return;
 
   const imagePaths: string[] = [];
 
   for (const file of Array.from(files)) {
     // Image files: upload and collect path
     if (isImageFile(file.name)) {
-      const path = await uploadFile(activeSessionId, file);
+      const path = await uploadFile(activeId, file);
       if (path) imagePaths.push(path);
       continue;
     }
@@ -229,7 +230,7 @@ async function handleFileDrop(files: FileList): Promise<void> {
     try {
       const content = await readFileAsText(file);
       const sanitized = sanitizePasteContent(content);
-      pasteToTerminal(activeSessionId, sanitized, false);
+      pasteToTerminal(activeId, sanitized, false);
     } catch (err) {
       console.error(`[FileDrop] Failed to read file: ${file.name}`, err);
       showDropToast(`Failed to read: ${file.name}`);
@@ -239,7 +240,7 @@ async function handleFileDrop(files: FileList): Promise<void> {
   // Paste collected image paths (if any)
   if (imagePaths.length > 0) {
     const joined = sanitizePasteContent(imagePaths.join(' '));
-    pasteToTerminal(activeSessionId, joined, true);
+    pasteToTerminal(activeId, joined, true);
   }
 }
 

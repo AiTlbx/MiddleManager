@@ -24,6 +24,7 @@ import {
   sendResize,
   requestBufferRefresh,
   sendActiveSessionHint,
+  initConnectionStatusIndicator,
 } from './modules/comms';
 import {
   createTerminalForSession,
@@ -82,20 +83,24 @@ import {
 import { initTouchController } from './modules/touchController';
 import {
   cacheDOMElements,
-  sessions,
-  activeSessionId,
   sessionTerminals,
   currentSettings,
-  stateWsConnected,
-  muxWsConnected,
   dom,
-  setActiveSessionId,
   setFontsReadyPromise,
-  setRenamingSessionId,
   isSessionListRerendering,
   newlyCreatedSessions,
   pendingSessions,
 } from './state';
+import {
+  $stateWsConnected,
+  $muxWsConnected,
+  $activeSessionId,
+  $sessionList,
+  $renamingSessionId,
+  setSession,
+  removeSession,
+  getSession,
+} from './stores';
 import {
   FONT_CHAR_WIDTH_RATIO,
   FONT_LINE_HEIGHT_RATIO,
@@ -116,7 +121,7 @@ window.mmDebug = {
     return sessionTerminals;
   },
   get activeId() {
-    return activeSessionId;
+    return $activeSessionId.get();
   },
   get settings() {
     return currentSettings;
@@ -139,6 +144,7 @@ async function init(): Promise<void> {
   log.info(() => 'MidTerm frontend initializing');
 
   cacheDOMElements();
+  initConnectionStatusIndicator();
   restoreSidebarState();
   setupSidebarResize();
   initializeSessionList();
@@ -235,10 +241,10 @@ function setupVisibilityChangeHandler(): void {
     if (document.visibilityState === 'visible') {
       // Reconnect WebSockets if they were dropped while in background
       // Buffer refresh is handled by muxChannel's reconnect handler if needed
-      if (!stateWsConnected) {
+      if (!$stateWsConnected.get()) {
         connectStateWebSocket();
       }
-      if (!muxWsConnected) {
+      if (!$muxWsConnected.get()) {
         connectMuxWebSocket();
       }
     }
@@ -281,7 +287,7 @@ function createSession(): void {
     cols: cols,
     rows: rows,
   };
-  sessions.push(tempSession);
+  setSession(tempSession);
   pendingSessions.add(tempId);
   renderSessionList();
   closeSidebar();
@@ -295,10 +301,7 @@ function createSession(): void {
     .then((session) => {
       // Remove temporary session
       pendingSessions.delete(tempId);
-      const idx = sessions.findIndex((s) => s.id === tempId);
-      if (idx >= 0) {
-        sessions.splice(idx, 1);
-      }
+      removeSession(tempId);
 
       newlyCreatedSessions.add(session.id);
       selectSession(session.id);
@@ -306,12 +309,9 @@ function createSession(): void {
     .catch((e) => {
       // Remove temporary session on error
       pendingSessions.delete(tempId);
-      const idx = sessions.findIndex((s) => s.id === tempId);
-      if (idx >= 0) {
-        sessions.splice(idx, 1);
-        renderSessionList();
-        updateEmptyState();
-      }
+      removeSession(tempId);
+      renderSessionList();
+      updateEmptyState();
       log.error(() => `Failed to create session: ${e}`);
     });
 }
@@ -327,10 +327,10 @@ function selectSession(sessionId: string, options?: { closeSettingsPanel?: boole
     state.container.classList.add('hidden');
   });
 
-  setActiveSessionId(sessionId);
+  $activeSessionId.set(sessionId);
   sendActiveSessionHint(sessionId);
 
-  const sessionInfo = sessions.find((s) => s.id === sessionId);
+  const sessionInfo = getSession(sessionId);
   const state = createTerminalForSession(sessionId, sessionInfo);
   const isNewlyCreated = newlyCreatedSessions.has(sessionId);
   state.container.classList.remove('hidden');
@@ -353,15 +353,13 @@ function deleteSession(sessionId: string): void {
   // Optimistic UI: remove session immediately for better UX
   destroyTerminalForSession(sessionId);
 
-  // Remove from local sessions array
-  const idx = sessions.findIndex((s) => s.id === sessionId);
-  if (idx >= 0) {
-    sessions.splice(idx, 1);
-  }
+  // Remove from sessions store
+  removeSession(sessionId);
 
   // If this was the active session, select another (but don't close settings panel)
-  if (activeSessionId === sessionId) {
-    setActiveSessionId(null);
+  if ($activeSessionId.get() === sessionId) {
+    $activeSessionId.set(null);
+    const sessions = $sessionList.get();
     const firstSession = sessions[0];
     if (firstSession) {
       selectSession(firstSession.id, { closeSettingsPanel: false });
@@ -379,17 +377,18 @@ function deleteSession(sessionId: string): void {
 }
 
 function renameSession(sessionId: string, newName: string | null): void {
-  const session = sessions.find((s) => s.id === sessionId);
+  const session = getSession(sessionId);
   if (!session) return;
 
   const trimmedName = (newName || '').trim();
   const nameToSend = trimmedName === '' || trimmedName === session.shellType ? null : trimmedName;
 
-  // Optimistic UI update
+  // Store previous values for rollback
   const previousName = session.name;
   const wasManuallyNamed = session.manuallyNamed ?? false;
-  session.name = nameToSend;
-  session.manuallyNamed = true;
+
+  // Optimistic UI update via store
+  setSession({ ...session, name: nameToSend, manuallyNamed: true });
   renderSessionList();
   updateMobileTitle();
 
@@ -398,9 +397,11 @@ function renameSession(sessionId: string, newName: string | null): void {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: nameToSend }),
   }).catch((e) => {
-    // Rollback on error
-    session.name = previousName;
-    session.manuallyNamed = wasManuallyNamed;
+    // Rollback on error via store
+    const currentSession = getSession(sessionId);
+    if (currentSession) {
+      setSession({ ...currentSession, name: previousName, manuallyNamed: wasManuallyNamed });
+    }
     renderSessionList();
     updateMobileTitle();
     log.error(() => `Failed to rename session ${sessionId}: ${e}`);
@@ -414,11 +415,11 @@ function startInlineRename(sessionId: string): void {
   const titleSpan = item.querySelector('.session-title');
   if (!titleSpan) return;
 
-  const session = sessions.find((s) => s.id === sessionId);
+  const session = getSession(sessionId);
   const currentName = session ? session.name || session.shellType : '';
 
   // Mark this session as being renamed (prevents re-render from destroying input)
-  setRenamingSessionId(sessionId);
+  $renamingSessionId.set(sessionId);
 
   const input = document.createElement('input');
   input.type = 'text';
@@ -435,7 +436,7 @@ function startInlineRename(sessionId: string): void {
     // Skip if blur was triggered by re-render (element will be reattached)
     if (isSessionListRerendering) return;
     committed = true;
-    setRenamingSessionId(null);
+    $renamingSessionId.set(null);
     renameSession(sessionId, input.value);
     input.replaceWith(titleSpan as Node);
   }
@@ -445,7 +446,7 @@ function startInlineRename(sessionId: string): void {
     // Skip if triggered by re-render
     if (isSessionListRerendering) return;
     committed = true;
-    setRenamingSessionId(null);
+    $renamingSessionId.set(null);
     input.replaceWith(titleSpan as Node);
   }
 
@@ -466,7 +467,7 @@ function startInlineRename(sessionId: string): void {
 }
 
 function promptRenameSession(sessionId: string): void {
-  const session = sessions.find((s) => s.id === sessionId);
+  const session = getSession(sessionId);
   if (!session) return;
 
   const currentName = session.name || session.shellType;
@@ -564,7 +565,7 @@ function showBellNotification(sessionId: string): void {
   if (!currentSettings) return;
 
   const bellStyle = currentSettings.bellStyle || 'notification';
-  const session = sessions.find((s) => s.id === sessionId);
+  const session = getSession(sessionId);
   const title = session ? getSessionDisplayName(session) : 'Terminal';
 
   if (
@@ -657,22 +658,28 @@ function bindEvents(): void {
   }
 
   bindClick('btn-ctrlc-mobile', () => {
-    if (activeSessionId) sendInput(activeSessionId, '\x03');
+    const activeId = $activeSessionId.get();
+    if (activeId) sendInput(activeId, '\x03');
   });
   bindClick('btn-resize-mobile', () => {
-    if (activeSessionId) fitSessionToScreen(activeSessionId);
+    const activeId = $activeSessionId.get();
+    if (activeId) fitSessionToScreen(activeId);
   });
   bindClick('btn-resize-titlebar', () => {
-    if (activeSessionId) fitSessionToScreen(activeSessionId);
+    const activeId = $activeSessionId.get();
+    if (activeId) fitSessionToScreen(activeId);
   });
   bindClick('btn-rename-mobile', () => {
-    if (activeSessionId) promptRenameSession(activeSessionId);
+    const activeId = $activeSessionId.get();
+    if (activeId) promptRenameSession(activeId);
   });
   bindClick('btn-rename-titlebar', () => {
-    if (activeSessionId) promptRenameSession(activeSessionId);
+    const activeId = $activeSessionId.get();
+    if (activeId) promptRenameSession(activeId);
   });
   bindClick('btn-close-mobile', () => {
-    if (activeSessionId) deleteSession(activeSessionId);
+    const activeId = $activeSessionId.get();
+    if (activeId) deleteSession(activeId);
   });
 
   if (dom.settingsBtn) {

@@ -1,28 +1,15 @@
 /**
  * Application State
  *
- * Centralized state management for the application.
- * Replaces the global variables from the original JavaScript.
+ * Ephemeral state that doesn't need reactivity - WebSocket instances,
+ * terminal Maps, DOM cache, etc. Reactive state lives in stores/index.ts.
  */
 
-import type {
-  Session,
-  TerminalState,
-  Settings,
-  UpdateInfo,
-  AuthStatus,
-  DOMElements,
-} from './types';
+import type { TerminalState, Settings, UpdateInfo, AuthStatus, DOMElements } from './types';
 
 // =============================================================================
-// State Store
+// Server Data State (NOT migrated - currentSettings used for terminal options)
 // =============================================================================
-
-/** Sessions from server */
-export let sessions: Session[] = [];
-
-/** Currently active session ID */
-export let activeSessionId: string | null = null;
 
 /** User settings from server */
 export let currentSettings: Settings | null = null;
@@ -34,19 +21,6 @@ export let updateInfo: UpdateInfo | null = null;
 export let authStatus: AuthStatus | null = null;
 
 // =============================================================================
-// UI State
-// =============================================================================
-
-/** Settings panel visibility */
-export let settingsOpen = false;
-
-/** Mobile sidebar visibility */
-export let sidebarOpen = false;
-
-/** Desktop sidebar collapsed state */
-export let sidebarCollapsed = false;
-
-// =============================================================================
 // WebSocket State
 // =============================================================================
 
@@ -56,20 +30,11 @@ export let stateWs: WebSocket | null = null;
 /** State WebSocket reconnect timer */
 export let stateReconnectTimer: number | undefined;
 
-/** State WebSocket connected flag */
-export let stateWsConnected = false;
-
 /** Mux WebSocket connection */
 export let muxWs: WebSocket | null = null;
 
 /** Mux WebSocket reconnect timer */
 export let muxReconnectTimer: number | undefined;
-
-/** Mux WebSocket connected flag */
-export let muxWsConnected = false;
-
-/** Tracks if mux WebSocket has ever connected (for reconnect detection) */
-export let muxHasConnected = false;
 
 // =============================================================================
 // Terminal State
@@ -95,9 +60,6 @@ export const sessionsNeedingResync = new Set<string>();
 
 /** Font loading promise */
 export let fontsReadyPromise: Promise<void> | null = null;
-
-/** Session currently being renamed (guards against re-render destroying input) */
-export let renamingSessionId: string | null = null;
 
 /** True during session list re-render (prevents blur from committing rename) */
 export let isSessionListRerendering = false;
@@ -127,14 +89,6 @@ export const dom: DOMElements = {
 // State Setters
 // =============================================================================
 
-export function setSessions(newSessions: Session[]): void {
-  sessions = newSessions;
-}
-
-export function setActiveSessionId(id: string | null): void {
-  activeSessionId = id;
-}
-
 export function setCurrentSettings(settings: Settings | null): void {
   currentSettings = settings;
 }
@@ -147,28 +101,12 @@ export function setAuthStatus(status: AuthStatus | null): void {
   authStatus = status;
 }
 
-export function setSettingsOpen(open: boolean): void {
-  settingsOpen = open;
-}
-
-export function setSidebarOpen(open: boolean): void {
-  sidebarOpen = open;
-}
-
-export function setSidebarCollapsed(collapsed: boolean): void {
-  sidebarCollapsed = collapsed;
-}
-
 export function setStateWs(ws: WebSocket | null): void {
   stateWs = ws;
 }
 
 export function setStateReconnectTimer(timer: number | undefined): void {
   stateReconnectTimer = timer;
-}
-
-export function setStateWsConnected(connected: boolean): void {
-  stateWsConnected = connected;
 }
 
 export function setMuxWs(ws: WebSocket | null): void {
@@ -179,24 +117,12 @@ export function setMuxReconnectTimer(timer: number | undefined): void {
   muxReconnectTimer = timer;
 }
 
-export function setMuxWsConnected(connected: boolean): void {
-  muxWsConnected = connected;
-}
-
-export function setMuxHasConnected(connected: boolean): void {
-  muxHasConnected = connected;
-}
-
 export function setFontsReadyPromise(promise: Promise<void>): void {
   fontsReadyPromise = promise;
 }
 
 export function setWindowsBuildNumber(build: number | null): void {
   windowsBuildNumber = build;
-}
-
-export function setRenamingSessionId(id: string | null): void {
-  renamingSessionId = id;
 }
 
 export function setSessionListRerendering(value: boolean): void {

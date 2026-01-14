@@ -6,15 +6,8 @@
  */
 
 import type { HealthResponse } from '../../types';
-import {
-  settingsOpen,
-  setSettingsOpen,
-  activeSessionId,
-  sessionTerminals,
-  sessions,
-  dom,
-  setWindowsBuildNumber,
-} from '../../state';
+import { sessionTerminals, dom, setWindowsBuildNumber } from '../../state';
+import { $settingsOpen, $activeSessionId, $sessionList } from '../../stores';
 import { fetchSettings } from './persistence';
 import { initSettingsTabs } from './tabs';
 import { createLogger } from '../logging';
@@ -33,7 +26,7 @@ function closeSidebar(): void {
  * Toggle the settings panel visibility
  */
 export function toggleSettings(): void {
-  if (settingsOpen) {
+  if ($settingsOpen.get()) {
     closeSettings();
   } else {
     openSettings();
@@ -44,12 +37,13 @@ export function toggleSettings(): void {
  * Open the settings panel
  */
 export function openSettings(): void {
-  setSettingsOpen(true);
+  $settingsOpen.set(true);
   if (dom.settingsBtn) dom.settingsBtn.classList.add('active');
   closeSidebar();
 
-  if (activeSessionId) {
-    const state = sessionTerminals.get(activeSessionId);
+  const activeId = $activeSessionId.get();
+  if (activeId) {
+    const state = sessionTerminals.get(activeId);
     if (state) state.container.classList.add('hidden');
   }
 
@@ -66,19 +60,20 @@ export function openSettings(): void {
  * Close the settings panel
  */
 export function closeSettings(): void {
-  setSettingsOpen(false);
+  $settingsOpen.set(false);
   if (dom.settingsBtn) dom.settingsBtn.classList.remove('active');
   if (dom.settingsView) dom.settingsView.classList.add('hidden');
 
-  if (activeSessionId) {
-    const state = sessionTerminals.get(activeSessionId);
+  const activeId = $activeSessionId.get();
+  if (activeId) {
+    const state = sessionTerminals.get(activeId);
     if (state) {
       state.container.classList.remove('hidden');
       requestAnimationFrame(() => {
         state.terminal.focus();
       });
     }
-  } else if (sessions.length === 0 && dom.emptyState) {
+  } else if ($sessionList.get().length === 0 && dom.emptyState) {
     dom.emptyState.classList.remove('hidden');
   }
 }

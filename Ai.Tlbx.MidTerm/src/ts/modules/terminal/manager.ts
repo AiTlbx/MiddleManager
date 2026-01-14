@@ -10,15 +10,14 @@ import { THEMES, MOBILE_BREAKPOINT, TERMINAL_FONT_STACK } from '../../constants'
 import {
   sessionTerminals,
   currentSettings,
-  activeSessionId,
   pendingOutputFrames,
   sessionsNeedingResync,
   fontsReadyPromise,
   dom,
   setFontsReadyPromise,
   windowsBuildNumber,
-  sessions,
 } from '../../state';
+import { $activeSessionId, getSession } from '../../stores';
 import { getClipboardStyle, parseOutputFrame } from '../../utils';
 import { applyTerminalScaling } from './scaling';
 import { setupFileDrop, handleClipboardPaste, sanitizePasteContent } from './fileDrop';
@@ -49,7 +48,7 @@ const pendingTitleUpdates = new Map<string, number>();
  * Auto-update session name from shell title (with debounce)
  */
 function updateSessionNameAuto(sessionId: string, name: string): void {
-  const session = sessions.find((s) => s.id === sessionId);
+  const session = getSession(sessionId);
   if (session?.manuallyNamed) return;
 
   const existing = pendingTitleUpdates.get(sessionId);
@@ -546,11 +545,12 @@ export function applySettingsToTerminals(): void {
  * Using WebSocket ensures the buffer arrives in-order with live terminal data.
  */
 export function refreshActiveTerminalBuffer(): void {
-  if (!activeSessionId) return;
-  const state = sessionTerminals.get(activeSessionId);
+  const activeId = $activeSessionId.get();
+  if (!activeId) return;
+  const state = sessionTerminals.get(activeId);
   if (state && state.opened) {
     state.terminal.clear();
-    requestBufferRefresh(activeSessionId);
+    requestBufferRefresh(activeId);
   }
 }
 

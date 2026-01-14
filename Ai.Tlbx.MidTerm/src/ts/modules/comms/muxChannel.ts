@@ -33,17 +33,13 @@ import {
 import {
   muxWs,
   muxReconnectTimer,
-  muxHasConnected,
   sessionTerminals,
   pendingOutputFrames,
   sessionsNeedingResync,
-  activeSessionId,
   setMuxWs,
   setMuxReconnectTimer,
-  setMuxWsConnected,
-  setMuxHasConnected,
 } from '../../state';
-import { updateConnectionStatus } from './stateChannel';
+import { $muxWsConnected, $muxHasConnected, $activeSessionId } from '../../stores';
 
 const log = createLogger('mux');
 
@@ -238,11 +234,10 @@ export function connectMuxWebSocket(): void {
 
   ws.onopen = () => {
     // Detect reconnect: we've connected before AND have terminals to refresh
-    const isReconnect = muxHasConnected && sessionTerminals.size > 0;
+    const isReconnect = $muxHasConnected.get() && sessionTerminals.size > 0;
 
-    setMuxWsConnected(true);
-    setMuxHasConnected(true);
-    updateConnectionStatus();
+    $muxWsConnected.set(true);
+    $muxHasConnected.set(true);
 
     // On reconnect, check if server version changed (update applied) and reload
     if (isReconnect) {
@@ -264,8 +259,9 @@ export function connectMuxWebSocket(): void {
     }
 
     // Send active session hint so server knows which session to prioritize
-    if (activeSessionId) {
-      sendActiveSessionHint(activeSessionId);
+    const activeId = $activeSessionId.get();
+    if (activeId) {
+      sendActiveSessionHint(activeId);
     }
 
     // DISABLED: Was causing cursor to disappear in some cases
@@ -328,8 +324,7 @@ export function connectMuxWebSocket(): void {
   };
 
   ws.onclose = () => {
-    setMuxWsConnected(false);
-    updateConnectionStatus();
+    $muxWsConnected.set(false);
     scheduleMuxReconnect();
   };
 
