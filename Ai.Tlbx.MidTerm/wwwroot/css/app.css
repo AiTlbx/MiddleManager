@@ -3317,30 +3317,74 @@ html, body {
     color: var(--accent-blue);
 }
 
-/* Share Access Button */
-.share-access-btn {
+/* Network & Remote Access Section */
+.network-section {
+    margin-bottom: 8px;
+}
+
+.network-section-header {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 8px;
+    justify-content: space-between;
     width: 100%;
-    padding: 10px 12px;
-    margin-bottom: 12px;
-    background-color: var(--btn-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    color: var(--text-primary);
-    font-size: 12px;
+    padding: 6px 4px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
     cursor: pointer;
-    transition: background-color 0.15s;
+    transition: color 0.15s;
 }
 
-.share-access-btn:hover {
-    background-color: var(--btn-secondary-hover);
+.network-section-header:hover {
+    color: var(--text-secondary);
 }
 
-.share-access-btn .icon {
-    font-size: 14px;
+.network-section-chevron {
+    font-size: 10px;
+    transition: transform 0.2s ease;
+}
+
+.network-section.collapsed .network-section-chevron {
+    transform: rotate(-90deg);
+}
+
+.network-section-content {
+    overflow: hidden;
+    transition: max-height 0.2s ease, opacity 0.2s ease;
+    max-height: 300px;
+    opacity: 1;
+}
+
+.network-section.collapsed .network-section-content {
+    max-height: 0;
+    opacity: 0;
+}
+
+/* Share Access Link (subtle) */
+.share-access-link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    margin-top: 4px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 10px;
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.share-access-link:hover {
+    color: var(--accent-blue);
+}
+
+.share-access-link .icon {
+    font-size: 11px;
 }
 
 /* Certificate fingerprint inline display in settings */

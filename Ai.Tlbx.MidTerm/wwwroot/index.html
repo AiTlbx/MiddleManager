@@ -52,11 +52,19 @@
                     <button id="update-btn" class="update-btn">Update & Restart</button>
                     <div class="update-note">Sessions will be closed</div>
                 </div>
-                <button id="btn-share-access" class="share-access-btn" title="Share connection info via email">
-                    <span class="icon">&#xe925;</span>
-                    Share Access
-                </button>
-                <div class="network-list" id="network-list"></div>
+                <div class="network-section" id="network-section">
+                    <button class="network-section-header" id="btn-toggle-network" title="Toggle Network & Remote Access">
+                        <span class="network-section-title">Network & Remote Access</span>
+                        <span class="network-section-chevron icon">&#xe910;</span>
+                    </button>
+                    <div class="network-section-content" id="network-section-content">
+                        <div class="network-list" id="network-list"></div>
+                        <button id="btn-share-access" class="share-access-link" title="Share connection info via email">
+                            <span class="icon">&#xe925;</span>
+                            Share Access...
+                        </button>
+                    </div>
+                </div>
                 <div class="footer-row">
                     <span class="footer-sessions">Sessions: <span id="session-count">0</span></span>
                     <span class="version" id="app-version" title="Assembly version"></span>

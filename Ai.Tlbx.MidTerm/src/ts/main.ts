@@ -54,6 +54,7 @@ import {
   restoreSidebarState,
   setupSidebarResize,
   initShareAccessButton,
+  initNetworkSection,
   initializeSessionList,
 } from './modules/sidebar';
 import {
@@ -164,6 +165,7 @@ async function init(): Promise<void> {
   bindAuthEvents();
   bindSearchEvents();
   initShareAccessButton();
+  initNetworkSection();
   setupResizeObserver();
   setupVisualViewport();
   initTouchController();
