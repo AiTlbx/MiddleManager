@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="Marketing/Icons/FancyLogoToBeChanged.png" alt="MidTerm Banner" width="600">
+</p>
+
 # MidTerm
 
 [![GitHub Release](https://img.shields.io/github/v/release/AiTlbx/MidTerm)](https://github.com/AiTlbx/MidTerm/releases/latest)
@@ -7,8 +11,6 @@
 [![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)](#installation)
 
 **Your terminal, anywhere.** Run AI coding agents and TUI apps on your machine, access them from any browser.
-
-![MidTerm Screenshot](docs/screenshot.png)
 
 ## The Problem
 
