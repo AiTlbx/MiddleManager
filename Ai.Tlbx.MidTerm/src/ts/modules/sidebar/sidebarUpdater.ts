@@ -196,18 +196,34 @@ export function initializeSidebarUpdater(): void {
     const changeType = detectChangeType(sessions);
     if (changeType === 'none') return;
 
-    const isRenaming = $renamingSessionId.get() !== null;
+    const renamingId = $renamingSessionId.get();
 
-    if (isRenaming) {
-      // Defer update, track highest priority type (membership > data)
-      log.info(() => `Deferring ${changeType} update during rename`);
-      if (changeType === 'membership' || deferredUpdateType !== 'membership') {
-        deferredUpdateType = changeType;
+    if (renamingId && changeType === 'membership') {
+      // Defer membership changes during rename (can't add/remove DOM while input is focused)
+      log.info(() => 'Deferring membership update during rename');
+      deferredUpdateType = 'membership';
+      previousSessions = { ...sessions };
+      previousSessionIds = new Set(Object.keys(sessions));
+    } else if (changeType === 'data') {
+      // Data changes: apply surgical updates to all sessions
+      // The renaming session's title element is replaced with input, so it's naturally skipped
+      log.info(() => 'Applying data update (surgical)');
+      for (const [id, session] of Object.entries(sessions)) {
+        const prev = previousSessions[id];
+        if (
+          prev &&
+          (session.name !== prev.name ||
+            session.terminalTitle !== prev.terminalTitle ||
+            session.shellType !== prev.shellType)
+        ) {
+          updateSessionItemContent(id, session);
+        }
       }
-      // Still update tracking state so we don't miss changes
+      updateMobileTitle();
       previousSessions = { ...sessions };
       previousSessionIds = new Set(Object.keys(sessions));
     } else {
+      // Membership change, not renaming - full re-render
       applyUpdate(changeType, sessions);
       previousSessions = { ...sessions };
       previousSessionIds = new Set(Object.keys(sessions));
