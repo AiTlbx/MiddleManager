@@ -140,39 +140,44 @@ export function fitSessionToScreen(sessionId: string): void {
 }
 
 /**
+ * Apply CSS scaling to a terminal synchronously.
+ * Use this when already inside a requestAnimationFrame callback.
+ */
+export function applyTerminalScalingSync(state: TerminalState): void {
+  const container = state.container;
+  const xterm = container.querySelector('.xterm') as HTMLElement | null;
+  if (!xterm) return;
+
+  const availWidth = container.clientWidth - 8;
+  const availHeight = container.clientHeight - 8;
+  const termWidth = xterm.offsetWidth;
+  const termHeight = xterm.offsetHeight;
+
+  // Calculate scale (shrink only, never enlarge)
+  const scaleX = availWidth / termWidth;
+  const scaleY = availHeight / termHeight;
+  const scale = Math.min(scaleX, scaleY, 1);
+
+  if (scale < 0.99) {
+    // Use zoom instead of transform:scale for better pixel alignment
+    // zoom respects pixel boundaries, transform can cause subpixel rendering
+    xterm.style.zoom = String(scale);
+    xterm.style.transform = '';
+    container.classList.add('scaled');
+  } else {
+    xterm.style.zoom = '';
+    xterm.style.transform = '';
+    container.classList.remove('scaled');
+  }
+}
+
+/**
  * Apply CSS scaling to a terminal to fit within its container.
  * Scales down terminals that are larger than the available space.
  * Uses CSS zoom instead of transform:scale for better pixel alignment.
  */
 export function applyTerminalScaling(_sessionId: string, state: TerminalState): void {
-  const container = state.container;
-  const xterm = container.querySelector('.xterm') as HTMLElement | null;
-  if (!xterm) return;
-
-  // Use requestAnimationFrame for accurate measurements after resize
-  requestAnimationFrame(() => {
-    const availWidth = container.clientWidth - 8;
-    const availHeight = container.clientHeight - 8;
-    const termWidth = xterm.offsetWidth;
-    const termHeight = xterm.offsetHeight;
-
-    // Calculate scale (shrink only, never enlarge)
-    const scaleX = availWidth / termWidth;
-    const scaleY = availHeight / termHeight;
-    const scale = Math.min(scaleX, scaleY, 1);
-
-    if (scale < 0.99) {
-      // Use zoom instead of transform:scale for better pixel alignment
-      // zoom respects pixel boundaries, transform can cause subpixel rendering
-      xterm.style.zoom = String(scale);
-      xterm.style.transform = '';
-      container.classList.add('scaled');
-    } else {
-      xterm.style.zoom = '';
-      xterm.style.transform = '';
-      container.classList.remove('scaled');
-    }
-  });
+  requestAnimationFrame(() => applyTerminalScalingSync(state));
 }
 
 /**

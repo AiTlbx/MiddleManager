@@ -28,7 +28,7 @@ public static class MuxProtocol
 
     // Compression settings
     public const int CompressionChunkSize = 256 * 1024; // Chunk large data before compressing
-    public const int CompressionThreshold = 2048; // Only compress payloads > 2KB
+    public const int CompressionThreshold = 8192; // Only compress payloads > 8KB (buffer replays)
     public const int CompressedOutputHeaderSize = 17; // HeaderSize + dims(4) + uncompressedLen(4)
 
     public static byte[] CreateOutputFrame(string sessionId, int cols, int rows, ReadOnlySpan<byte> data)

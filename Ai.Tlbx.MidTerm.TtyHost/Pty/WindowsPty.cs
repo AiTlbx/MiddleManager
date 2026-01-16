@@ -209,8 +209,8 @@ public sealed class WindowsPty : IPtyConnection
                 }
             }
 
-            _writerStream = new FileStream(_inputWriteHandle, FileAccess.Write, 4096, false);
-            _readerStream = new FileStream(_outputReadHandle, FileAccess.Read, 4096, false);
+            _writerStream = new FileStream(_inputWriteHandle, FileAccess.Write, 16384, false);
+            _readerStream = new FileStream(_outputReadHandle, FileAccess.Read, 16384, false);
         }
         catch
         {

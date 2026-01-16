@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Threading.Channels;
@@ -203,23 +204,31 @@ public sealed class MuxClient : IAsyncDisposable
     {
         if (buffer.DataChunks.Count == 0) return;
 
-        // Combine all chunks into single payload
+        // Combine all chunks into pooled buffer (reduces GC pressure)
         var totalLen = buffer.DataChunks.Sum(c => c.Length);
-        var combined = new byte[totalLen];
-        var offset = 0;
-        foreach (var chunk in buffer.DataChunks)
+        var combined = ArrayPool<byte>.Shared.Rent(totalLen);
+        try
         {
-            Buffer.BlockCopy(chunk, 0, combined, offset, chunk.Length);
-            offset += chunk.Length;
+            var offset = 0;
+            foreach (var chunk in buffer.DataChunks)
+            {
+                Buffer.BlockCopy(chunk, 0, combined, offset, chunk.Length);
+                offset += chunk.Length;
+            }
+
+            // Create frame using exact span (rented buffer may be larger)
+            var data = combined.AsSpan(0, totalLen);
+            var frame = totalLen > MuxProtocol.CompressionThreshold
+                ? MuxProtocol.CreateCompressedOutputFrame(sessionId, buffer.LastCols, buffer.LastRows, data)
+                : MuxProtocol.CreateOutputFrame(sessionId, buffer.LastCols, buffer.LastRows, data);
+
+            // Send first, clear after - prevents data loss on send failure
+            await SendFrameAsync(frame).ConfigureAwait(false);
         }
-
-        // Create frame (with compression if large enough)
-        var frame = combined.Length > MuxProtocol.CompressionThreshold
-            ? MuxProtocol.CreateCompressedOutputFrame(sessionId, buffer.LastCols, buffer.LastRows, combined)
-            : MuxProtocol.CreateOutputFrame(sessionId, buffer.LastCols, buffer.LastRows, combined);
-
-        // Send first, clear after - prevents data loss on send failure
-        await SendFrameAsync(frame).ConfigureAwait(false);
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(combined);
+        }
 
         buffer.DataChunks.Clear();
         buffer.TotalBytes = 0;

@@ -19,7 +19,7 @@ import {
 } from '../../state';
 import { $activeSessionId, getSession } from '../../stores';
 import { getClipboardStyle, parseOutputFrame } from '../../utils';
-import { applyTerminalScaling } from './scaling';
+import { applyTerminalScaling, applyTerminalScalingSync } from './scaling';
 import { setupFileDrop, handleClipboardPaste, sanitizePasteContent } from './fileDrop';
 import { isBracketedPasteEnabled } from '../comms';
 
@@ -67,7 +67,7 @@ export function focusActiveTerminal(): void {
     if (state?.opened) {
       state.terminal.focus();
     }
-  }, 50);
+  }, 16); // Single frame (60fps) prevents focus/blur thrashing
 }
 
 /**
@@ -127,7 +127,7 @@ export function getTerminalOptions(): ITerminalOptions {
     lineHeight: 1,
     scrollback: currentSettings?.scrollbackLines ?? 10000,
     minimumContrastRatio: currentSettings?.minimumContrastRatio ?? 1,
-    smoothScrollDuration: currentSettings?.smoothScrolling ? 150 : 0,
+    smoothScrollDuration: currentSettings?.smoothScrolling ? 50 : 0,
     allowProposedApi: true,
     customGlyphs: true,
     rescaleOverlappingGlyphs: true,
@@ -246,7 +246,7 @@ export function createTerminalForSession(
           // Resize may fail if terminal not fully initialized
         }
       }
-      applyTerminalScaling(sessionId, state);
+      applyTerminalScalingSync(state); // Sync version - already in rAF context
 
       setupTerminalEvents(sessionId, terminal, container);
     });

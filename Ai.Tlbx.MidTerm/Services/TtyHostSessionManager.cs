@@ -203,6 +203,26 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
         return endpoints;
     }
 
+    private static bool EndpointExists(string sessionId, int hostPid)
+    {
+        try
+        {
+#if WINDOWS
+            // Named pipes appear in \\.\pipe\ directory - enumerate to check existence
+            var pipeName = IpcEndpoint.GetSessionEndpoint(sessionId, hostPid);
+            var pipeDir = @"\\.\pipe\";
+            return Directory.GetFiles(pipeDir, pipeName).Length > 0;
+#else
+            var socketPath = IpcEndpoint.GetSessionEndpoint(sessionId, hostPid);
+            return File.Exists(socketPath);
+#endif
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static void CleanupEndpoint(string sessionId, int hostPid)
     {
         try
@@ -246,8 +266,14 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
             return null;
         }
 
-        // Wait for IPC endpoint to become available
-        await Task.Delay(500, ct).ConfigureAwait(false);
+        // Wait for IPC endpoint with exponential backoff (50ms initial, then 50ms, 100ms, 200ms)
+        // Initial delay ensures process has time to initialize before polling
+        await Task.Delay(50, ct).ConfigureAwait(false);
+        for (var wait = 50; wait < 500; wait *= 2)
+        {
+            if (EndpointExists(sessionId, hostPid)) break;
+            await Task.Delay(wait, ct).ConfigureAwait(false);
+        }
 
         // Connect to the new session using sessionId + PID for endpoint
         var client = new TtyHostClient(sessionId, hostPid);
