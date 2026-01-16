@@ -12,8 +12,10 @@ import {
   MIN_TERMINAL_ROWS,
   MAX_TERMINAL_COLS,
   MAX_TERMINAL_ROWS,
+  icon,
 } from '../../constants';
 import { sessionTerminals, fontsReadyPromise, dom } from '../../state';
+import { $activeSessionId } from '../../stores';
 
 // Forward declarations for functions from other modules
 let sendResize: (sessionId: string, dimensions: { cols: number; rows: number }) => void = () => {};
@@ -158,16 +160,38 @@ export function applyTerminalScalingSync(state: TerminalState): void {
   const scaleY = availHeight / termHeight;
   const scale = Math.min(scaleX, scaleY, 1);
 
+  // Find or create overlay element
+  let overlay = container.querySelector('.scaled-overlay') as HTMLElement | null;
+
   if (scale < 0.99) {
     // Use zoom instead of transform:scale for better pixel alignment
     // zoom respects pixel boundaries, transform can cause subpixel rendering
     xterm.style.zoom = String(scale);
     xterm.style.transform = '';
     container.classList.add('scaled');
+
+    // Add clickable overlay if not present
+    if (!overlay) {
+      overlay = document.createElement('button');
+      overlay.className = 'scaled-overlay';
+      overlay.innerHTML = `${icon('resize')} Scaled view - click to resize`;
+      overlay.addEventListener('click', () => {
+        const activeId = $activeSessionId.get();
+        if (activeId) {
+          fitSessionToScreen(activeId);
+        }
+      });
+      container.appendChild(overlay);
+    }
   } else {
     xterm.style.zoom = '';
     xterm.style.transform = '';
     container.classList.remove('scaled');
+
+    // Remove overlay if present
+    if (overlay) {
+      overlay.remove();
+    }
   }
 }
 

@@ -1433,8 +1433,7 @@ html, body {
     overflow: hidden;
 }
 
-.terminal-container.scaled::after {
-    content: 'Scaled view - click ⤢ to resize';
+.scaled-overlay {
     position: absolute;
     bottom: 8px;
     left: 8px;
@@ -1443,8 +1442,22 @@ html, body {
     color: var(--text-secondary);
     font-size: 10px;
     border-radius: 4px;
-    pointer-events: none;
+    border: none;
+    cursor: pointer;
     z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: background-color 0.15s ease;
+}
+
+.scaled-overlay:hover {
+    background-color: rgba(65, 72, 104, 1);
+    color: var(--text-primary);
+}
+
+.scaled-overlay .icon {
+    font-size: 12px;
 }
 
 /* Sidebar header buttons */
