@@ -41,7 +41,6 @@ const pendingCommands = new Map<
 import {
   $settingsOpen,
   $stateWsConnected,
-  $connectionStatus,
   $activeSessionId,
   $sessionList,
   setSessions,
@@ -222,33 +221,6 @@ export function handleUpdateInfo(update: UpdateInfo | null): void {
  */
 export function scheduleStateReconnect(): void {
   scheduleReconnect(connectStateWebSocket, setStateReconnectTimer, stateReconnectTimer);
-}
-
-/**
- * Initialize the connection status indicator.
- * Subscribes to $connectionStatus store for reactive updates.
- */
-export function initConnectionStatusIndicator(): void {
-  $connectionStatus.subscribe((status) => {
-    const indicator = document.getElementById('connection-status');
-    if (!indicator) return;
-
-    let text: string;
-    switch (status) {
-      case 'connected':
-        text = '';
-        break;
-      case 'disconnected':
-        text = 'Server disconnected';
-        break;
-      case 'reconnecting':
-        text = 'Reconnecting...';
-        break;
-    }
-
-    indicator.className = `connection-status ${status}`;
-    indicator.textContent = text;
-  });
 }
 
 // =============================================================================

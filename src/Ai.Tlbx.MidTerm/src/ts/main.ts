@@ -26,8 +26,8 @@ import {
   sendResize,
   requestBufferRefresh,
   sendActiveSessionHint,
-  initConnectionStatusIndicator,
 } from './modules/comms';
+import { initBadges } from './modules/badges';
 import {
   createTerminalForSession,
   destroyTerminalForSession,
@@ -147,7 +147,7 @@ async function init(): Promise<void> {
 
   cacheDOMElements();
   initTrafficIndicator();
-  initConnectionStatusIndicator();
+  initBadges();
   restoreSidebarState();
   setupSidebarResize();
   initializeSessionList();

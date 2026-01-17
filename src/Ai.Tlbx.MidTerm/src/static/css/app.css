@@ -1402,18 +1402,23 @@ html, body {
     background-color: var(--btn-primary-hover);
 }
 
-/* Connection status indicator */
-.connection-status {
+/* Status badges - shared base styles */
+.status-badge {
     position: fixed;
     bottom: 8px;
-    right: 8px;
     padding: 4px 8px;
     border-radius: 4px;
     font-size: 11px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 1000;
+}
+
+/* Connection status - right side */
+.connection-status {
+    right: 8px;
     background-color: var(--btn-secondary);
     color: var(--text-secondary);
-    opacity: 0;
-    transition: opacity 0.3s;
 }
 
 .connection-status.connected {
@@ -1435,6 +1440,19 @@ html, body {
 .connection-status.reconnecting {
     background-color: var(--accent-orange);
     color: var(--bg-primary);
+    opacity: 1;
+}
+
+/* Paste indicator - center */
+.paste-indicator {
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--accent-blue);
+    color: var(--bg-primary);
+    pointer-events: none;
+}
+
+.paste-indicator.active {
     opacity: 1;
 }
 

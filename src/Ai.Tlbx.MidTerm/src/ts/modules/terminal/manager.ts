@@ -22,6 +22,7 @@ import { getClipboardStyle, parseOutputFrame } from '../../utils';
 import { applyTerminalScaling, applyTerminalScalingSync } from './scaling';
 import { setupFileDrop, handleClipboardPaste, sanitizePasteContent } from './fileDrop';
 import { isBracketedPasteEnabled } from '../comms';
+import { showPasteIndicator, hidePasteIndicator } from '../badges';
 
 import { Terminal, type ITerminalOptions } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -525,6 +526,7 @@ export function destroyTerminalForSession(sessionId: string): void {
 // BPM shells handle bulk paste atomically via bracketed markers
 const PASTE_CHUNK_SIZE = 4096; // 4KB chunks
 const PASTE_CHUNK_DELAY = 5; // 5ms between chunks (only for non-BPM)
+const PASTE_INDICATOR_THRESHOLD = 1024; // Only show indicator for pastes > 1KB
 
 /**
  * Send data in chunks with delays to prevent PTY buffer overflow.
@@ -566,15 +568,31 @@ export function pasteToTerminal(
   // Prepare content
   const content = isFilePath ? '"' + data + '"' : data;
 
+  // Show indicator for large pastes
+  const showIndicator = content.length > PASTE_INDICATOR_THRESHOLD;
+  if (showIndicator) {
+    showPasteIndicator();
+  }
+
   if (bpmEnabled) {
     // BPM shells handle bulk paste atomically - send everything at once
     sendInput(sessionId, '\x1b[200~' + content + '\x1b[201~');
+    if (showIndicator) {
+      hidePasteIndicator();
+    }
   } else {
     // Non-BPM: use chunking as safety margin for legacy shells
     if (content.length > PASTE_CHUNK_SIZE) {
-      sendChunked(sessionId, content);
+      sendChunked(sessionId, content).then(() => {
+        if (showIndicator) {
+          hidePasteIndicator();
+        }
+      });
     } else {
       sendInput(sessionId, content);
+      if (showIndicator) {
+        hidePasteIndicator();
+      }
     }
   }
 }
