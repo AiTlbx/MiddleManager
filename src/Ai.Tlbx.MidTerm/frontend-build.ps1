@@ -291,6 +291,23 @@ Get-ChildItem -Path "$fontsSource\*" -Include @('*.txt') | ForEach-Object {
     }
 }
 
+# Additional JS files (not bundled, e.g. audio worklets) -> wwwroot/js/
+$jsSource = Join-Path $StaticSource "js"
+if (Test-Path $jsSource) {
+    Get-ChildItem -Path "$jsSource\*" -Include @('*.js') | ForEach-Object {
+        $dstPath = Join-Path $WwwRoot "js/$($_.Name)"
+        $result = Process-TextFile -Source $_.FullName -Destination $dstPath -Compress $Publish
+
+        if ($Publish) {
+            $totalSaved += $result.Saved
+            Write-Host "  js/$($_.Name) -> js/$($_.Name).br ($($result.Reduction)% reduction)" -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host "  js/$($_.Name)" -ForegroundColor DarkGray
+        }
+    }
+}
+
 # ===========================================
 # PHASE 6: Compress generated JS (publish only)
 # ===========================================

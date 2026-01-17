@@ -22,6 +22,8 @@ import {
   applySettingsToTerminals,
 } from '../settings/persistence';
 import { updateSecurityWarning, updatePasswordStatus } from '../auth/status';
+import { setDevMode, setVoiceSectionVisible } from '../sidebar/voiceSection';
+import { checkVoiceServerHealth } from '../voice';
 import { escapeHtml } from '../../utils';
 
 const log = createLogger('bootstrap');
@@ -91,6 +93,14 @@ export async function fetchBootstrap(): Promise<BootstrapResponse | null> {
 
     // Check system health (TtyHost compatibility)
     checkTtyHostHealth(data);
+
+    // Legacy devMode logging
+    setDevMode(data.devMode);
+
+    // Check voice server availability and show section if available
+    checkVoiceServerHealth().then((available) => {
+      setVoiceSectionVisible(available);
+    });
 
     // Apply settings to any terminals that were created before settings loaded
     applySettingsToTerminals();

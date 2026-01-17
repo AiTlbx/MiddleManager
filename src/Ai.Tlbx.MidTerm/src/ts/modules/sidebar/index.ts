@@ -9,5 +9,6 @@ export * from './sessionList';
 export * from './collapse';
 export * from './shareAccess';
 export * from './networkSection';
+export * from './voiceSection';
 export * from './sidebarUpdater';
 export { initTrafficIndicator } from './trafficIndicator';

@@ -64,7 +64,8 @@ public static class EndpointSetup
                 Networks = networks,
                 Users = users,
                 Shells = shells,
-                UpdateResult = updateResult
+                UpdateResult = updateResult,
+                DevMode = UpdateService.IsDevEnvironment
             };
 
             return Results.Json(response, AppJsonContext.Default.BootstrapResponse);

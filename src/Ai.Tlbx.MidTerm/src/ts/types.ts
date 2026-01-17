@@ -227,6 +227,7 @@ export interface BootstrapResponse {
   users: UserInfo[];
   shells: ShellInfo[];
   updateResult?: UpdateResult;
+  devMode: boolean;
 }
 
 /** Minimal startup data for login page from GET /api/bootstrap/login */

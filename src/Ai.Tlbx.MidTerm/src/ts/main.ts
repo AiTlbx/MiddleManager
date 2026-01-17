@@ -58,10 +58,12 @@ import {
   setupSidebarResize,
   initShareAccessButton,
   initNetworkSection,
+  initVoiceSection,
   initializeSessionList,
   initializeSidebarUpdater,
   initTrafficIndicator,
 } from './modules/sidebar';
+import { bindVoiceEvents } from './modules/voice';
 import { toggleSettings, closeSettings, applyReceivedSettings } from './modules/settings';
 import { bindAuthEvents } from './modules/auth';
 import { fetchBootstrap } from './modules/bootstrap';
@@ -166,6 +168,8 @@ async function init(): Promise<void> {
   bindSearchEvents();
   initShareAccessButton();
   initNetworkSection();
+  initVoiceSection();
+  bindVoiceEvents();
   setupResizeObserver();
   setupVisualViewport();
   initTouchController();

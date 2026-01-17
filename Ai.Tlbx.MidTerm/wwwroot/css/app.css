@@ -323,35 +323,7 @@ html, body {
 .session-foreground {
     font-size: 10.5px;
     color: var(--accent-cyan);
-    display: flex;
-    align-items: center;
-    gap: 0;
-    min-width: 0;
-}
-
-.fg-cwd {
-    flex: 0 1 auto;
-    min-width: 20px;
-    max-width: 50%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    direction: rtl;
-    text-align: left;
-}
-
-.fg-separator {
-    flex: 0 0 auto;
-    padding: 0 2px;
-    opacity: 0.6;
-}
-
-.fg-process {
-    flex: 1 1 auto;
-    min-width: 20px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: block;
 }
 
 .session-racing-log {
@@ -722,7 +694,7 @@ html, body {
 .terminals-area {
     flex: 1;
     position: relative;
-    overflow: hidden;
+    overflow: auto;
     background-color: var(--terminal-bg);
 }
 
@@ -776,46 +748,35 @@ html, body {
     flex-shrink: 0;
 }
 
-/* Hide native scrollbar - use xterm's custom scrollbar instead */
+/* Permanent dark scrollbar for xterm */
 .terminal-container .xterm-viewport {
-    scrollbar-width: none;
+    overflow-y: scroll !important;
+    scrollbar-width: thin;
+    scrollbar-color: var(--text-muted) var(--bg-primary);
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar {
-    display: none;
+    width: 7px;
+    background: var(--bg-primary);
 }
 
-/* Auto-hide mouse cursor over terminal after inactivity */
-.terminal-container.cursor-hidden {
-    cursor: none !important;
+.terminal-container .xterm-viewport::-webkit-scrollbar-track {
+    background: var(--bg-primary);
 }
 
-.terminal-container.cursor-hidden .xterm {
-    cursor: none !important;
+.terminal-container .xterm-viewport::-webkit-scrollbar-thumb {
+    background: var(--text-muted);
+    border-radius: 3px;
+    min-height: 30px;
 }
 
-/* Terminal initialization error state */
-.terminal-error {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    gap: 1rem;
-    color: var(--text-primary);
+.terminal-container .xterm-viewport::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
 }
 
-.terminal-error button {
-    padding: 0.5rem 1rem;
-    background: var(--btn-primary);
-    border: none;
-    border-radius: var(--radius-md);
-    color: var(--bg-primary);
-    cursor: pointer;
-}
-
-.terminal-error button:hover {
-    background: var(--btn-primary-hover);
+/* Hide xterm.js custom overlay scrollbar - we use native scrollbar */
+.terminal-container .xterm-scrollable-element > .scrollbar {
+    display: none !important;
 }
 
 /* ============================================================================
@@ -1129,7 +1090,7 @@ html, body {
     .terminals-area {
         flex: 1;
         min-height: 0;
-        overflow: hidden;
+        overflow: auto;
         padding-bottom: env(safe-area-inset-bottom, 0);
     }
 
@@ -1138,7 +1099,7 @@ html, body {
         padding: 4px;
         padding-left: calc(4px + env(safe-area-inset-left, 0));
         padding-right: calc(4px + env(safe-area-inset-right, 0));
-        overflow: hidden;
+        overflow: auto;
     }
 
     /* Mobile: Hide session-actions by default, show menu button */
@@ -3450,110 +3411,6 @@ html, body {
 
 .share-access-link .icon {
     font-size: 11px;
-}
-
-/* Voice Assistant Section (dev mode only) */
-.voice-section {
-    margin-bottom: 8px;
-}
-
-.voice-section-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    padding: 6px 4px;
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    font-size: 10px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    cursor: pointer;
-    transition: color 0.15s;
-}
-
-.voice-section-header:hover {
-    color: var(--text-secondary);
-}
-
-.voice-section-chevron {
-    font-size: 10px;
-    transition: transform 0.2s ease;
-}
-
-.voice-section.collapsed .voice-section-chevron {
-    transform: rotate(180deg);
-}
-
-.voice-section-content {
-    overflow: hidden;
-    transition: max-height 0.2s ease, opacity 0.2s ease;
-    max-height: 100px;
-    opacity: 1;
-    padding: 4px 0;
-}
-
-.voice-section.collapsed .voice-section-content {
-    max-height: 0;
-    opacity: 0;
-    padding: 0;
-}
-
-.voice-controls {
-    display: flex;
-    gap: 8px;
-    padding: 4px 0;
-}
-
-.voice-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    border: none;
-    background-color: var(--btn-secondary);
-    color: var(--text-primary);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    transition: background-color 0.15s, color 0.15s;
-}
-
-.voice-btn:hover:not(:disabled) {
-    background-color: var(--btn-secondary-hover);
-}
-
-.voice-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.voice-btn.active {
-    background-color: var(--accent-green);
-    color: var(--bg-primary);
-}
-
-.voice-btn.recording {
-    background-color: var(--accent-red);
-    color: var(--bg-primary);
-    animation: voice-pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes voice-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.7; }
-}
-
-.voice-btn .icon {
-    font-size: 14px;
-}
-
-.voice-status {
-    font-size: 10px;
-    color: var(--text-muted);
-    padding: 2px 0;
 }
 
 /* Certificate fingerprint inline display in settings */

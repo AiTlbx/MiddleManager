@@ -30,6 +30,23 @@ declare global {
       readonly activeId: string | null;
       readonly settings: Settings | null;
     };
+
+    // Voice audio functions from webAudioAccess.js
+    initAudioWithUserInteraction?: () => Promise<boolean>;
+    requestMicrophonePermissionAndGetDevices?: () => Promise<unknown[]>;
+    getAvailableMicrophones?: () => Promise<unknown[]>;
+    startRecording?: (
+      callback: (base64Audio: string) => void,
+      intervalMs?: number,
+      deviceId?: string | null,
+      targetSampleRate?: number,
+    ) => Promise<boolean>;
+    stopRecording?: () => Promise<void>;
+    playAudio?: (base64Audio: string, sampleRate?: number) => Promise<boolean>;
+    stopAudioPlayback?: () => Promise<void>;
+    cleanupAudio?: () => void;
+    setOnError?: (callback: (error: string) => void) => void;
+    setOnRecordingState?: (callback: (isRecording: boolean) => void) => void;
   }
 }
 

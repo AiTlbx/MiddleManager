@@ -66,6 +66,11 @@ public sealed class BootstrapResponse
     /// Null if no update result exists.
     /// </summary>
     public UpdateResult? UpdateResult { get; init; }
+
+    /// <summary>
+    /// Whether server is running in development mode
+    /// </summary>
+    public bool DevMode { get; init; }
 }
 
 /// <summary>
