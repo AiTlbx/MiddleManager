@@ -132,6 +132,7 @@ function updateSessionProcessInfo(sessionId: string): void {
 
 /**
  * Strip executable path from command line, keeping just the exe name and arguments.
+ * Also strips .exe extension on Windows for cleaner display.
  * Handles quoted paths (e.g., "C:\Program Files\git\bin\git.exe" status)
  * and unquoted paths (e.g., C:\Windows\System32\cmd.exe /c dir)
  */
@@ -145,7 +146,10 @@ function stripExePath(commandLine: string): string {
     if (endQuote > 1) {
       const quotedPath = trimmed.slice(1, endQuote);
       const rest = trimmed.slice(endQuote + 1);
-      const exeName = quotedPath.replace(/\\/g, '/').split('/').pop() || quotedPath;
+      const exeName = (quotedPath.replace(/\\/g, '/').split('/').pop() || quotedPath).replace(
+        /\.exe$/i,
+        '',
+      );
       return (exeName + rest).trim();
     }
   }
@@ -154,12 +158,12 @@ function stripExePath(commandLine: string): string {
   const spaceIdx = trimmed.indexOf(' ');
   if (spaceIdx === -1) {
     // No arguments, just strip the path from the executable
-    return trimmed.replace(/\\/g, '/').split('/').pop() || trimmed;
+    return (trimmed.replace(/\\/g, '/').split('/').pop() || trimmed).replace(/\.exe$/i, '');
   }
 
   const exePart = trimmed.slice(0, spaceIdx);
   const argsPart = trimmed.slice(spaceIdx);
-  const exeName = exePart.replace(/\\/g, '/').split('/').pop() || exePart;
+  const exeName = (exePart.replace(/\\/g, '/').split('/').pop() || exePart).replace(/\.exe$/i, '');
   return (exeName + argsPart).trim();
 }
 
