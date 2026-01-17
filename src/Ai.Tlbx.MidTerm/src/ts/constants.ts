@@ -106,8 +106,8 @@ export const TERMINAL_FONT_STACK =
 /** Padding around terminal content in pixels */
 export const TERMINAL_PADDING = 8;
 
-/** xterm scrollbar width in pixels (matches CSS .xterm-viewport::-webkit-scrollbar) */
-export const SCROLLBAR_WIDTH = 10;
+/** Reserved space for xterm's overlay scrollbar to prevent text being obscured */
+export const SCROLLBAR_WIDTH = 20;
 
 /** Minimum terminal columns */
 export const MIN_TERMINAL_COLS = 10;

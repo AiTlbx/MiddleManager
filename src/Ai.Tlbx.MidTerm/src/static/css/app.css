@@ -776,36 +776,32 @@ html, body {
     flex-shrink: 0;
 }
 
-/* Always-visible scrollbar for xterm with MidTerm blue theme */
+/* Hide native scrollbar - use xterm's custom scrollbar instead */
 .terminal-container .xterm-viewport {
-    overflow-y: scroll !important;
-    scrollbar-width: auto;
-    scrollbar-color: #3d59a1 #1a1b26;
+    scrollbar-width: none;
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar {
-    width: 10px;
-    background: #1a1b26;
+    display: none;
 }
 
-.terminal-container .xterm-viewport::-webkit-scrollbar-track {
-    background: #1a1b26;
+/* Style xterm's custom scrollbar with MidTerm blue theme */
+.terminal-container .xterm {
+    --vscode-scrollbarSlider-background: rgba(61, 89, 161, 0.6);
+    --vscode-scrollbarSlider-hoverBackground: rgba(122, 162, 247, 0.8);
+    --vscode-scrollbarSlider-activeBackground: rgba(122, 162, 247, 1);
+    --vscode-scrollbar-shadow: #000;
 }
 
-.terminal-container .xterm-viewport::-webkit-scrollbar-thumb {
-    background: #3d59a1;
-    border-radius: 5px;
-    min-height: 40px;
-    border: 2px solid #1a1b26;
-}
-
-.terminal-container .xterm-viewport::-webkit-scrollbar-thumb:hover {
-    background: #7aa2f7;
-}
-
-/* Hide xterm.js custom overlay scrollbar - we use native scrollbar */
+/* Make xterm scrollbar always visible (don't fade out) */
 .terminal-container .xterm-scrollable-element > .scrollbar {
-    display: none !important;
+    opacity: 1 !important;
+    transition: none !important;
+}
+
+.terminal-container .xterm-scrollable-element > .scrollbar.invisible {
+    opacity: 1 !important;
+    pointer-events: auto !important;
 }
 
 /* Terminal initialization error state */
