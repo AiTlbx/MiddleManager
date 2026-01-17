@@ -38,7 +38,7 @@ let initialized = false;
 // Change Detection
 // =============================================================================
 
-type ChangeType = 'none' | 'membership' | 'data';
+type ChangeType = 'none' | 'membership' | 'data' | 'order';
 
 /**
  * Detect what type of change occurred between previous and current sessions
@@ -52,6 +52,14 @@ function detectChangeType(sessions: Record<string, Session>): ChangeType {
   }
   for (const id of newIds) {
     if (!previousSessionIds.has(id)) return 'membership';
+  }
+
+  // Check for order change
+  for (const [id, session] of Object.entries(sessions)) {
+    const prev = previousSessions[id];
+    if (prev && session._order !== prev._order) {
+      return 'order';
+    }
   }
 
   // Check for data change
@@ -138,6 +146,9 @@ function applyUpdate(type: ChangeType, sessions: Record<string, Session>): void 
     renderSessionList();
     updateEmptyState();
     updateMobileTitle();
+  } else if (type === 'order') {
+    log.info(() => 'Applying order update (full re-render)');
+    renderSessionList();
   } else if (type === 'data') {
     log.info(() => 'Applying data update (surgical)');
     // Surgical updates for each changed session
@@ -220,6 +231,11 @@ export function initializeSidebarUpdater(): void {
         }
       }
       updateMobileTitle();
+      previousSessions = { ...sessions };
+      previousSessionIds = new Set(Object.keys(sessions));
+    } else if (changeType === 'order') {
+      // Order change - re-render the list
+      applyUpdate(changeType, sessions);
       previousSessions = { ...sessions };
       previousSessionIds = new Set(Object.keys(sessions));
     } else {

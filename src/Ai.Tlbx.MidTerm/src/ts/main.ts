@@ -61,6 +61,7 @@ import {
   initVoiceSection,
   initializeSessionList,
   initializeSidebarUpdater,
+  initSessionDrag,
   initTrafficIndicator,
 } from './modules/sidebar';
 import { bindVoiceEvents } from './modules/voice';
@@ -152,6 +153,7 @@ async function init(): Promise<void> {
   setupSidebarResize();
   initializeSessionList();
   initializeSidebarUpdater();
+  initSessionDrag();
   initializeCommandHistory();
   initHistoryDropdown(spawnFromHistory);
 

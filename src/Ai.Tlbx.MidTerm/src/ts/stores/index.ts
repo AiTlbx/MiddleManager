@@ -219,3 +219,26 @@ export function removeProcessState(sessionId: string): void {
   delete states[sessionId];
   $processStates.set(states);
 }
+
+/**
+ * Reorder sessions by moving a session from one index to another.
+ * Updates _order values for all affected sessions.
+ */
+export function reorderSessions(fromIndex: number, toIndex: number): void {
+  if (fromIndex === toIndex) return;
+
+  const sessionList = $sessionList.get();
+  if (fromIndex < 0 || fromIndex >= sessionList.length) return;
+  if (toIndex < 0 || toIndex >= sessionList.length) return;
+
+  const reordered = [...sessionList];
+  const moved = reordered.splice(fromIndex, 1)[0];
+  if (!moved) return;
+  reordered.splice(toIndex, 0, moved);
+
+  const sessionsMap: Record<string, Session> = {};
+  reordered.forEach((session, i) => {
+    sessionsMap[session.id] = { ...session, _order: i };
+  });
+  $sessions.set(sessionsMap);
+}

@@ -11,4 +11,5 @@ export * from './shareAccess';
 export * from './networkSection';
 export * from './voiceSection';
 export * from './sidebarUpdater';
+export * from './sessionDrag';
 export { initTrafficIndicator } from './trafficIndicator';

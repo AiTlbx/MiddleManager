@@ -240,9 +240,12 @@ function createSessionItem(
   const item = document.createElement('div');
   item.className = 'session-item' + (isActive ? ' active' : '') + (isPending ? ' pending' : '');
   item.dataset.sessionId = session.id;
+  item.draggable = !isPending;
 
   if (!isPending) {
-    item.addEventListener('click', () => {
+    item.addEventListener('click', (e) => {
+      // Don't select if clicking on drag handle
+      if ((e.target as HTMLElement).closest('.drag-handle')) return;
       closeMobileActionMenu();
       if (callbacks) {
         callbacks.onSelect(session.id);
@@ -250,6 +253,14 @@ function createSessionItem(
       }
     });
   }
+
+  // Drag handle
+  const dragHandle = document.createElement('div');
+  dragHandle.className = 'drag-handle';
+  const dragDots = document.createElement('div');
+  dragDots.className = 'drag-handle-dots';
+  dragHandle.appendChild(dragDots);
+  item.appendChild(dragHandle);
 
   const info = document.createElement('div');
   info.className = 'session-info';
