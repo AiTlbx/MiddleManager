@@ -378,7 +378,11 @@ public sealed class TtyHostSessionManager : IAsyncDisposable
                 ShellType = s.ShellType,
                 Name = s.Name,
                 TerminalTitle = s.TerminalTitle,
-                ManuallyNamed = s.ManuallyNamed
+                ManuallyNamed = s.ManuallyNamed,
+                CurrentDirectory = s.CurrentDirectory,
+                ForegroundPid = s.ForegroundPid,
+                ForegroundName = s.ForegroundName,
+                ForegroundCommandLine = s.ForegroundCommandLine
             }).OrderBy(s => s.CreatedAt).ToList()
         };
     }

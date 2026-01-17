@@ -16,4 +16,8 @@ public sealed class SessionInfoDto
     public string? Name { get; set; }
     public string? TerminalTitle { get; set; }
     public bool ManuallyNamed { get; set; }
+    public string? CurrentDirectory { get; set; }
+    public int? ForegroundPid { get; set; }
+    public string? ForegroundName { get; set; }
+    public string? ForegroundCommandLine { get; set; }
 }

@@ -122,7 +122,11 @@ public static class SessionApiEndpoints
             Rows = sessionInfo.Rows,
             ShellType = sessionInfo.ShellType,
             Name = sessionInfo.Name,
-            ManuallyNamed = sessionInfo.ManuallyNamed
+            ManuallyNamed = sessionInfo.ManuallyNamed,
+            CurrentDirectory = sessionInfo.CurrentDirectory,
+            ForegroundPid = sessionInfo.ForegroundPid,
+            ForegroundName = sessionInfo.ForegroundName,
+            ForegroundCommandLine = sessionInfo.ForegroundCommandLine
         };
     }
 }

@@ -10,6 +10,7 @@ export {
   handleProcessEvent,
   handleForegroundChange,
   clearProcessState,
+  initializeFromSession,
   getRacingLogText,
   getFullRacingLog,
   isRacingLogVisible,

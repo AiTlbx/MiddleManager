@@ -105,6 +105,36 @@ export function clearProcessState(sessionId: string): void {
 }
 
 /**
+ * Initialize process state from session data (e.g., on reconnect).
+ * Only updates if the session has foreground process info.
+ */
+export function initializeFromSession(
+  sessionId: string,
+  foregroundPid: number | undefined,
+  foregroundName: string | undefined,
+  foregroundCommandLine: string | undefined,
+  currentDirectory: string | undefined,
+): void {
+  if (!foregroundPid && !foregroundName) return;
+
+  const state = getProcessState(sessionId);
+  const changed =
+    state.foregroundPid !== (foregroundPid ?? null) ||
+    state.foregroundName !== (foregroundName ?? null) ||
+    state.foregroundCommandLine !== (foregroundCommandLine ?? null) ||
+    state.foregroundCwd !== (currentDirectory ?? null);
+
+  if (changed) {
+    state.foregroundPid = foregroundPid ?? null;
+    state.foregroundName = foregroundName ?? null;
+    state.foregroundCommandLine = foregroundCommandLine ?? null;
+    state.foregroundCwd = currentDirectory ?? null;
+    notifyStateChange(sessionId, state);
+    log.verbose(() => `Initialized from session: ${foregroundName} in ${currentDirectory}`);
+  }
+}
+
+/**
  * Get racing log display text (single line - latest entry only).
  */
 export function getRacingLogText(sessionId: string): string {

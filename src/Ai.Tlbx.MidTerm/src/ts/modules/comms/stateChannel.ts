@@ -8,6 +8,7 @@
 import type { Session, UpdateInfo, TerminalState } from '../../types';
 import { scheduleReconnect } from '../../utils';
 import { createLogger } from '../logging';
+import { initializeFromSession } from '../process';
 
 const log = createLogger('state');
 import {
@@ -126,7 +127,17 @@ export function handleStateUpdate(newSessions: Session[]): void {
 
   // Update dimensions and resize terminals when server dimensions change
   // Also create terminals proactively for sessions that don't have one yet
+  // Initialize process state from session data (for reconnect scenarios)
   newSessions.forEach((session) => {
+    // Initialize process monitor state from session data
+    initializeFromSession(
+      session.id,
+      session.foregroundPid,
+      session.foregroundName,
+      session.foregroundCommandLine,
+      session.currentDirectory,
+    );
+
     const state = sessionTerminals.get(session.id);
     if (state && state.opened) {
       const dimensionsChanged =
