@@ -250,7 +250,8 @@ export function applyTerminalScalingSync(state: TerminalState): void {
   // Find or create overlay element
   let overlay = container.querySelector('.scaled-overlay') as HTMLElement | null;
 
-  if (scale < 0.99) {
+  // Use 0.97 threshold to account for rounding errors between fit calculation and actual render
+  if (scale < 0.97) {
     // Use transform: scale() with explicit transform-origin for predictable behavior
     xterm.style.transform = `scale(${scale})`;
     xterm.style.transformOrigin = 'top left';

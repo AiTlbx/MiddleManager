@@ -107,7 +107,7 @@ export const TERMINAL_FONT_STACK =
 export const TERMINAL_PADDING = 8;
 
 /** xterm scrollbar width in pixels (matches CSS .xterm-viewport::-webkit-scrollbar) */
-export const SCROLLBAR_WIDTH = 7;
+export const SCROLLBAR_WIDTH = 10;
 
 /** Minimum terminal columns */
 export const MIN_TERMINAL_COLS = 10;
